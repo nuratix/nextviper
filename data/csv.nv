@@ -1,0 +1,8 @@
+// NextViper Data Subsystem - CSV
+// Fast RFC 4180 compliant CSV parser and serializer.
+
+export fn parse(csv_content):
+    return data.read_csv(csv_content)
+
+export fn load(file_path):
+    return data.load(file_path)

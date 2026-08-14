@@ -1,0 +1,14 @@
+// NextViper Data Subsystem - Statistics
+// Descriptive and inferential statistical operations on columns and tables.
+
+export fn describe(df):
+    return df.describe()
+
+export fn mean(arr):
+    return arr.mean()
+
+export fn sum(arr):
+    return arr.sum()
+
+export fn std(arr):
+    return arr.std()

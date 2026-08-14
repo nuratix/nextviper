@@ -4,6 +4,7 @@
 #include "nextviper/parser.hpp"
 #include "nextviper/tensor.hpp"
 #include "nextviper/dataset.hpp"
+#include "nextviper/data_subsystem.hpp"
 #include "nextviper/ai_model.hpp"
 #include "nextviper/version.hpp"
 #include <cmath>
@@ -1676,34 +1677,23 @@ Value ModuleManager::create_math_module() {
 }
 
 Value ModuleManager::create_data_module() {
-    std::map<std::string, Value> exports;
+    Value base_mod = nextviper::create_data_module();
+    auto exports = *base_mod.as_object();
 
-    exports["load"] = Value::make_native_fn("load", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
-        try {
-            return Dataset::load(args[0].as_string()).to_value();
-        } catch (const std::exception& e) {
-            throw RuntimeError(std::string("data.load failed: ") + e.what(), span);
-        }
-    });
-
-    exports["from_csv"] = Value::make_native_fn("from_csv", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
-        try {
-            return Dataset::from_csv(args[0].as_string()).to_value();
-        } catch (const std::exception& e) {
-            throw RuntimeError(std::string("data.from_csv failed: ") + e.what(), span);
-        }
-    });
-
+    // Backward-compatible extensions
+    exports["from_csv"] = exports["read_csv"];
     exports["from_rows"] = Value::make_native_fn("from_rows", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
         std::vector<std::string> cols;
         for (const auto& c : *args[0].as_array()) cols.push_back(c.as_string());
         std::vector<std::vector<Value>> rows;
         for (const auto& r : *args[1].as_array()) rows.push_back(*r.as_array());
-        return Dataset::from_rows(std::move(cols), std::move(rows)).to_value();
+        return DataFrame(std::move(cols), std::move(rows)).to_value();
     });
 
+    exports["dataframe"] = exports["from_rows"];
+
     exports["dataloader"] = Value::make_native_fn("dataloader", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
-        if (args.empty() || !args[0].is_object()) throw RuntimeError("data.dataloader requires a Dataset as first argument", span);
+        if (args.empty() || !args[0].is_object()) throw RuntimeError("data.dataloader requires a Dataset/DataFrame as first argument", span);
         size_t batch_size = args.size() >= 2 ? static_cast<size_t>(args[1].as_int()) : 32;
         bool shuffle = args.size() >= 3 ? args[2].as_bool() : true;
         return DataLoader(Dataset::from_rows({}, {}), batch_size, shuffle).to_value();

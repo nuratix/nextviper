@@ -1,0 +1,19 @@
+// NextViper Data Subsystem - Array
+// Contiguous numerical vector / multi-dimensional array operations.
+
+import std.math
+
+export fn array(values):
+    return data.array(values)
+
+export fn zeros(shape):
+    return data.zeros(shape)
+
+export fn ones(shape):
+    return data.ones(shape)
+
+export fn arange(start, stop, step = 1.0):
+    return data.arange(start, stop, step)
+
+export fn linspace(start, stop, num = 50):
+    return data.linspace(start, stop, num)

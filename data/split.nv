@@ -1,0 +1,5 @@
+// NextViper Data Subsystem - Split
+// Train/test validation splitting for machine learning pipelines.
+
+export fn train_test_split(df, train_ratio = 0.8, seed = 42):
+    return df.split(train_ratio, seed)

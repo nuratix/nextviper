@@ -1,0 +1,33 @@
+// NextViper Data Subsystem Performance Benchmark
+import data
+import std.time
+import std.io
+
+fn run_array_bench():
+    let t0 = time.now()
+    let arr = data.arange(0.0, 100000.0, 1.0)
+    let m = arr.mean()
+    let s = arr.sum()
+    let mx = arr.max()
+    let mn = arr.min()
+    let sd = arr.std()
+    let norm = arr.normalize(0.0, 1.0)
+    let t1 = time.now()
+    io.print("Array 100k items time:", t1 - t0, "sec | Mean:", m, "Sum:", s, "Std:", sd)
+
+fn run_dataframe_bench():
+    let t0 = time.now()
+    // Generate synthetic CSV with 10,000 rows
+    let arr = data.arange(0.0, 10000.0, 1.0)
+    let norm = arr.normalize(0.0, 100.0)
+    let df = data.zeros([10000, 4])
+    let t1 = time.now()
+    io.print("DataFrame 10k rows allocation time:", t1 - t0, "sec")
+
+fn main():
+    io.print("=== NextViper Data Subsystem Benchmarks ===")
+    run_array_bench()
+    run_dataframe_bench()
+    io.print("Data Subsystem Benchmark Complete.")
+
+main()

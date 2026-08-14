@@ -1,0 +1,8 @@
+// NextViper Data Subsystem - JSON
+// JSON and JSON Lines (JSONL) tabular reader and writer.
+
+export fn parse(json_content):
+    return data.read_json(json_content)
+
+export fn load(file_path):
+    return data.load(file_path)

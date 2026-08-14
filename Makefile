@@ -30,7 +30,8 @@ CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/compiler.cpp \
             $(SRC_DIR)/vm.cpp \
             $(SRC_DIR)/repl.cpp \
-            $(SRC_DIR)/package_manager.cpp
+            $(SRC_DIR)/package_manager.cpp \
+            $(SRC_DIR)/data_subsystem.cpp
 
 CORE_OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(CORE_SRCS))
 
@@ -46,6 +47,7 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_loops.cpp \
             $(TEST_DIR)/test_modules.cpp \
             $(TEST_DIR)/test_ai_data.cpp \
+            $(TEST_DIR)/test_data_subsystem.cpp \
             $(TEST_DIR)/test_native_compiler.cpp \
             $(TEST_DIR)/test_stdlib.cpp \
             $(TEST_DIR)/test_package_manager.cpp \

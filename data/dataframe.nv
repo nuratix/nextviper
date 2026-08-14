@@ -1,0 +1,14 @@
+// NextViper Data Subsystem - DataFrame
+// Tabular data representation with columnar query capabilities.
+
+export fn from_rows(columns, rows):
+    return data.from_rows(columns, rows)
+
+export fn from_csv(csv_content):
+    return data.from_csv(csv_content)
+
+export fn from_json(json_content):
+    return data.read_json(json_content)
+
+export fn load(path):
+    return data.load(path)

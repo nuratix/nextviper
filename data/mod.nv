@@ -1,0 +1,34 @@
+// NextViper Data Subsystem
+import data.dataframe
+import data.array
+import data.dataset
+import data.csv
+import data.json
+import data.preprocessing
+import data.split
+import data.sampling
+import data.statistics
+
+export fn load(path):
+    return data.load(path)
+
+export fn read_csv(content):
+    return data.read_csv(content)
+
+export fn read_json(content):
+    return data.read_json(content)
+
+export fn array(values):
+    return data.array(values)
+
+export fn zeros(shape):
+    return data.zeros(shape)
+
+export fn ones(shape):
+    return data.ones(shape)
+
+export fn arange(start, stop, step = 1.0):
+    return data.arange(start, stop, step)
+
+export fn linspace(start, stop, num = 50):
+    return data.linspace(start, stop, num)

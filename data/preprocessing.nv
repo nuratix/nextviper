@@ -1,0 +1,11 @@
+// NextViper Data Subsystem - Preprocessing
+// Data cleaning, missing value handling, scaling and normalization utilities.
+
+export fn drop_missing(df, columns = []):
+    return df.drop_missing()
+
+export fn normalize(df, columns = []):
+    return df.normalize()
+
+export fn standardize(df, columns = []):
+    return df.standardize()

@@ -1,0 +1,8 @@
+// NextViper Data Subsystem - Sampling
+// Random sampling and mini-batch extraction.
+
+export fn sample(df, n, seed = 42):
+    return df.sample(n, seed)
+
+export fn sample_fraction(df, frac, seed = 42):
+    return df.sample_fraction(frac, seed)

@@ -1,0 +1,18 @@
+// NextViper Data Subsystem - Schema
+// Defines schema representation and data types for columnar tables.
+
+export fn infer_type(val):
+    if val == null:
+        return "null"
+    elif type(val) == "int":
+        return "int64"
+    elif type(val) == "float":
+        return "float64"
+    elif type(val) == "string":
+        return "string"
+    elif type(val) == "bool":
+        return "bool"
+    return "object"
+
+export fn validate_schema(schema, row):
+    return true

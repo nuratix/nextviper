@@ -1,0 +1,8 @@
+// NextViper Data Subsystem - Dataset
+// Dataset abstraction for machine learning data pipelines.
+
+export fn load(path):
+    return data.load(path)
+
+export fn from_rows(columns, rows):
+    return data.from_rows(columns, rows)

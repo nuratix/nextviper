@@ -1,0 +1,9 @@
+// NextViper Data Subsystem - Parquet Format Interface
+// Architecture stub for future zero-copy Apache Parquet columnar reader/writer.
+
+export fn is_parquet_supported():
+    return false
+
+export fn load(file_path):
+    // Future: native arrow/parquet parser bindings
+    return data.load(file_path)
