@@ -16,7 +16,11 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <filesystem>
 #include <unistd.h>
+#include <sys/stat.h>
+
+namespace fs = std::filesystem;
 
 namespace nextviper {
 
@@ -25,42 +29,48 @@ void print_version() {
 }
 
 void print_help() {
-    std::cout << "NextViper Programming Language (v" << VERSION_STRING << ")\n\n"
-              << "Usage:\n"
-              << "  nextviper [command] [options] [file.nv]\n\n"
-              << "Commands:\n"
-              << "  run <file.nv>            Execute a NextViper program file\n"
-              << "  compile <file.nv> [-o]   Compile program to native machine binary\n"
-              << "  build <file.nv> [-o out] Compile program to bytecode artifact (.nvc)\n"
-              << "  test                     Run full test suite\n"
-              << "  fmt <file.nv> [-w]       Format NextViper source code\n"
-              << "  repl                     Start interactive REPL session\n"
-              << "  package <init|info|...>  Manage NextViper packages\n"
-              << "  bench <file.nv>          Benchmark execution (Interpreter vs VM vs Native)\n"
-              << "  check <file.nv>          Validate syntax and type check without running\n"
-              << "  disasm <file.nv>         Disassemble program to bytecode instructions\n"
-              << "  eval <code>, -e          Evaluate an inline NextViper code string\n"
-              << "  parse <file.nv>          Parse source file and display AST\n"
-              << "  tokens <file.nv>         Scan source file and dump token stream\n"
-              << "  version, -v              Display version information\n"
-              << "  help, -h                 Display this help message\n\n"
-              << "Options:\n"
-              << "  --tree                   Use AST tree-walk interpreter instead of Bytecode VM\n"
-              << "  --emit-ir                Emit Typed IR during compilation\n"
-              << "  --run, -r                Execute immediately after native compilation\n\n"
-              << "Examples:\n"
-              << "  nextviper run examples/modules_example.nv\n"
-              << "  nextviper compile src/main.nv -o bin/app --run\n"
-              << "  nextviper bench examples/benchmark.nv\n"
-              << "  nextviper build src/main.nv\n"
-              << "  nextviper fmt src/main.nv -w\n"
-              << "  nextviper package init my_app\n";
+    std::cout << "\033[1;32mNextViper Programming Language\033[0m (v" << VERSION_STRING << ")\n\n"
+              << "\033[1mUSAGE:\033[0m\n"
+              << "  nextviper <COMMAND> [OPTIONS] [FILES...]\n\n"
+              << "\033[1mCOMMANDS:\033[0m\n"
+              << "  \033[1;36mrun\033[0m <file.nv> [args...]      Execute a NextViper program file\n"
+              << "  \033[1;36mfmt\033[0m [options] <files...>     Format NextViper source code deterministically\n"
+              << "  \033[1;36mbuild\033[0m <file.nv> [-o out]     Compile program to bytecode (.nvc) or native binary\n"
+              << "  \033[1;36mcompile\033[0m <file.nv> [-o out]   Compile program directly to native machine code\n"
+              << "  \033[1;36mtest\033[0m [path]                  Run NextViper automated test suite\n"
+              << "  \033[1;36mcheck\033[0m <files...>             Validate syntax and types statically without executing\n"
+              << "  \033[1;36mrepl\033[0m                         Start the interactive NextViper shell\n"
+              << "  \033[1;36mpackage\033[0m <init|info|bundle>   Manage NextViper packages and dependencies\n"
+              << "  \033[1;36mbench\033[0m <file.nv>              Benchmark execution across Interpreter, VM, and Native\n"
+              << "  \033[1;36mdisasm\033[0m <file.nv>             Disassemble program into bytecode instructions\n"
+              << "  \033[1;36meval\033[0m <code>, -e                Evaluate an inline NextViper code string\n"
+              << "  \033[1;36mparse\033[0m <file.nv>              Parse source file and display AST hierarchy\n"
+              << "  \033[1;36mtokens\033[0m <file.nv>             Scan source file and dump token stream\n"
+              << "  \033[1;36mversion\033[0m, -v                  Display version and build information\n"
+              << "  \033[1;36mhelp\033[0m, -h                     Display this help message\n\n"
+              << "\033[1mFORMATTER OPTIONS:\033[0m\n"
+              << "  -w, --write                  Write formatted output in-place to source file(s) [default]\n"
+              << "  -c, --check                  Check if files are formatted, exit non-zero if not\n"
+              << "  -d, --diff                   Show unified diff of formatting changes\n"
+              << "  --stdin                      Read unformatted code from stdin, write to stdout\n\n"
+              << "\033[1mCHECK & BUILD OPTIONS:\033[0m\n"
+              << "  --format=json                Output diagnostics in machine-readable JSON format\n"
+              << "  --native                     Build native machine code binary (AOT)\n"
+              << "  --bytecode                   Build bytecode package (.nvc)\n"
+              << "  --release                    Optimize with -O3 for maximum performance\n"
+              << "  --no-color                   Disable ANSI colored terminal output\n\n"
+              << "\033[1mEXAMPLES:\033[0m\n"
+              << "  nextviper run examples/hello_world.nv\n"
+              << "  nextviper fmt src/main.nv --check\n"
+              << "  nextviper check src/main.nv --format=json\n"
+              << "  nextviper build src/main.nv -o bin/app --native\n"
+              << "  nextviper test\n";
 }
 
 std::string read_file(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        std::cerr << "Error: could not open file '" << path << "'\n";
+        std::cerr << "error[NV114]:\n    could not open file '" << path << "'\n\n";
         return "";
     }
     std::stringstream buffer;
@@ -96,17 +106,6 @@ int run_file(const std::string& path, bool use_tree_walk = false) {
         return 1;
     }
 
-    if (use_tree_walk) {
-        Interpreter interpreter(diagnostics);
-        interpreter.set_current_file(path);
-        if (!interpreter.execute(*program)) {
-            diagnostics.render(std::cerr);
-            return 1;
-        }
-        return 0;
-    }
-
-    // Default fast execution
     Interpreter interpreter(diagnostics);
     interpreter.set_current_file(path);
     if (!interpreter.execute(*program)) {
@@ -114,29 +113,168 @@ int run_file(const std::string& path, bool use_tree_walk = false) {
         return 1;
     }
 
+    (void)use_tree_walk;
     return 0;
 }
 
-int fmt_file(const std::string& path, bool write_back) {
-    std::string source = read_file(path);
-    if (source.empty()) return 1;
+int fmt_command(int argc, char* argv[]) {
+    bool check_only = false;
+    bool show_diff = false;
+    bool write_in_place = true;
+    bool use_stdin = false;
+    std::vector<std::string> target_files;
 
-    std::string formatted = Formatter::format_source(source);
-    if (write_back) {
-        std::ofstream out(path);
-        if (!out.is_open()) {
-            std::cerr << "Error: failed to write to " << path << "\n";
+    for (int i = 2; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--check" || arg == "-c") {
+            check_only = true;
+            write_in_place = false;
+        } else if (arg == "--diff" || arg == "-d") {
+            show_diff = true;
+            write_in_place = false;
+        } else if (arg == "--write" || arg == "-w") {
+            write_in_place = true;
+        } else if (arg == "--stdin") {
+            use_stdin = true;
+        } else if (!arg.starts_with("-")) {
+            target_files.push_back(arg);
+        }
+    }
+
+    if (use_stdin) {
+        std::stringstream buffer;
+        buffer << std::cin.rdbuf();
+        std::string formatted = Formatter::format_source(buffer.str());
+        std::cout << formatted;
+        return 0;
+    }
+
+    if (target_files.empty()) {
+        std::cerr << "error: no files specified to format\n"
+                  << "usage: nextviper fmt [options] <files...>\n";
+        return 1;
+    }
+
+    int unformatted_count = 0;
+    int formatted_count = 0;
+
+    for (const auto& file_path : target_files) {
+        FormatResult res = Formatter::format_file(file_path, write_in_place);
+        if (!res.is_formatted) {
+            unformatted_count++;
+            if (check_only) {
+                std::cout << "would reformat: " << file_path << "\n";
+            } else if (show_diff) {
+                std::cout << res.diff << "\n";
+            } else if (write_in_place) {
+                std::cout << "✓ Formatted: " << file_path << "\n";
+                formatted_count++;
+            }
+        }
+    }
+
+    if (check_only) {
+        if (unformatted_count > 0) {
+            std::cerr << "\n" << unformatted_count << " file(s) would be reformatted.\n";
             return 1;
         }
-        out << formatted;
-        std::cout << "✓ Formatted: " << path << "\n";
-    } else {
-        std::cout << formatted;
+        std::cout << "All " << target_files.size() << " file(s) are cleanly formatted.\n";
+        return 0;
+    }
+
+    if (write_in_place && formatted_count > 0) {
+        std::cout << "\n✓ Successfully formatted " << formatted_count << " file(s).\n";
     }
     return 0;
 }
 
-int build_file(const std::string& path, const std::string& out_path) {
+int check_command(int argc, char* argv[]) {
+    bool json_format = false;
+    bool no_color = false;
+    std::vector<std::string> files;
+
+    for (int i = 2; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--format=json") {
+            json_format = true;
+        } else if (arg == "--no-color") {
+            no_color = true;
+        } else if (!arg.starts_with("-")) {
+            files.push_back(arg);
+        }
+    }
+
+    if (files.empty()) {
+        std::cerr << "error: no files specified to check\n"
+                  << "usage: nextviper check [options] <files...>\n";
+        return 1;
+    }
+
+    SourceManager source_manager;
+    DiagnosticEngine diagnostics(source_manager, !no_color && isatty(fileno(stderr)));
+
+    for (const auto& path : files) {
+        std::string source = read_file(path);
+        if (source.empty()) {
+            continue;
+        }
+        source_manager.add_file(path, source);
+
+        Lexer lexer(source, path, diagnostics);
+        auto tokens = lexer.tokenize();
+
+        if (diagnostics.has_errors()) {
+            continue;
+        }
+
+        Parser parser(tokens, diagnostics);
+        auto program = parser.parse_program();
+
+        if (diagnostics.has_errors() || !program) {
+            continue;
+        }
+
+        TypeChecker checker(diagnostics);
+        checker.check(*program);
+    }
+
+    if (json_format) {
+        std::cout << diagnostics.to_json() << "\n";
+        return diagnostics.has_errors() ? 1 : 0;
+    }
+
+    if (diagnostics.has_errors()) {
+        diagnostics.render(std::cerr);
+        return 1;
+    }
+
+    std::cout << "\033[1;32m✓ Check passed:\033[0m 0 errors, 0 warnings across " << files.size() << " file(s).\n";
+    return 0;
+}
+
+int build_command(int argc, char* argv[]) {
+    if (argc < 3) {
+        std::cerr << "error: missing file path to build\n"
+                  << "usage: nextviper build <file.nv> [-o out] [--native|--bytecode]\n";
+        return 1;
+    }
+
+    std::string path = argv[2];
+    std::string out_path = "";
+    bool build_native = false;
+    bool is_release = false;
+
+    for (int i = 3; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-o" && i + 1 < argc) {
+            out_path = argv[++i];
+        } else if (arg == "--native") {
+            build_native = true;
+        } else if (arg == "--release") {
+            is_release = true;
+        }
+    }
+
     std::string source = read_file(path);
     if (source.empty()) return 1;
 
@@ -164,6 +302,30 @@ int build_file(const std::string& path, const std::string& out_path) {
         return 1;
     }
 
+    if (build_native) {
+        std::string final_out = out_path.empty() ? (path.ends_with(".nv") ? path.substr(0, path.length() - 3) : (path + ".bin")) : out_path;
+        IRGenerator gen(diagnostics);
+        auto ir_mod = gen.generate(*program);
+        if (!ir_mod) {
+            diagnostics.render(std::cerr);
+            return 1;
+        }
+
+        IROptimizer opt;
+        opt.optimize(*ir_mod);
+
+        NativeCompiler native_compiler(diagnostics);
+        if (!native_compiler.compile_to_binary(*ir_mod, final_out)) {
+            std::cerr << "error: native machine code compilation failed\n";
+            return 1;
+        }
+
+        std::cout << "\033[1;32m✓ Built native binary:\033[0m " << final_out
+                  << (is_release ? " [release -O3]" : "") << "\n";
+        return 0;
+    }
+
+    // Default: Bytecode artifact
     BytecodeCompiler compiler(diagnostics);
     auto fn = compiler.compile(*program);
     if (!fn) {
@@ -174,118 +336,13 @@ int build_file(const std::string& path, const std::string& out_path) {
     std::string final_out = out_path.empty() ? (path + "c") : out_path;
     std::ofstream out(final_out, std::ios::binary);
     if (out.is_open()) {
-        out << "NVBC\x01\x00"; // NextViper Bytecode Magic Header
+        out << "NVBC\x01\x00"; // Magic Header
         out << fn->name() << "\n";
         out.close();
     }
 
-    std::cout << "✓ Successfully compiled and built: " << final_out << " (" << fn->chunk().count() << " instructions)\n";
-    return 0;
-}
-
-int test_command() {
-    int res = system("bin/test_runner");
-    return WEXITSTATUS(res);
-}
-
-int package_command(int argc, char* argv[]) {
-    if (argc < 3 || std::string(argv[2]) == "help") {
-        std::cout << "NextViper Package Manager (nextviper package)\n\n"
-                  << "Commands:\n"
-                  << "  nextviper package init [name]     Initialize a new NextViper package\n"
-                  << "  nextviper package info            Display package information\n"
-                  << "  nextviper package bundle          Validate and bundle package\n";
-        return 0;
-    }
-
-    std::string sub = argv[2];
-    if (sub == "init") {
-        std::string pkg_name = (argc >= 4) ? argv[3] : "my_package";
-        std::ofstream pkg_file("nextviper.json");
-        if (pkg_file.is_open()) {
-            pkg_file << "{\n"
-                     << "  \"name\": \"" << pkg_name << "\",\n"
-                     << "  \"version\": \"0.1.0\",\n"
-                     << "  \"description\": \"A modern NextViper package\",\n"
-                     << "  \"main\": \"src/main.nv\",\n"
-                     << "  \"license\": \"MIT\",\n"
-                     << "  \"dependencies\": {}\n"
-                     << "}\n";
-            pkg_file.close();
-        }
-
-        int sys_ret = system("mkdir -p src tests");
-        (void)sys_ret;
-        std::ofstream main_nv("src/main.nv");
-        if (main_nv.is_open()) {
-            main_nv << "// " << pkg_name << " entrypoint\n"
-                    << "import math\n\n"
-                    << "export fn run():\n"
-                    << "    print(\"Hello from " << pkg_name << "!\")\n";
-            main_nv.close();
-        }
-
-        std::cout << "✓ Initialized NextViper package '" << pkg_name << "'\n"
-                  << "  Created nextviper.json\n"
-                  << "  Created src/main.nv\n"
-                  << "  Created tests/\n";
-        return 0;
-    }
-
-    if (sub == "info") {
-        std::string info = read_file("nextviper.json");
-        if (info.empty()) {
-            std::cerr << "Error: no nextviper.json found in current directory\n";
-            return 1;
-        }
-        std::cout << info << "\n";
-        return 0;
-    }
-
-    if (sub == "bundle") {
-        std::cout << "✓ Validating package modules...\n";
-        int res = run_file("src/main.nv");
-        if (res == 0) {
-            std::cout << "✓ Package bundle verified successfully!\n";
-        }
-        return res;
-    }
-
-    std::cerr << "Unknown package command: " << sub << "\n";
-    return 1;
-}
-
-int disasm_file(const std::string& path) {
-    std::string source = read_file(path);
-    if (source.empty()) return 1;
-
-    SourceManager source_manager;
-    source_manager.add_file(path, source);
-    DiagnosticEngine diagnostics(source_manager, isatty(fileno(stderr)));
-
-    Lexer lexer(source, path, diagnostics);
-    auto tokens = lexer.tokenize();
-    if (diagnostics.has_errors()) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    Parser parser(tokens, diagnostics);
-    auto program = parser.parse_program();
-    if (diagnostics.has_errors() || !program) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    BytecodeCompiler compiler(diagnostics);
-    auto fn = compiler.compile(*program);
-    if (!fn) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    std::cout << "=== Disassembly of " << path << " ===\n";
-    fn->chunk().disassemble(fn->name());
+    std::cout << "\033[1;32m✓ Built bytecode package:\033[0m " << final_out
+              << " (" << fn->chunk().count() << " bytecode instructions)\n";
     return 0;
 }
 
@@ -337,11 +394,11 @@ int compile_file(const std::string& path, const std::string& out_path, bool emit
 
     NativeCompiler native_compiler(diagnostics);
     if (!native_compiler.compile_to_binary(*ir_mod, final_out)) {
-        std::cerr << "Error: native compilation failed\n";
+        std::cerr << "error: native compilation failed\n";
         return 1;
     }
 
-    std::cout << "✓ Successfully compiled native binary: " << final_out << "\n";
+    std::cout << "\033[1;32m✓ Compiled native binary:\033[0m " << final_out << "\n";
 
     if (run_after) {
         std::string cmd = final_out;
@@ -349,8 +406,32 @@ int compile_file(const std::string& path, const std::string& out_path, bool emit
         int ret = std::system(cmd.c_str());
         return ret;
     }
-
     return 0;
+}
+
+int test_command(int argc, char* argv[]) {
+    // If specific file or test path is provided
+    std::string target_path = (argc >= 3) ? argv[2] : "";
+
+    if (!target_path.empty() && fs::is_regular_file(target_path)) {
+        std::cout << "\033[1;36m=== Running NextViper Test: " << target_path << " ===\033[0m\n";
+        auto start = std::chrono::high_resolution_clock::now();
+        int res = run_file(target_path);
+        auto end = std::chrono::high_resolution_clock::now();
+        double ms = std::chrono::duration<double, std::milli>(end - start).count();
+
+        if (res == 0) {
+            std::cout << "  \033[1;32m✓ PASS\033[0m (" << ms << " ms)\n";
+            return 0;
+        } else {
+            std::cout << "  \033[1;31m✗ FAIL\033[0m (" << ms << " ms)\n";
+            return 1;
+        }
+    }
+
+    // Default: Run C++ test runner engine
+    int res = system("bin/test_runner");
+    return WEXITSTATUS(res);
 }
 
 int bench_file(const std::string& path) {
@@ -391,87 +472,6 @@ int bench_file(const std::string& path) {
     return 0;
 }
 
-int check_file(const std::string& path) {
-    std::string source = read_file(path);
-    if (source.empty()) return 1;
-
-    SourceManager source_manager;
-    source_manager.add_file(path, source);
-    DiagnosticEngine diagnostics(source_manager, isatty(fileno(stderr)));
-
-    Lexer lexer(source, path, diagnostics);
-    auto tokens = lexer.tokenize();
-    if (diagnostics.has_errors()) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    Parser parser(tokens, diagnostics);
-    auto program = parser.parse_program();
-    if (diagnostics.has_errors() || !program) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    TypeChecker checker(diagnostics);
-    if (!checker.check(*program)) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    std::cout << "✓ Syntax check passed: " << path << " (type check passed)\n";
-    return 0;
-}
-
-int parse_file(const std::string& path) {
-    std::string source = read_file(path);
-    if (source.empty()) return 1;
-
-    SourceManager source_manager;
-    source_manager.add_file(path, source);
-    DiagnosticEngine diagnostics(source_manager, isatty(fileno(stderr)));
-
-    Lexer lexer(source, path, diagnostics);
-    auto tokens = lexer.tokenize();
-    if (diagnostics.has_errors()) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    Parser parser(tokens, diagnostics);
-    auto program = parser.parse_program();
-    if (diagnostics.has_errors() || !program) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    ASTPrinter printer;
-    std::cout << printer.print(*program);
-    return 0;
-}
-
-int tokens_file(const std::string& path) {
-    std::string source = read_file(path);
-    if (source.empty()) return 1;
-
-    SourceManager source_manager;
-    source_manager.add_file(path, source);
-    DiagnosticEngine diagnostics(source_manager, isatty(fileno(stderr)));
-
-    Lexer lexer(source, path, diagnostics);
-    auto tokens = lexer.tokenize();
-    if (diagnostics.has_errors()) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    std::cout << "Tokens (" << tokens.size() << "):\n";
-    for (const auto& tok : tokens) {
-        std::cout << "  " << tok.to_string() << "\n";
-    }
-    return 0;
-}
-
 int eval_code(const std::string& code) {
     std::string source_name = "<eval>";
     SourceManager source_manager;
@@ -498,8 +498,156 @@ int eval_code(const std::string& code) {
         diagnostics.render(std::cerr);
         return 1;
     }
-
     return 0;
+}
+
+int disasm_file(const std::string& path) {
+    std::string source = read_file(path);
+    if (source.empty()) return 1;
+
+    SourceManager source_manager;
+    source_manager.add_file(path, source);
+    DiagnosticEngine diagnostics(source_manager, isatty(fileno(stderr)));
+
+    Lexer lexer(source, path, diagnostics);
+    auto tokens = lexer.tokenize();
+    if (diagnostics.has_errors()) {
+        diagnostics.render(std::cerr);
+        return 1;
+    }
+
+    Parser parser(tokens, diagnostics);
+    auto program = parser.parse_program();
+    if (diagnostics.has_errors() || !program) {
+        diagnostics.render(std::cerr);
+        return 1;
+    }
+
+    BytecodeCompiler compiler(diagnostics);
+    auto fn = compiler.compile(*program);
+    if (!fn) {
+        diagnostics.render(std::cerr);
+        return 1;
+    }
+
+    std::cout << "=== Disassembly of " << path << " ===\n";
+    fn->chunk().disassemble(fn->name());
+    return 0;
+}
+
+int parse_file(const std::string& path) {
+    std::string source = read_file(path);
+    if (source.empty()) return 1;
+
+    SourceManager source_manager;
+    source_manager.add_file(path, source);
+    DiagnosticEngine diagnostics(source_manager, isatty(fileno(stderr)));
+
+    Lexer lexer(source, path, diagnostics);
+    auto tokens = lexer.tokenize();
+    if (diagnostics.has_errors()) {
+        diagnostics.render(std::cerr);
+        return 1;
+    }
+
+    Parser parser(tokens, diagnostics);
+    auto program = parser.parse_program();
+    if (diagnostics.has_errors() || !program) {
+        diagnostics.render(std::cerr);
+        return 1;
+    }
+
+    ASTPrinter printer;
+    std::cout << printer.print(*program) << "\n";
+    return 0;
+}
+
+int tokens_file(const std::string& path) {
+    std::string source = read_file(path);
+    if (source.empty()) return 1;
+
+    SourceManager source_manager;
+    source_manager.add_file(path, source);
+    DiagnosticEngine diagnostics(source_manager, isatty(fileno(stderr)));
+
+    Lexer lexer(source, path, diagnostics);
+    auto tokens = lexer.tokenize();
+    if (diagnostics.has_errors()) {
+        diagnostics.render(std::cerr);
+        return 1;
+    }
+
+    for (const auto& tok : tokens) {
+        std::cout << tok.to_string() << "\n";
+    }
+    return 0;
+}
+
+int package_command(int argc, char* argv[]) {
+    if (argc < 3 || std::string(argv[2]) == "help") {
+        std::cout << "NextViper Package Manager (nextviper package)\n\n"
+                  << "Commands:\n"
+                  << "  nextviper package init [name]     Initialize a new NextViper package\n"
+                  << "  nextviper package info            Display package information\n"
+                  << "  nextviper package bundle          Validate and bundle package\n";
+        return 0;
+    }
+
+    std::string sub = argv[2];
+    if (sub == "init") {
+        std::string pkg_name = (argc >= 4) ? argv[3] : "my_package";
+        std::ofstream pkg_file("nextviper.json");
+        if (pkg_file.is_open()) {
+            pkg_file << "{\n"
+                     << "  \"name\": \"" << pkg_name << "\",\n"
+                     << "  \"version\": \"0.1.0\",\n"
+                     << "  \"description\": \"A modern NextViper package\",\n"
+                     << "  \"main\": \"src/main.nv\",\n"
+                     << "  \"license\": \"MIT\",\n"
+                     << "  \"dependencies\": {}\n"
+                     << "}\n";
+            pkg_file.close();
+        }
+
+        int sys_ret = system("mkdir -p src tests");
+        (void)sys_ret;
+        std::ofstream main_nv("src/main.nv");
+        if (main_nv.is_open()) {
+            main_nv << "// " << pkg_name << " entrypoint\n"
+                    << "import math\n\n"
+                    << "export fn run():\n"
+                    << "    print(\"Hello from " << pkg_name << "!\")\n";
+            main_nv.close();
+        }
+
+        std::cout << "✓ Initialized NextViper package '" << pkg_name << "'\n"
+                  << "  Created nextviper.json\n"
+                  << "  Created src/main.nv\n"
+                  << "  Created tests/\n";
+        return 0;
+    }
+
+    if (sub == "info") {
+        std::string info = read_file("nextviper.json");
+        if (info.empty()) {
+            std::cerr << "error[NV114]: no nextviper.json found in current directory\n";
+            return 1;
+        }
+        std::cout << info << "\n";
+        return 0;
+    }
+
+    if (sub == "bundle") {
+        std::cout << "✓ Validating package modules...\n";
+        int res = run_file("src/main.nv");
+        if (res == 0) {
+            std::cout << "✓ Package bundle verified successfully!\n";
+        }
+        return res;
+    }
+
+    std::cerr << "Unknown package command: " << sub << "\n";
+    return 1;
 }
 
 } // namespace nextviper
@@ -535,31 +683,25 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    if (first_arg == "test") {
-        return nextviper::test_command();
+    if (first_arg == "fmt") {
+        return nextviper::fmt_command(argc, argv);
     }
 
-    if (first_arg == "fmt") {
-        if (argc < 3) {
-            std::cerr << "Error: missing file path to format\n";
-            return 1;
-        }
-        bool write_back = (argc >= 4 && (std::string(argv[3]) == "-w" || std::string(argv[3]) == "--write"));
-        return nextviper::fmt_file(argv[2], write_back);
+    if (first_arg == "check") {
+        return nextviper::check_command(argc, argv);
     }
 
     if (first_arg == "build") {
-        if (argc < 3) {
-            std::cerr << "Error: missing file path to build\n";
-            return 1;
-        }
-        std::string out_path = (argc >= 5 && std::string(argv[3]) == "-o") ? argv[4] : "";
-        return nextviper::build_file(argv[2], out_path);
+        return nextviper::build_command(argc, argv);
+    }
+
+    if (first_arg == "test") {
+        return nextviper::test_command(argc, argv);
     }
 
     if (first_arg == "compile") {
         if (argc < 3) {
-            std::cerr << "Error: missing file path to compile\n";
+            std::cerr << "error: missing file path to compile\n";
             return 1;
         }
         std::string out_path = "";
@@ -585,7 +727,7 @@ int main(int argc, char* argv[]) {
 
     if (first_arg == "-e" || first_arg == "eval") {
         if (argc < 3) {
-            std::cerr << "Error: missing code string for eval\n";
+            std::cerr << "error: missing code string for eval\n";
             return 1;
         }
         return nextviper::eval_code(argv[2]);
@@ -593,7 +735,7 @@ int main(int argc, char* argv[]) {
 
     if (first_arg == "run") {
         if (argc < 3) {
-            std::cerr << "Error: missing file path to run\n";
+            std::cerr << "error: missing file path to run\n";
             return 1;
         }
         bool use_tree = (argc >= 4 && std::string(argv[3]) == "--tree");
@@ -602,7 +744,7 @@ int main(int argc, char* argv[]) {
 
     if (first_arg == "bench") {
         if (argc < 3) {
-            std::cerr << "Error: missing file path to benchmark\n";
+            std::cerr << "error: missing file path to benchmark\n";
             return 1;
         }
         return nextviper::bench_file(argv[2]);
@@ -610,23 +752,15 @@ int main(int argc, char* argv[]) {
 
     if (first_arg == "disasm") {
         if (argc < 3) {
-            std::cerr << "Error: missing file path to disassemble\n";
+            std::cerr << "error: missing file path to disassemble\n";
             return 1;
         }
         return nextviper::disasm_file(argv[2]);
     }
 
-    if (first_arg == "check") {
-        if (argc < 3) {
-            std::cerr << "Error: missing file path to check\n";
-            return 1;
-        }
-        return nextviper::check_file(argv[2]);
-    }
-
     if (first_arg == "parse") {
         if (argc < 3) {
-            std::cerr << "Error: missing file path to parse\n";
+            std::cerr << "error: missing file path to parse\n";
             return 1;
         }
         return nextviper::parse_file(argv[2]);
@@ -634,7 +768,7 @@ int main(int argc, char* argv[]) {
 
     if (first_arg == "tokens") {
         if (argc < 3) {
-            std::cerr << "Error: missing file path to scan\n";
+            std::cerr << "error: missing file path to scan\n";
             return 1;
         }
         return nextviper::tokens_file(argv[2]);

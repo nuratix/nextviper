@@ -17,10 +17,11 @@ NV_TEST(Diagnostics, RenderErrorReport) {
     diag.render(ss);
     std::string output = ss.str();
 
-    NV_ASSERT(output.find("error: expected expression after '+'") != std::string::npos);
+    NV_ASSERT(output.find("error[NV100]:") != std::string::npos);
+    NV_ASSERT(output.find("expected expression after '+'") != std::string::npos);
     NV_ASSERT(output.find("--> app.nv:2:14") != std::string::npos);
     NV_ASSERT(output.find("let y = (20 +") != std::string::npos);
-    NV_ASSERT(output.find("^ did you forget an operand?") != std::string::npos);
+    NV_ASSERT(output.find("help: did you forget an operand?") != std::string::npos);
 }
 
 NV_TEST(Diagnostics, MultipleDiagnosticLevels) {
@@ -38,6 +39,8 @@ NV_TEST(Diagnostics, MultipleDiagnosticLevels) {
     diag.render(ss);
     std::string output = ss.str();
 
-    NV_ASSERT(output.find("warning: variable 'a' is unused") != std::string::npos);
-    NV_ASSERT(output.find("note: type was inferred as Int") != std::string::npos);
+    NV_ASSERT(output.find("warning[NV200]:") != std::string::npos);
+    NV_ASSERT(output.find("variable 'a' is unused") != std::string::npos);
+    NV_ASSERT(output.find("note:") != std::string::npos);
+    NV_ASSERT(output.find("type was inferred as Int") != std::string::npos);
 }

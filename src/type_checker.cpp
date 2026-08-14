@@ -84,8 +84,8 @@ void TypeChecker::visit_literal(const LiteralExpr& expr) {
 void TypeChecker::visit_identifier(const IdentifierExpr& expr) {
     auto type = current_env_->lookup(expr.name());
     if (!type) {
-        diagnostics_.error("TypeError: undefined variable '" + expr.name() + "'", expr.span(),
-                          "make sure variable is declared before using it");
+        diagnostics_.error("unknown variable `" + expr.name() + "`", expr.span(),
+                          "define `" + expr.name() + "` before using it", "NV102");
         last_inferred_type_ = Type::make_unknown();
         return;
     }

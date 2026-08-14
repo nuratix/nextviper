@@ -23,32 +23,32 @@ Interpreter::Interpreter(DiagnosticEngine& diagnostics)
 }
 
 void Interpreter::runtime_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error("RuntimeError: " + message, span, help);
+    diagnostics_.error(message, span, help, "NV100");
     throw RuntimeError(RuntimeErrorKind::GENERIC_ERROR, message, span, help);
 }
 
 void Interpreter::type_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error("TypeError: " + message, span, help);
+    diagnostics_.error(message, span, help.empty() ? "ensure operands have compatible types" : help, "NV103");
     throw RuntimeError(RuntimeErrorKind::TYPE_ERROR, message, span, help);
 }
 
 void Interpreter::name_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error("NameError: " + message, span, help.empty() ? "make sure the variable is declared before use" : help);
+    diagnostics_.error(message, span, help.empty() ? "make sure the variable is declared before use" : help, "NV102");
     throw RuntimeError(RuntimeErrorKind::NAME_ERROR, message, span, help);
 }
 
 void Interpreter::division_by_zero_error(SourceSpan span, std::string help) {
-    diagnostics_.error("DivisionByZeroError: cannot divide by zero", span, help);
+    diagnostics_.error("division by zero", span, help.empty() ? "ensure denominator is non-zero before division" : help, "NV105");
     throw RuntimeError(RuntimeErrorKind::DIVISION_BY_ZERO, "cannot divide by zero", span, help);
 }
 
 void Interpreter::mutability_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error("MutabilityError: " + message, span, help.empty() ? "use 'let mut' to make the variable reassignable" : help);
+    diagnostics_.error(message, span, help.empty() ? "use 'let mut' to make the variable reassignable" : help, "NV108");
     throw RuntimeError(RuntimeErrorKind::MUTABILITY_ERROR, message, span, help);
 }
 
 void Interpreter::index_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error("IndexError: " + message, span, help);
+    diagnostics_.error(message, span, help.empty() ? "index is out of range for collection" : help, "NV106");
     throw RuntimeError(RuntimeErrorKind::INDEX_ERROR, message, span, help);
 }
 
@@ -537,7 +537,7 @@ void Interpreter::visit_literal(const LiteralExpr& expr) {
 void Interpreter::visit_identifier(const IdentifierExpr& expr) {
     auto val = environment_->get(expr.name());
     if (!val) {
-        name_error("undefined variable '" + expr.name() + "'", expr.span());
+        name_error("unknown variable `" + expr.name() + "`", expr.span(), "define `" + expr.name() + "` before using it");
     }
     last_evaluated_value_ = *val;
 }

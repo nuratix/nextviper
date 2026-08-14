@@ -46,6 +46,8 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_modules.cpp \
             $(TEST_DIR)/test_ai_data.cpp \
             $(TEST_DIR)/test_native_compiler.cpp \
+            $(TEST_DIR)/test_formatter.cpp \
+            $(TEST_DIR)/test_tooling.cpp \
             $(TEST_DIR)/test_vm.cpp \
             $(TEST_DIR)/test_diagnostics.cpp
 
@@ -70,10 +72,12 @@ $(BUILD_DIR)/tests/%.o: $(TEST_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(TARGET): $(CORE_OBJS) $(MAIN_OBJ)
+	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "\033[1;32m[Built]\033[0m $(TARGET)"
 
 $(TEST_TARGET): $(CORE_OBJS) $(TEST_OBJS)
+	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "\033[1;32m[Built]\033[0m $(TEST_TARGET)"
 

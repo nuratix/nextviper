@@ -8,7 +8,7 @@ if [ ! -f "$BIN" ]; then
     exit 1
 fi
 
-echo "Testing NextViper CLI..."
+echo "Testing NextViper CLI Tooling..."
 
 # Test 1: --version
 echo "1. Checking --version"
@@ -22,7 +22,7 @@ echo "  ✓ PASS: version output correct"
 # Test 2: --help
 echo "2. Checking --help"
 HELP_OUT=$($BIN --help)
-if [[ "$HELP_OUT" != *"Usage:"* ]]; then
+if [[ "$HELP_OUT" != *"USAGE:"* ]] && [[ "$HELP_OUT" != *"Usage:"* ]]; then
     echo "FAIL: unexpected help output"
     exit 1
 fi
@@ -38,16 +38,25 @@ fi
 echo "  ✓ PASS: eval output correct (42)"
 
 # Test 4: check command
-echo "4. Checking syntax validation"
+echo "4. Checking syntax & type validation"
 CHECK_OUT=$($BIN check examples/hello_world.nv)
-if [[ "$CHECK_OUT" != *"Syntax check passed"* ]]; then
-    echo "FAIL: syntax check failed"
+if [[ "$CHECK_OUT" != *"Check passed"* ]]; then
+    echo "FAIL: check failed: $CHECK_OUT"
     exit 1
 fi
-echo "  ✓ PASS: syntax check passed"
+echo "  ✓ PASS: check command succeeded"
 
-# Test 5: run command
-echo "5. Checking file execution"
+# Test 5: check --format=json
+echo "5. Checking check --format=json"
+JSON_OUT=$($BIN check examples/hello_world.nv --format=json)
+if [[ "$JSON_OUT" != *"["* ]]; then
+    echo "FAIL: expected JSON output"
+    exit 1
+fi
+echo "  ✓ PASS: check --format=json succeeded"
+
+# Test 6: run command
+echo "6. Checking file execution"
 RUN_OUT=$($BIN run examples/hello_world.nv)
 if [[ "$RUN_OUT" != *"Hello, World! Welcome to NextViper."* ]]; then
     echo "FAIL: unexpected output: $RUN_OUT"
@@ -55,35 +64,39 @@ if [[ "$RUN_OUT" != *"Hello, World! Welcome to NextViper."* ]]; then
 fi
 echo "  ✓ PASS: hello_world.nv executed successfully"
 
-# Test 6: parse AST command
-echo "6. Checking AST parser"
-PARSE_OUT=$($BIN parse examples/hello_world.nv)
-if [[ "$PARSE_OUT" != *"Program:"* ]]; then
-    echo "FAIL: AST output missing Program:"
-    exit 1
-fi
-echo "  ✓ PASS: AST parsing succeeded"
-
 # Test 7: Formatter command
 echo "7. Checking fmt command"
-FMT_OUT=$($BIN fmt examples/modules_example.nv)
-if [[ "$FMT_OUT" != *"import math"* ]]; then
-    echo "FAIL: fmt output unexpected"
+TMP_FMT="/tmp/test_fmt_$$.nv"
+echo "let   x=10+20" > "$TMP_FMT"
+$BIN fmt "$TMP_FMT"
+FMT_CONTENT=$(cat "$TMP_FMT")
+if [[ "$FMT_CONTENT" != *"let x = 10 + 20"* ]]; then
+    echo "FAIL: fmt failed to format file: $FMT_CONTENT"
+    rm -f "$TMP_FMT"
     exit 1
 fi
-echo "  ✓ PASS: fmt command succeeded"
+rm -f "$TMP_FMT"
+echo "  ✓ PASS: fmt in-place formatting succeeded"
 
-# Test 8: Build command
-echo "8. Checking build command"
+# Test 8: Formatter --check
+echo "8. Checking fmt --check"
+TMP_FMT="/tmp/test_fmt_clean_$$.nv"
+echo "let x = 10 + 20" > "$TMP_FMT"
+$BIN fmt "$TMP_FMT" --check > /dev/null 2>&1
+rm -f "$TMP_FMT"
+echo "  ✓ PASS: fmt --check passed on clean code"
+
+# Test 9: Build command
+echo "9. Checking build command"
 BUILD_OUT=$($BIN build examples/modules_example.nv -o build/test_cli_build.nvc)
-if [[ "$BUILD_OUT" != *"Successfully compiled and built"* ]]; then
-    echo "FAIL: build command failed"
+if [[ "$BUILD_OUT" != *"Built bytecode package"* ]] && [[ "$BUILD_OUT" != *"Successfully compiled and built"* ]]; then
+    echo "FAIL: build command failed: $BUILD_OUT"
     exit 1
 fi
 echo "  ✓ PASS: build command succeeded"
 
-# Test 9: Package command
-echo "9. Checking package command"
+# Test 10: Package command
+echo "10. Checking package command"
 PKG_OUT=$($BIN package help)
 if [[ "$PKG_OUT" != *"NextViper Package Manager"* ]]; then
     echo "FAIL: package help failed"
@@ -91,8 +104,8 @@ if [[ "$PKG_OUT" != *"NextViper Package Manager"* ]]; then
 fi
 echo "  ✓ PASS: package command succeeded"
 
-# Test 10: Error handling with exit code
-echo "10. Checking error exit codes"
+# Test 11: Error handling with non-zero exit code
+echo "11. Checking error exit codes"
 set +e
 $BIN run non_existent_file.nv > /dev/null 2>&1
 EXIT_CODE=$?

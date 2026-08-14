@@ -56,64 +56,122 @@ bool REPL::handle_command(const std::string& line) {
     return true;
 }
 
+static bool needs_multiline_continuation(const std::string& code) {
+    if (code.empty()) return false;
+
+    // Check if line ends with colon
+    size_t last_non_ws = code.find_last_not_of(" \t\r\n");
+    if (last_non_ws != std::string::npos && code[last_non_ws] == ':') {
+        return true;
+    }
+
+    // Check unclosed braces/brackets/parentheses
+    int paren = 0, bracket = 0, brace = 0;
+    bool in_str = false;
+    char str_q = 0;
+
+    for (size_t i = 0; i < code.size(); ++i) {
+        char c = code[i];
+        if (in_str) {
+            if (c == '\\' && i + 1 < code.size()) {
+                i++;
+                continue;
+            }
+            if (c == str_q) in_str = false;
+            continue;
+        }
+
+        if (c == '"' || c == '\'') {
+            in_str = true;
+            str_q = c;
+        } else if (c == '(') paren++;
+        else if (c == ')') paren = std::max(0, paren - 1);
+        else if (c == '[') bracket++;
+        else if (c == ']') bracket = std::max(0, bracket - 1);
+        else if (c == '{') brace++;
+        else if (c == '}') brace = std::max(0, brace - 1);
+    }
+
+    return (paren > 0 || bracket > 0 || brace > 0);
+}
+
 void REPL::run() {
     print_banner();
 
     std::string line;
+    std::string accumulated_code;
+
     while (true) {
-        std::cout << "\033[1;32mnv>\033[0m ";
+        if (accumulated_code.empty()) {
+            std::cout << "\033[1;32mnv>\033[0m ";
+        } else {
+            std::cout << "\033[1;36m... \033[0m";
+        }
+
         if (!std::getline(std::cin, line)) {
             std::cout << "\n";
             break;
         }
 
-        if (line.empty()) continue;
+        if (accumulated_code.empty() && line.empty()) continue;
 
-        if (line[0] == ':') {
+        if (accumulated_code.empty() && !line.empty() && line[0] == ':') {
             if (!handle_command(line)) {
                 break;
             }
             continue;
         }
 
-        std::string source_name = "<repl-" + std::to_string(line_counter_++) + ">";
-        source_manager_.add_file(source_name, line);
-        diagnostics_.clear();
-
-        Lexer lexer(line, source_name, diagnostics_);
-        auto tokens = lexer.tokenize();
-
-        if (diagnostics_.has_errors()) {
-            diagnostics_.render(std::cerr);
-            continue;
+        if (!accumulated_code.empty()) {
+            accumulated_code += "\n" + line;
+        } else {
+            accumulated_code = line;
         }
 
-        Parser parser(tokens, diagnostics_);
-        auto program = parser.parse_program();
+        // If user is inside multiline and submits empty line, finish
+        if (line.empty() || !needs_multiline_continuation(accumulated_code)) {
+            std::string code = accumulated_code;
+            accumulated_code.clear();
 
-        if (diagnostics_.has_errors() || !program) {
-            diagnostics_.render(std::cerr);
-            continue;
-        }
+            std::string source_name = "<repl-" + std::to_string(line_counter_++) + ">";
+            source_manager_.add_file(source_name, code);
+            diagnostics_.clear();
 
-        // Check if single expression statement to auto-print result
-        if (program->statements().size() == 1) {
-            if (auto* expr_stmt = dynamic_cast<ExprStmt*>(program->statements()[0].get())) {
-                try {
-                    Value val = interpreter_.evaluate(expr_stmt->expr());
-                    if (!val.is_nil()) {
-                        std::cout << "\033[1;34m=>\033[0m " << val.inspect() << "\n";
-                    }
-                } catch (const RuntimeError&) {
-                    diagnostics_.render(std::cerr);
-                }
+            Lexer lexer(code, source_name, diagnostics_);
+            auto tokens = lexer.tokenize();
+
+            if (diagnostics_.has_errors()) {
+                diagnostics_.render(std::cerr);
                 continue;
             }
-        }
 
-        // Execute general statements
-        if (!interpreter_.execute(*program)) {
-            diagnostics_.render(std::cerr);
+            Parser parser(tokens, diagnostics_);
+            auto program = parser.parse_program();
+
+            if (diagnostics_.has_errors() || !program) {
+                diagnostics_.render(std::cerr);
+                continue;
+            }
+
+            // Check if single expression statement to auto-print result
+            if (program->statements().size() == 1) {
+                if (auto* expr_stmt = dynamic_cast<ExprStmt*>(program->statements()[0].get())) {
+                    try {
+                        Value val = interpreter_.evaluate(expr_stmt->expr());
+                        if (!val.is_nil()) {
+                            std::cout << "\033[1;34m=>\033[0m " << val.inspect() << "\n";
+                        }
+                    } catch (const RuntimeError&) {
+                        diagnostics_.render(std::cerr);
+                    }
+                    continue;
+                }
+            }
+
+            // Execute general statements
+            if (!interpreter_.execute(*program)) {
+                diagnostics_.render(std::cerr);
+            }
         }
     }
 

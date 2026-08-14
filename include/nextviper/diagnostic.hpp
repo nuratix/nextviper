@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <iostream>
+#include <sstream>
 
 namespace nextviper {
 
@@ -17,12 +18,15 @@ enum class DiagnosticLevel {
 
 struct Diagnostic {
     DiagnosticLevel level;
+    std::string code; // e.g. "NV102"
     std::string message;
     SourceSpan span;
-    std::string hint;
+    std::string hint; // help / suggestion message
 
-    Diagnostic(DiagnosticLevel level, std::string message, SourceSpan span = {}, std::string hint = "")
-        : level(level), message(std::move(message)), span(span), hint(std::move(hint)) {}
+    Diagnostic(DiagnosticLevel level, std::string message, SourceSpan span = {}, std::string hint = "", std::string code = "")
+        : level(level), code(std::move(code)), message(std::move(message)), span(span), hint(std::move(hint)) {}
+
+    std::string to_json() const;
 };
 
 class SourceManager {
@@ -31,6 +35,7 @@ public:
     std::string_view get_content(const std::string& path) const;
     std::string_view get_line_content(const std::string& path, size_t line_number) const;
     bool has_file(const std::string& path) const;
+    void clear();
 
 private:
     struct FileEntry {
@@ -48,9 +53,9 @@ public:
     explicit DiagnosticEngine(SourceManager& sm, bool use_color = true)
         : source_manager_(sm), use_color_(use_color) {}
 
-    void report(DiagnosticLevel level, const std::string& message, SourceSpan span = {}, const std::string& hint = "");
-    void error(const std::string& message, SourceSpan span = {}, const std::string& hint = "");
-    void warning(const std::string& message, SourceSpan span = {}, const std::string& hint = "");
+    void report(DiagnosticLevel level, const std::string& message, SourceSpan span = {}, const std::string& hint = "", const std::string& code = "");
+    void error(const std::string& message, SourceSpan span = {}, const std::string& hint = "", const std::string& code = "NV100");
+    void warning(const std::string& message, SourceSpan span = {}, const std::string& hint = "", const std::string& code = "NV200");
     void note(const std::string& message, SourceSpan span = {});
     void help(const std::string& message, SourceSpan span = {});
 
@@ -58,10 +63,15 @@ public:
     size_t error_count() const { return error_count_; }
     size_t warning_count() const { return warning_count_; }
 
+    const std::vector<Diagnostic>& diagnostics() const { return diagnostics_; }
+
     void render(std::ostream& os = std::cerr) const;
+    std::string render_to_string() const;
+    std::string to_json() const;
     void clear();
 
     void set_color(bool enable) { use_color_ = enable; }
+    bool use_color() const { return use_color_; }
 
 private:
     SourceManager& source_manager_;
