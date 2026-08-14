@@ -12,10 +12,13 @@ namespace nextviper {
 
 class Lexer {
 public:
-    Lexer(std::string source, std::string file_path, DiagnosticEngine& diagnostics);
+    Lexer(std::string source, std::string file_path, DiagnosticEngine& diagnostics, bool emit_newlines = false);
 
     std::vector<Token> tokenize();
     Token next_token();
+
+    bool emit_newlines() const { return emit_newlines_; }
+    void set_emit_newlines(bool val) { emit_newlines_ = val; }
 
 private:
     bool is_at_end() const;
@@ -30,7 +33,7 @@ private:
 
     Token scan_identifier_or_keyword();
     Token scan_number();
-    Token scan_string();
+    Token scan_string(char quote_char, bool is_raw = false, bool is_multiline = false);
 
     SourceLocation current_location() const;
     SourceSpan make_span(SourceLocation start_loc) const;
@@ -38,6 +41,7 @@ private:
     std::string source_;
     std::string file_path_;
     DiagnosticEngine& diagnostics_;
+    bool emit_newlines_ = false;
 
     size_t start_offset_ = 0;
     size_t current_offset_ = 0;

@@ -1,5 +1,6 @@
 #include "nextviper/token.hpp"
 #include <sstream>
+#include <iomanip>
 
 namespace nextviper {
 
@@ -27,6 +28,7 @@ std::string_view token_type_to_string(TokenType type) {
         case TokenType::KEYWORD_CONTINUE: return "continue";
         case TokenType::KEYWORD_TRUE: return "true";
         case TokenType::KEYWORD_FALSE: return "false";
+        case TokenType::KEYWORD_NULL: return "null";
         case TokenType::KEYWORD_NIL: return "nil";
         case TokenType::KEYWORD_MATCH: return "match";
         case TokenType::KEYWORD_STRUCT: return "struct";
@@ -60,6 +62,10 @@ std::string_view token_type_to_string(TokenType type) {
         case TokenType::AMP_AMP: return "&&";
         case TokenType::PIPE_PIPE: return "||";
         case TokenType::BANG: return "!";
+        case TokenType::AMP: return "&";
+        case TokenType::PIPE: return "|";
+        case TokenType::TILDE: return "~";
+        case TokenType::CARET: return "^";
 
         case TokenType::PIPE_GREATER: return "|>";
         case TokenType::FAT_ARROW: return "=>";
@@ -75,9 +81,13 @@ std::string_view token_type_to_string(TokenType type) {
         case TokenType::RBRACKET: return "]";
         case TokenType::COMMA: return ",";
         case TokenType::COLON: return ":";
+        case TokenType::COLON_COLON: return "::";
         case TokenType::SEMICOLON: return ";";
         case TokenType::DOT: return ".";
         case TokenType::QUESTION: return "?";
+        case TokenType::AT: return "@";
+
+        case TokenType::NEWLINE: return "NEWLINE";
     }
     return "UNKNOWN";
 }
@@ -88,7 +98,23 @@ std::string_view Token::type_name() const {
 
 std::string Token::to_string() const {
     std::ostringstream ss;
-    ss << "Token(" << type_name() << ", \"" << text << "\", " << span.start << ")";
+    ss << "Token(" << type_name() << ", \"" << text << "\", line: " << span.start.line << ", col: " << span.start.column << ")";
+    return ss.str();
+}
+
+std::string Token::format_detailed() const {
+    std::ostringstream ss;
+    ss << "Token[" << type_name() << "] lexeme=\"" << text << "\"";
+    if (type == TokenType::INT_LITERAL) {
+        ss << " value=" << int_value;
+    } else if (type == TokenType::FLOAT_LITERAL) {
+        ss << " value=" << float_value;
+    } else if (type == TokenType::STRING_LITERAL) {
+        ss << " value=\"" << string_value << "\"";
+    } else if (type == TokenType::KEYWORD_TRUE || type == TokenType::KEYWORD_FALSE) {
+        ss << " value=" << (bool_value ? "true" : "false");
+    }
+    ss << " span=" << span.start.line << ":" << span.start.column << "-" << span.end.line << ":" << span.end.column;
     return ss.str();
 }
 

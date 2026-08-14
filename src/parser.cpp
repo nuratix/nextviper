@@ -553,7 +553,7 @@ std::unique_ptr<Expr> Parser::parse_lambda() {
 }
 
 std::unique_ptr<Expr> Parser::parse_primary() {
-    if (match(TokenType::KEYWORD_NIL)) {
+    if (match({TokenType::KEYWORD_NIL, TokenType::KEYWORD_NULL})) {
         return std::make_unique<LiteralExpr>(previous().span);
     }
     if (match(TokenType::KEYWORD_TRUE)) {

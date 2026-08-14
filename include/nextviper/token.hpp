@@ -3,6 +3,7 @@
 #include "nextviper/common.hpp"
 #include <string>
 #include <string_view>
+#include <sstream>
 
 namespace nextviper {
 
@@ -32,6 +33,7 @@ enum class TokenType {
     KEYWORD_CONTINUE,
     KEYWORD_TRUE,
     KEYWORD_FALSE,
+    KEYWORD_NULL,
     KEYWORD_NIL,
     KEYWORD_MATCH,
     KEYWORD_STRUCT,
@@ -66,6 +68,10 @@ enum class TokenType {
     AMP_AMP,        // &&
     PIPE_PIPE,      // ||
     BANG,           // !
+    AMP,            // &
+    PIPE,           // |
+    TILDE,          // ~
+    CARET,          // ^
 
     PIPE_GREATER,   // |> (Pipeline Operator)
     FAT_ARROW,      // => (Arrow function / match arm)
@@ -73,7 +79,7 @@ enum class TokenType {
     DOT_DOT,        // .. (Range)
     DOT_DOT_EQUAL,  // ..= (Inclusive range)
 
-    // Punctuation
+    // Punctuation & Delimiters
     LPAREN,         // (
     RPAREN,         // )
     LBRACE,         // {
@@ -82,25 +88,38 @@ enum class TokenType {
     RBRACKET,       // ]
     COMMA,          // ,
     COLON,          // :
+    COLON_COLON,    // ::
     SEMICOLON,      // ;
     DOT,            // .
-    QUESTION        // ?
+    QUESTION,       // ?
+    AT,             // @
+
+    // Layout
+    NEWLINE
 };
 
 struct Token {
     TokenType type = TokenType::INVALID;
-    std::string text;
-    SourceSpan span;
+    std::string text;           // Raw source lexeme
+    SourceSpan span;            // Source location span (file, line, col)
+    
+    // Parsed literal values
     int64_t int_value = 0;
     double float_value = 0.0;
     std::string string_value;
+    bool bool_value = false;
 
     Token() = default;
     Token(TokenType type, std::string text, SourceSpan span)
         : type(type), text(std::move(text)), span(span) {}
 
+    size_t line() const { return span.start.line; }
+    size_t column() const { return span.start.column; }
+    size_t offset() const { return span.start.offset; }
+
     std::string_view type_name() const;
     std::string to_string() const;
+    std::string format_detailed() const;
 };
 
 std::string_view token_type_to_string(TokenType type);

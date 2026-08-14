@@ -1,0 +1,5 @@
+let name = "Junaid"
+let age = 15
+
+print(name)
+print(age + 1)
