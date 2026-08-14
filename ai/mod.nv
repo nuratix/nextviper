@@ -1,0 +1,53 @@
+// NextViper AI Module Central Hub
+import ai
+
+fn Sequential(layers):
+    return ai.Sequential(layers)
+
+fn sequential(layers):
+    return ai.Sequential(layers)
+
+fn Dense(units, activation):
+    return ai.Dense(units, activation)
+
+fn dense(units, activation):
+    return ai.Dense(units, activation)
+
+fn Dropout(rate):
+    return ai.Dropout(rate)
+
+fn Flatten():
+    return ai.Flatten()
+
+fn ReLU():
+    return ai.ReLU()
+
+fn Sigmoid():
+    return ai.Sigmoid()
+
+fn Tanh():
+    return ai.Tanh()
+
+fn Softmax(dim):
+    return ai.Softmax(dim)
+
+fn Adam(lr, beta1, beta2, eps, weight_decay):
+    return ai.Adam(lr, beta1, beta2, eps, weight_decay)
+
+fn SGD(lr, momentum, weight_decay):
+    return ai.SGD(lr, momentum, weight_decay)
+
+fn MSE():
+    return ai.MSE()
+
+fn MAE():
+    return ai.MAE()
+
+fn CrossEntropy():
+    return ai.CrossEntropy()
+
+fn BinaryCrossEntropy():
+    return ai.BinaryCrossEntropy()
+
+fn load(path):
+    return ai.load(path)

@@ -1,0 +1,10 @@
+// NextViper AI Datasets Bridge
+import data
+import tensor
+
+fn load_csv_tensors(path, feature_cols, target_cols):
+    let df = data.load(path)
+    let clean_df = df.drop_missing()
+    let x = clean_df.to_tensor(feature_cols)
+    let y = clean_df.to_tensor(target_cols)
+    return [x, y]

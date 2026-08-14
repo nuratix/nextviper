@@ -10,6 +10,8 @@
 
 namespace nextviper {
 
+struct AutogradNode;
+
 enum class Device {
     CPU,
     CUDA,
@@ -88,6 +90,16 @@ public:
     static CPUTensorBackend& instance();
 };
 
+class Tensor;
+struct AutogradNode;
+
+struct AutogradMeta {
+    bool requires_grad = false;
+    bool is_leaf = true;
+    std::shared_ptr<Tensor> grad = nullptr;
+    std::shared_ptr<AutogradNode> grad_fn = nullptr;
+};
+
 class Tensor {
 public:
     Tensor();
@@ -110,6 +122,20 @@ public:
     Device device() const { return device_; }
     bool is_contiguous() const { return is_contiguous_; }
 
+    // Autograd Properties & Methods
+    bool requires_grad() const { return autograd_meta_ ? autograd_meta_->requires_grad : false; }
+    void set_requires_grad(bool req) { ensure_autograd_meta(); autograd_meta_->requires_grad = req; }
+    std::shared_ptr<Tensor> grad() const { return autograd_meta_ ? autograd_meta_->grad : nullptr; }
+    void set_grad(std::shared_ptr<Tensor> g) { ensure_autograd_meta(); autograd_meta_->grad = std::move(g); }
+    std::shared_ptr<AutogradNode> grad_fn() const { return autograd_meta_ ? autograd_meta_->grad_fn : nullptr; }
+    void set_grad_fn(std::shared_ptr<AutogradNode> fn) { ensure_autograd_meta(); autograd_meta_->grad_fn = std::move(fn); }
+    bool is_leaf() const { return autograd_meta_ ? autograd_meta_->is_leaf : true; }
+    void set_is_leaf(bool leaf) { ensure_autograd_meta(); autograd_meta_->is_leaf = leaf; }
+
+    void backward(const Tensor& grad_output = {});
+    void zero_grad();
+    Tensor detach() const;
+
     // Memory access
     void* data() { return data_.get(); }
     const void* data() const { return data_.get(); }
@@ -130,7 +156,7 @@ public:
     Tensor T() const; // 2D Transpose
     Tensor flatten() const;
 
-    // Mathematical operations
+    // Mathematical operations (with automatic autograd tracking)
     Tensor add(const Tensor& other) const;
     Tensor sub(const Tensor& other) const;
     Tensor mul(const Tensor& other) const;
@@ -138,6 +164,12 @@ public:
     Tensor scalar_add(double scalar) const;
     Tensor scalar_mul(double scalar) const;
     Tensor matmul(const Tensor& other) const;
+    Tensor neg() const;
+    Tensor pow(double exponent) const;
+    Tensor exp() const;
+    Tensor log(double eps = 1e-12) const;
+    Tensor abs() const;
+    Tensor clamp(double low, double high) const;
 
     // Reductions
     Tensor sum(int64_t dim = -1, bool keepdims = false) const;
@@ -166,6 +198,15 @@ private:
     Device device_ = Device::CPU;
     bool is_contiguous_ = true;
     std::shared_ptr<void> data_;
+
+    // Autograd metadata
+    std::shared_ptr<AutogradMeta> autograd_meta_ = nullptr;
+
+    void ensure_autograd_meta() const {
+        if (!autograd_meta_) {
+            const_cast<Tensor*>(this)->autograd_meta_ = std::make_shared<AutogradMeta>();
+        }
+    }
 
     void compute_strides();
     size_t compute_offset(const std::vector<int64_t>& indices) const;

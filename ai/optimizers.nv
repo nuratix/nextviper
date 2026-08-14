@@ -1,0 +1,14 @@
+// NextViper AI Optimizers Suite
+import ai
+
+fn Adam(lr, beta1, beta2, eps, weight_decay):
+    return ai.Adam(lr, beta1, beta2, eps, weight_decay)
+
+fn AdamW(lr, beta1, beta2, eps, weight_decay):
+    return ai.AdamW(lr, beta1, beta2, eps, weight_decay)
+
+fn SGD(lr, momentum, weight_decay):
+    return ai.SGD(lr, momentum, weight_decay)
+
+fn Momentum(lr, momentum, weight_decay):
+    return ai.Momentum(lr, momentum, weight_decay)

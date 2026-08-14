@@ -1,0 +1,8 @@
+// NextViper AI Hardware Backends Interface
+import ai
+
+fn current_backend():
+    return ai.device_name()
+
+fn available_devices():
+    return ["cpu"]

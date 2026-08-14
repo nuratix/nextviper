@@ -1,0 +1,8 @@
+// NextViper AI Model Serialization
+import ai
+
+fn save(model, path):
+    return model.save(path)
+
+fn load(path):
+    return ai.load(path)

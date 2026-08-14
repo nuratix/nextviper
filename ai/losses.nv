@@ -1,0 +1,14 @@
+// NextViper AI Loss Functions
+import ai
+
+fn MSE():
+    return ai.MSE()
+
+fn MAE():
+    return ai.MAE()
+
+fn CrossEntropy():
+    return ai.CrossEntropy()
+
+fn BinaryCrossEntropy():
+    return ai.BinaryCrossEntropy()

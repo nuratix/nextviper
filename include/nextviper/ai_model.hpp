@@ -1,86 +1,93 @@
 #pragma once
 
-#include "nextviper/common.hpp"
-#include "nextviper/value.hpp"
-#include "nextviper/tensor.hpp"
+#include "nextviper/ai_layers.hpp"
+#include "nextviper/ai_loss.hpp"
+#include "nextviper/ai_optimizer.hpp"
+#include "nextviper/ai_metrics.hpp"
 #include "nextviper/dataset.hpp"
+#include "nextviper/value.hpp"
 #include <string>
 #include <vector>
 #include <memory>
+#include <map>
+#include <functional>
 
 namespace nextviper {
 
-enum class ActivationKind {
-    NONE,
-    RELU,
-    SIGMOID,
-    TANH,
-    SOFTMAX
+// Training History
+struct History {
+    std::vector<double> loss;
+    std::map<std::string, std::vector<double>> metrics;
+    std::vector<double> val_loss;
+    std::map<std::string, std::vector<double>> val_metrics;
+    int epochs = 0;
+
+    Value to_value() const;
 };
 
-class Layer {
+// Sequential Container Model
+class Sequential : public Module {
 public:
-    virtual ~Layer() = default;
-    virtual std::string type_name() const = 0;
-    virtual Tensor forward(const Tensor& input) = 0;
-    virtual Tensor backward(const Tensor& grad_output, double lr) = 0;
-    virtual std::string serialize() const = 0;
-};
+    Sequential() = default;
+    explicit Sequential(std::vector<std::shared_ptr<Module>> layers);
 
-class LinearLayer : public Layer {
-public:
-    LinearLayer(int64_t in_features, int64_t out_features, bool has_bias = true);
+    std::string type_name() const override { return "Sequential"; }
 
-    std::string type_name() const override { return "Linear"; }
+    void add(std::shared_ptr<Module> layer);
+
     Tensor forward(const Tensor& input) override;
-    Tensor backward(const Tensor& grad_output, double lr) override;
-    std::string serialize() const override;
 
-    int64_t in_features() const { return in_features_; }
-    int64_t out_features() const { return out_features_; }
-    const Tensor& weights() const { return weights_; }
-    const Tensor& bias() const { return bias_; }
+    std::vector<std::shared_ptr<Parameter>> parameters() override;
+    std::vector<std::shared_ptr<Parameter>> trainable_parameters() override;
 
-    void set_weights(Tensor w) { weights_ = std::move(w); }
-    void set_bias(Tensor b) { bias_ = std::move(b); }
+    void train(bool mode = true) override;
+    void eval() override;
+    void zero_grad() override;
+
+    const std::vector<std::shared_ptr<Module>>& layers() const { return layers_; }
+
+    void compile(std::shared_ptr<Optimizer> optimizer,
+                 std::shared_ptr<Loss> loss,
+                 std::vector<std::string> metrics = {});
+
+    History fit(const Tensor& x_train,
+                const Tensor& y_train,
+                int epochs = 10,
+                size_t batch_size = 32,
+                bool shuffle = true,
+                const Tensor& val_x = Tensor(),
+                const Tensor& val_y = Tensor());
+
+    Tensor predict(const Tensor& input);
+
+    std::map<std::string, double> evaluate(const Tensor& x, const Tensor& y);
+
+    std::string summary() const;
+
+    void save(const std::string& path) const;
+    static std::shared_ptr<Sequential> load(const std::string& path);
+
+    Value to_value() override;
 
 private:
-    int64_t in_features_;
-    int64_t out_features_;
-    bool has_bias_;
-    Tensor weights_;
-    Tensor bias_;
-    Tensor last_input_;
+    std::vector<std::shared_ptr<Module>> layers_;
+    std::shared_ptr<Optimizer> optimizer_;
+    std::shared_ptr<Loss> loss_fn_;
+    std::vector<std::string> metric_names_;
 };
 
-class ActivationLayer : public Layer {
-public:
-    explicit ActivationLayer(ActivationKind kind);
-
-    std::string type_name() const override;
-    Tensor forward(const Tensor& input) override;
-    Tensor backward(const Tensor& grad_output, double lr) override;
-    std::string serialize() const override;
-
-    ActivationKind kind() const { return kind_; }
-
-private:
-    ActivationKind kind_;
-    Tensor last_output_;
-};
-
+// Backward-compatible AIModel wrapper
 class AIModel {
 public:
     AIModel();
+    explicit AIModel(std::shared_ptr<Sequential> seq);
 
-    void add_layer(std::shared_ptr<Layer> layer);
+    void add_layer(std::shared_ptr<Module> layer);
     Tensor forward(const Tensor& x);
     Tensor predict(const Tensor& x);
 
-    // Single gradient descent training step
     double train_step(const Tensor& x, const Tensor& y, double lr = 0.01);
 
-    // End-to-end dataset fitting
     void fit(const Dataset& dataset,
              const std::vector<std::string>& feature_cols,
              const std::vector<std::string>& target_cols,
@@ -88,16 +95,15 @@ public:
              double lr = 0.01,
              size_t batch_size = 16);
 
-    // Serialization
     void save(const std::string& path) const;
     static AIModel load(const std::string& path);
 
-    const std::vector<std::shared_ptr<Layer>>& layers() const { return layers_; }
+    std::shared_ptr<Sequential> sequential() const { return seq_; }
 
     Value to_value() const;
 
 private:
-    std::vector<std::shared_ptr<Layer>> layers_;
+    std::shared_ptr<Sequential> seq_;
 };
 
 } // namespace nextviper

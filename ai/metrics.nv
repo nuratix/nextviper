@@ -1,0 +1,20 @@
+// NextViper AI Metrics Module
+import ai
+
+fn accuracy(pred, target):
+    return pred.accuracy(target)
+
+fn precision(pred, target):
+    return pred.precision(target)
+
+fn recall(pred, target):
+    return pred.recall(target)
+
+fn f1_score(pred, target):
+    return pred.f1_score(target)
+
+fn mae(pred, target):
+    return pred.mae(target)
+
+fn mse(pred, target):
+    return pred.mse(target)

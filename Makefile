@@ -23,6 +23,13 @@ CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/tensor.cpp \
             $(SRC_DIR)/dataset.cpp \
             $(SRC_DIR)/ai_model.cpp \
+            $(SRC_DIR)/autograd.cpp \
+            $(SRC_DIR)/ai_layers.cpp \
+            $(SRC_DIR)/ai_loss.cpp \
+            $(SRC_DIR)/ai_optimizer.cpp \
+            $(SRC_DIR)/ai_metrics.cpp \
+            $(SRC_DIR)/ai_serialization.cpp \
+            $(SRC_DIR)/ai_subsystem.cpp \
             $(SRC_DIR)/ir.cpp \
             $(SRC_DIR)/native_compiler.cpp \
             $(SRC_DIR)/formatter.cpp \
@@ -48,6 +55,7 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_modules.cpp \
             $(TEST_DIR)/test_ai_data.cpp \
             $(TEST_DIR)/test_data_subsystem.cpp \
+            $(TEST_DIR)/test_ai_subsystem.cpp \
             $(TEST_DIR)/test_native_compiler.cpp \
             $(TEST_DIR)/test_stdlib.cpp \
             $(TEST_DIR)/test_package_manager.cpp \

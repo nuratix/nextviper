@@ -2,6 +2,7 @@
 #include "nextviper/tensor.hpp"
 #include "nextviper/dataset.hpp"
 #include "nextviper/ai_model.hpp"
+#include "nextviper/ai_layers.hpp"
 #include "nextviper/lexer.hpp"
 #include "nextviper/parser.hpp"
 #include "nextviper/interpreter.hpp"
@@ -104,9 +105,8 @@ NV_TEST(AIData, DatasetLoadingCleaningAndSplitting) {
 NV_TEST(AIData, AIModelTrainingInferenceAndSerialization) {
     // 1. Build a 2-layer Neural Network
     AIModel model;
-    model.add_layer(std::make_shared<LinearLayer>(2, 4, true));
-    model.add_layer(std::make_shared<ActivationLayer>(ActivationKind::RELU));
-    model.add_layer(std::make_shared<LinearLayer>(4, 1, true));
+    model.add_layer(std::make_shared<Dense>(2, 4, true, "relu"));
+    model.add_layer(std::make_shared<Dense>(4, 1, true, "none"));
 
     // 2. Training Data (Linear relationship: y = 2*x1 + 3*x2)
     Tensor x({4, 2}, {
@@ -137,7 +137,7 @@ NV_TEST(AIData, AIModelTrainingInferenceAndSerialization) {
     model.save(model_file);
 
     AIModel loaded_model = AIModel::load(model_file);
-    NV_ASSERT_EQ(loaded_model.layers().size(), 3);
+    NV_ASSERT_EQ(loaded_model.sequential()->layers().size(), 2);
 
     Tensor pred_orig = model.predict(x);
     Tensor pred_loaded = loaded_model.predict(x);

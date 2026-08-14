@@ -1229,7 +1229,14 @@ Value DataFrame::to_value() const {
         return self->standardize().to_value();
     });
 
-    obj["to_tensor"] = Value::make_native_fn("to_tensor", -1, [self](const std::vector<Value>&, SourceSpan) {
+    obj["to_tensor"] = Value::make_native_fn("to_tensor", -1, [self](const std::vector<Value>& args, SourceSpan) {
+        if (!args.empty() && args[0].is_array()) {
+            std::vector<std::string> cols;
+            for (const auto& v : *args[0].as_array()) {
+                cols.push_back(v.as_string());
+            }
+            return self->to_tensor(cols).to_value();
+        }
         return self->to_tensor().to_value();
     });
 

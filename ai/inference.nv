@@ -1,0 +1,5 @@
+// NextViper AI Inference Engine
+import ai
+
+fn predict(model, input_tensor):
+    return model.predict(input_tensor)

@@ -1,0 +1,8 @@
+// NextViper AI Training Loop Utilities
+import ai
+
+fn fit(model, x, y, epochs, batch_size):
+    return model.fit(x, y, epochs, batch_size)
+
+fn evaluate(model, x, y):
+    return model.evaluate(x, y)

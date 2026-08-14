@@ -1,0 +1,26 @@
+// NextViper AI Layers Suite
+import ai
+
+fn Dense(units, activation):
+    return ai.Dense(units, activation)
+
+fn dense(units, activation):
+    return ai.Dense(units, activation)
+
+fn Dropout(rate):
+    return ai.Dropout(rate)
+
+fn Flatten():
+    return ai.Flatten()
+
+fn ReLU():
+    return ai.ReLU()
+
+fn Sigmoid():
+    return ai.Sigmoid()
+
+fn Tanh():
+    return ai.Tanh()
+
+fn Softmax(dim):
+    return ai.Softmax(dim)

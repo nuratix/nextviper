@@ -1,0 +1,57 @@
+// ============================================================================
+// NextViper AI Subsystem - Non-linear XOR Classification Example
+// ============================================================================
+
+import tensor
+import ai
+
+fn main() {
+    print("=== NextViper AI: Training XOR Neural Network ===")
+
+    // 1. Prepare XOR inputs and targets
+    let x = tensor.from([[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]])
+    let y = tensor.from([[0.0], [1.0], [1.0], [0.0]])
+
+    print("Input Tensor Shape:", x.shape)
+    print("Target Tensor Shape:", y.shape)
+
+    // 2. Build multi-layer perceptron (MLP) with non-linear activations
+    let model = ai.Sequential([
+        ai.Dense(2, 8, "relu"),
+        ai.Dense(8, 1, "sigmoid")
+    ])
+
+    print("Model Architecture Summary:")
+    print("  Layer 1: Dense(2 -> 8, ReLU)")
+    print("  Layer 2: Dense(8 -> 1, Sigmoid)")
+
+    // 3. Compile model with Adam optimizer and Binary Cross-Entropy / MSE loss
+    model.compile(
+        ai.Adam(0.05),
+        ai.MSE()
+    )
+
+    // 4. Fit model over 200 epochs
+    print("\nTraining model...")
+    let history = model.fit(x, y, 200, 4)
+
+    // 5. Evaluate and run inference
+    let preds = model.predict(x)
+    print("\nTrained Predictions on XOR inputs:")
+    print("  [0, 0] -> expected ~0.0, got:", preds.get(0, 0))
+    print("  [0, 1] -> expected ~1.0, got:", preds.get(1, 0))
+    print("  [1, 0] -> expected ~1.0, got:", preds.get(2, 0))
+    print("  [1, 1] -> expected ~0.0, got:", preds.get(3, 0))
+
+    // 6. Safe Model Serialization & Restoration
+    let model_path = "/tmp/xor_mlp.nvmodel"
+    model.save(model_path)
+    print("\nModel saved safely to:", model_path)
+
+    let loaded_model = ai.load(model_path)
+    let loaded_preds = loaded_model.predict(x)
+    print("Loaded Model Prediction verification [0, 1]:", loaded_preds.get(1, 0))
+    print("\nXOR Training Demo Complete!")
+}
+
+main()

@@ -1,0 +1,8 @@
+// NextViper AI Core Module
+import tensor
+
+fn version():
+    return "1.0.0"
+
+fn device_name():
+    return "CPU (NextViper Vectorized Native Backend)"

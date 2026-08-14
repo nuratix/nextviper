@@ -1,0 +1,8 @@
+// NextViper AI Model Abstraction
+import ai
+
+fn Sequential(layers):
+    return ai.Sequential(layers)
+
+fn sequential(layers):
+    return ai.Sequential(layers)

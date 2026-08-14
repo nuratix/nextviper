@@ -1,0 +1,12 @@
+// NextViper AI Autograd Engine Interface
+import tensor
+
+fn backward(loss_tensor):
+    return loss_tensor.backward()
+
+fn zero_grad(tensors):
+    for t in tensors:
+        t.zero_grad()
+
+fn detach(t):
+    return t.detach()
