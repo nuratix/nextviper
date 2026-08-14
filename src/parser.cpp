@@ -120,6 +120,23 @@ std::unique_ptr<Stmt> Parser::parse_statement() {
     }
     return parse_expression_statement();
 }
+std::string Parser::parse_type_annotation() {
+    Token base_type = consume(TokenType::IDENTIFIER, "expected type name");
+    std::string result = base_type.text;
+
+    // Generic type arguments, e.g. list[int], map[string, float], tensor[float]
+    if (match(TokenType::LBRACKET)) {
+        result += "[";
+        result += parse_type_annotation();
+        while (match(TokenType::COMMA)) {
+            result += ", ";
+            result += parse_type_annotation();
+        }
+        consume(TokenType::RBRACKET, "expected ']' after type arguments");
+        result += "]";
+    }
+    return result;
+}
 
 std::unique_ptr<Stmt> Parser::parse_let_statement() {
     SourceLocation start_loc = previous().span.start;
@@ -134,8 +151,7 @@ std::unique_ptr<Stmt> Parser::parse_let_statement() {
 
     std::string type_annotation;
     if (match(TokenType::COLON)) {
-        Token type_tok = consume(TokenType::IDENTIFIER, "expected type name after ':'");
-        type_annotation = type_tok.text;
+        type_annotation = parse_type_annotation();
     }
 
     std::unique_ptr<Expr> initializer = nullptr;
@@ -163,8 +179,7 @@ std::unique_ptr<Stmt> Parser::parse_fn_declaration() {
             Token param_name = consume(TokenType::IDENTIFIER, "expected parameter name");
             std::string param_type;
             if (match(TokenType::COLON)) {
-                Token type_tok = consume(TokenType::IDENTIFIER, "expected type name after ':'");
-                param_type = type_tok.text;
+                param_type = parse_type_annotation();
             }
             params.push_back({param_name.text, param_type});
         } while (match(TokenType::COMMA));
@@ -174,8 +189,7 @@ std::unique_ptr<Stmt> Parser::parse_fn_declaration() {
 
     std::string return_type;
     if (match(TokenType::ARROW)) {
-        Token ret_tok = consume(TokenType::IDENTIFIER, "expected return type after '->'");
-        return_type = ret_tok.text;
+        return_type = parse_type_annotation();
     }
 
     std::unique_ptr<BlockStmt> body = nullptr;

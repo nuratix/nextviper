@@ -1,0 +1,29 @@
+// NextViper Static Typing and Inference Example
+
+let name: string = "Junaid"
+let age: int = 15
+let score: float = 95.5
+let active: bool = true
+
+// Automatic Type Inference
+let inferred_age = 15
+let inferred_score = 95.5
+let inferred_name = "Junaid"
+let inferred_active = true
+
+print("User:", name, "(age:", age, "score:", score, "active:", active, ")")
+print("Inferred age + 5:", inferred_age + 5)
+
+// Collections
+let scores: list[int] = [95, 88, 100, 92]
+let subject_grades: map[string, int] = {"Math": 98, "Physics": 95}
+
+print("Scores:", scores)
+print("Grades:", subject_grades)
+
+// Functions with explicit type signatures
+fn calculate_total(a: int, b: int) -> int:
+    return a + b
+
+let total: int = calculate_total(10, 20)
+print("Total calculated:", total)

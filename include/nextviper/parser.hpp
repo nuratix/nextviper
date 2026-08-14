@@ -31,6 +31,7 @@ private:
     std::unique_ptr<BlockStmt> parse_block_statement();
     std::unique_ptr<Stmt> parse_body_statement(size_t parent_col = 0);
     std::unique_ptr<Stmt> parse_expression_statement();
+    std::string parse_type_annotation();
 
     // Expression parsing with precedence
     std::unique_ptr<Expr> parse_assignment();

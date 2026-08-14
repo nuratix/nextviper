@@ -2,6 +2,7 @@
 #include "nextviper/diagnostic.hpp"
 #include "nextviper/lexer.hpp"
 #include "nextviper/parser.hpp"
+#include "nextviper/type_checker.hpp"
 #include "nextviper/interpreter.hpp"
 #include "nextviper/compiler.hpp"
 #include "nextviper/vm.hpp"
@@ -238,7 +239,13 @@ int check_file(const std::string& path) {
         return 1;
     }
 
-    std::cout << "\033[1;32m✓\033[0m Syntax check passed: " << path << "\n";
+    TypeChecker type_checker(diagnostics);
+    if (!type_checker.check(*program)) {
+        diagnostics.render(std::cerr);
+        return 1;
+    }
+
+    std::cout << "\033[1;32m✓\033[0m Syntax check passed: " << path << " (type check passed)\n";
     return 0;
 }
 
