@@ -1,0 +1,14 @@
+// Benchmark 02: Loops - Nested iteration and accumulator
+fn compute_loops(outer, inner):
+    let mut total = 0
+    let mut i = 0
+    while i < outer:
+        let mut j = 0
+        while j < inner:
+            total = (total + (i * j) % 97) % 1000003
+            j = j + 1
+        i = i + 1
+    return total
+
+let result = compute_loops(2000, 500)
+print(result)

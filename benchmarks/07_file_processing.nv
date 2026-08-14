@@ -1,0 +1,14 @@
+// Benchmark 07: File Processing - Loading CSV dataset, cleaning, filtering, and summary metrics
+import data
+
+let dataset = data.load("benchmarks/sample_data.csv")
+let initial_rows = dataset.num_rows
+
+let cleaned = dataset.clean()
+let shuffled = cleaned.shuffle()
+
+let splits = shuffled.split(0.8)
+let train_set = splits[0]
+let test_set = splits[1]
+
+print(train_set.num_rows + test_set.num_rows)

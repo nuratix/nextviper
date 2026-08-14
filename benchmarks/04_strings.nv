@@ -1,0 +1,13 @@
+// Benchmark 04: Strings - Concatenation, slicing and transformations
+fn string_benchmark(iterations):
+    let mut s = ""
+    let mut i = 0
+    while i < iterations:
+        s = s + "NextViper"
+        if len(s) > 100:
+            s = s[0:50]
+        i = i + 1
+    return len(s)
+
+let final_len = string_benchmark(2000)
+print(final_len)

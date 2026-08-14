@@ -112,6 +112,15 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
                     case IROpcode::DIV:
                         ss << "  int64_t r" << inst.dest_reg << " = (r" << inst.args[1].reg_id << " != 0) ? (r" << inst.args[0].reg_id << " / r" << inst.args[1].reg_id << ") : 0;\n";
                         break;
+                    case IROpcode::MOD:
+                        ss << "  int64_t r" << inst.dest_reg << " = (r" << inst.args[1].reg_id << " != 0) ? (r" << inst.args[0].reg_id << " % r" << inst.args[1].reg_id << ") : 0;\n";
+                        break;
+                    case IROpcode::NEG:
+                        ss << "  int64_t r" << inst.dest_reg << " = -r" << inst.args[0].reg_id << ";\n";
+                        break;
+                    case IROpcode::NOT:
+                        ss << "  bool r" << inst.dest_reg << " = !r" << inst.args[0].reg_id << ";\n";
+                        break;
                     case IROpcode::EQ:
                         ss << "  bool r" << inst.dest_reg << " = (r" << inst.args[0].reg_id << " == r" << inst.args[1].reg_id << ");\n";
                         break;

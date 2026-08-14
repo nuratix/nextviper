@@ -1,0 +1,11 @@
+// Benchmark 08: Data Processing - N-D Tensor Matmul, Activation, and Reductions
+import tensor
+
+let a = tensor.ones([60, 60])
+let b = tensor.ones([60, 60])
+
+let c = a.matmul(b)
+let d = c.relu()
+let s = d.sum()
+
+print(s.item())

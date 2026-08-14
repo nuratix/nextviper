@@ -477,110 +477,137 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
             }
 
             case OpCode::OP_EQUAL: {
-                Value b = pop();
-                Value a = pop();
-                push(Value::make_bool(a == b));
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
+                a = Value::make_bool(a == b);
+                stack_top_--;
                 break;
             }
             case OpCode::OP_NOT_EQUAL: {
-                Value b = pop();
-                Value a = pop();
-                push(Value::make_bool(a != b));
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
+                a = Value::make_bool(a != b);
+                stack_top_--;
                 break;
             }
             case OpCode::OP_GREATER: {
-                Value b = pop();
-                Value a = pop();
-                push(Value::make_bool(a > b));
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
+                if (a.is_int() && b.is_int()) {
+                    a = Value::make_bool(a.as_int() > b.as_int());
+                } else {
+                    a = Value::make_bool(a > b);
+                }
+                stack_top_--;
                 break;
             }
             case OpCode::OP_GREATER_EQUAL: {
-                Value b = pop();
-                Value a = pop();
-                push(Value::make_bool(a >= b));
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
+                if (a.is_int() && b.is_int()) {
+                    a = Value::make_bool(a.as_int() >= b.as_int());
+                } else {
+                    a = Value::make_bool(a >= b);
+                }
+                stack_top_--;
                 break;
             }
             case OpCode::OP_LESS: {
-                Value b = pop();
-                Value a = pop();
-                push(Value::make_bool(a < b));
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
+                if (a.is_int() && b.is_int()) {
+                    a = Value::make_bool(a.as_int() < b.as_int());
+                } else {
+                    a = Value::make_bool(a < b);
+                }
+                stack_top_--;
                 break;
             }
             case OpCode::OP_LESS_EQUAL: {
-                Value b = pop();
-                Value a = pop();
-                push(Value::make_bool(a <= b));
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
+                if (a.is_int() && b.is_int()) {
+                    a = Value::make_bool(a.as_int() <= b.as_int());
+                } else {
+                    a = Value::make_bool(a <= b);
+                }
+                stack_top_--;
                 break;
             }
 
             case OpCode::OP_ADD: {
-                Value b = pop();
-                Value a = pop();
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
                 if (a.is_int() && b.is_int()) {
-                    push(Value::make_int(a.as_int() + b.as_int()));
+                    a = Value::make_int(a.as_int() + b.as_int());
                 } else if (a.is_number() && b.is_number()) {
-                    push(Value::make_float(a.as_float() + b.as_float()));
+                    a = Value::make_float(a.as_float() + b.as_float());
                 } else if (a.is_string() || b.is_string()) {
-                    push(Value::make_string(a.to_string() + b.to_string()));
+                    a = Value::make_string(a.to_string() + b.to_string());
                 } else if (a.is_array() && b.is_array()) {
                     auto new_arr = *a.as_array();
                     const auto& r = *b.as_array();
                     new_arr.insert(new_arr.end(), r.begin(), r.end());
-                    push(Value::make_array(std::move(new_arr)));
+                    a = Value::make_array(std::move(new_arr));
                 } else {
                     runtime_error("operands must be numbers, strings, or arrays");
                     return VMResult::RUNTIME_ERROR;
                 }
+                stack_top_--;
                 break;
             }
             case OpCode::OP_SUBTRACT: {
-                Value b = pop();
-                Value a = pop();
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
                 if (a.is_int() && b.is_int()) {
-                    push(Value::make_int(a.as_int() - b.as_int()));
+                    a = Value::make_int(a.as_int() - b.as_int());
                 } else if (a.is_number() && b.is_number()) {
-                    push(Value::make_float(a.as_float() - b.as_float()));
+                    a = Value::make_float(a.as_float() - b.as_float());
                 } else {
                     runtime_error("operands must be numbers for '-'");
                     return VMResult::RUNTIME_ERROR;
                 }
+                stack_top_--;
                 break;
             }
             case OpCode::OP_MULTIPLY: {
-                Value b = pop();
-                Value a = pop();
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
                 if (a.is_int() && b.is_int()) {
-                    push(Value::make_int(a.as_int() * b.as_int()));
+                    a = Value::make_int(a.as_int() * b.as_int());
                 } else if (a.is_number() && b.is_number()) {
-                    push(Value::make_float(a.as_float() * b.as_float()));
+                    a = Value::make_float(a.as_float() * b.as_float());
                 } else {
                     runtime_error("operands must be numbers for '*'");
                     return VMResult::RUNTIME_ERROR;
                 }
+                stack_top_--;
                 break;
             }
             case OpCode::OP_DIVIDE: {
-                Value b = pop();
-                Value a = pop();
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
                 if (b.as_float() == 0.0) {
                     runtime_error("division by zero");
                     return VMResult::RUNTIME_ERROR;
                 }
                 if (a.is_int() && b.is_int() && a.as_int() % b.as_int() == 0) {
-                    push(Value::make_int(a.as_int() / b.as_int()));
+                    a = Value::make_int(a.as_int() / b.as_int());
                 } else {
-                    push(Value::make_float(a.as_float() / b.as_float()));
+                    a = Value::make_float(a.as_float() / b.as_float());
                 }
+                stack_top_--;
                 break;
             }
             case OpCode::OP_MODULO: {
-                Value b = pop();
-                Value a = pop();
+                Value& a = *(stack_top_ - 2);
+                Value& b = *(stack_top_ - 1);
                 if (b.as_int() == 0) {
                     runtime_error("modulo by zero");
                     return VMResult::RUNTIME_ERROR;
                 }
-                push(Value::make_int(a.as_int() % b.as_int()));
+                a = Value::make_int(a.as_int() % b.as_int());
+                stack_top_--;
                 break;
             }
             case OpCode::OP_POWER: {
