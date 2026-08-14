@@ -43,6 +43,99 @@ NV_TEST(Interpreter, UserPromptExample) {
     NV_ASSERT_EQ(vsum->as_int(), 30);
 }
 
+NV_TEST(Interpreter, FunctionsProposedSyntax) {
+    SourceManager sm;
+    DiagnosticEngine diag(sm, false);
+    Interpreter interp(diag);
+
+    std::string src = "fn add(a, b):\n"
+                      "    return a + b\n"
+                      "\n"
+                      "result = add(10, 20)\n"
+                      "print(result)\n";
+
+    NV_ASSERT_TRUE(eval_script(src, interp, diag));
+
+    auto v_res = interp.globals()->get("result");
+    NV_ASSERT(v_res.has_value());
+    NV_ASSERT_EQ(v_res->as_int(), 30);
+}
+
+NV_TEST(Interpreter, FunctionsOptionalTypesAndExtensibility) {
+    SourceManager sm;
+    DiagnosticEngine diag(sm, false);
+    Interpreter interp(diag);
+
+    std::string src = "fn add(a: int, b: int) -> int:\n"
+                      "    return a + b\n"
+                      "\n"
+                      "result = add(10, 20)\n";
+
+    NV_ASSERT_TRUE(eval_script(src, interp, diag));
+
+    auto v_res = interp.globals()->get("result");
+    NV_ASSERT(v_res.has_value());
+    NV_ASSERT_EQ(v_res->as_int(), 30);
+
+    // Test type mismatch error
+    diag.clear();
+    std::string bad_type_src = "fn multiply(a: int, b: int) -> int:\n"
+                               "    return a * b\n"
+                               "let x = multiply(\"string\", 20)\n";
+    NV_ASSERT_FALSE(eval_script(bad_type_src, interp, diag));
+    NV_ASSERT_TRUE(diag.has_errors());
+}
+
+NV_TEST(Interpreter, FunctionsRecursionAndNestedCalls) {
+    SourceManager sm;
+    DiagnosticEngine diag(sm, false);
+    Interpreter interp(diag);
+
+    std::string src = "fn fib(n):\n"
+                      "    if n <= 1:\n"
+                      "        return n\n"
+                      "    return fib(n - 1) + fib(n - 2)\n"
+                      "\n"
+                      "fn square(x):\n"
+                      "    return x * x\n"
+                      "\n"
+                      "fn add(a, b):\n"
+                      "    return a + b\n"
+                      "\n"
+                      "let fib7 = fib(7)\n"
+                      "let nested = add(square(3), square(4))\n"; // 3^2 + 4^2 = 25
+
+    NV_ASSERT_TRUE(eval_script(src, interp, diag));
+
+    auto v_fib7 = interp.globals()->get("fib7");
+    NV_ASSERT(v_fib7.has_value());
+    NV_ASSERT_EQ(v_fib7->as_int(), 13);
+
+    auto v_nested = interp.globals()->get("nested");
+    NV_ASSERT(v_nested.has_value());
+    NV_ASSERT_EQ(v_nested->as_int(), 25);
+}
+
+NV_TEST(Interpreter, FunctionsClosuresAndScope) {
+    SourceManager sm;
+    DiagnosticEngine diag(sm, false);
+    Interpreter interp(diag);
+
+    std::string src = "fn make_adder(x):\n"
+                      "    fn add(y):\n"
+                      "        return x + y\n"
+                      "    return add\n"
+                      "\n"
+                      "let add10 = make_adder(10)\n"
+                      "let res = add10(32)\n";
+
+    NV_ASSERT_TRUE(eval_script(src, interp, diag));
+
+    auto v_res = interp.globals()->get("res");
+    NV_ASSERT(v_res.has_value());
+    NV_ASSERT_EQ(v_res->as_int(), 42);
+}
+
 NV_TEST(Interpreter, VariablesAndScopes) {
     SourceManager sm;
     DiagnosticEngine diag(sm, false);

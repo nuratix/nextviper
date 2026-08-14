@@ -184,6 +184,35 @@ std::unique_ptr<Stmt> Parser::parse_fn_declaration() {
     if (match(TokenType::FAT_ARROW)) {
         expr_body = parse_expression();
         match(TokenType::SEMICOLON);
+    } else if (check(TokenType::LBRACE)) {
+        body = parse_block_statement();
+    } else if (match(TokenType::COLON)) {
+        if (check(TokenType::LBRACE)) {
+            body = parse_block_statement();
+        } else {
+            size_t fn_col = start_loc.column;
+            std::vector<std::unique_ptr<Stmt>> stmts;
+
+            if (!is_at_end() && peek().span.start.line == previous().span.start.line) {
+                auto s = parse_statement();
+                if (s) stmts.push_back(std::move(s));
+            } else {
+                while (!is_at_end() && !check(TokenType::RBRACE)) {
+                    if (peek().span.start.column <= fn_col) {
+                        break;
+                    }
+                    auto s = parse_statement();
+                    if (s) {
+                        stmts.push_back(std::move(s));
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            SourceSpan b_span(start_loc, previous().span.end, previous().span.file_path);
+            body = std::make_unique<BlockStmt>(std::move(stmts), b_span);
+        }
     } else {
         body = parse_block_statement();
     }
@@ -193,7 +222,7 @@ std::unique_ptr<Stmt> Parser::parse_fn_declaration() {
                                         std::move(body), std::move(expr_body), span);
 }
 
-std::unique_ptr<Stmt> Parser::parse_body_statement() {
+std::unique_ptr<Stmt> Parser::parse_body_statement(size_t parent_col) {
     if (check(TokenType::LBRACE)) {
         return parse_block_statement();
     }
@@ -202,7 +231,35 @@ std::unique_ptr<Stmt> Parser::parse_body_statement() {
         if (check(TokenType::LBRACE)) {
             return parse_block_statement();
         }
-        return parse_statement();
+
+        SourceLocation start_loc = previous().span.start;
+        if (parent_col == 0) {
+            parent_col = previous().span.start.column;
+        }
+
+        // If statement is on the same line as ':'
+        if (!is_at_end() && peek().span.start.line == previous().span.start.line) {
+            return parse_statement();
+        }
+
+        std::vector<std::unique_ptr<Stmt>> statements;
+        while (!is_at_end() && !check(TokenType::RBRACE) && !check(TokenType::KEYWORD_ELSE)) {
+            if (peek().span.start.column <= parent_col) {
+                break;
+            }
+            auto s = parse_statement();
+            if (s) {
+                statements.push_back(std::move(s));
+            } else {
+                break;
+            }
+        }
+
+        SourceSpan span(start_loc, previous().span.end, previous().span.file_path);
+        if (statements.size() == 1) {
+            return std::move(statements[0]);
+        }
+        return std::make_unique<BlockStmt>(std::move(statements), span);
     }
 
     // Default: expect '{'
@@ -214,14 +271,14 @@ std::unique_ptr<Stmt> Parser::parse_if_statement() {
     SourceLocation start_loc = previous().span.start;
     auto condition = parse_expression();
 
-    auto then_branch = parse_body_statement();
+    auto then_branch = parse_body_statement(start_loc.column);
     std::unique_ptr<Stmt> else_branch = nullptr;
 
     if (match(TokenType::KEYWORD_ELSE)) {
         if (match(TokenType::KEYWORD_IF)) {
             else_branch = parse_if_statement();
         } else {
-            else_branch = parse_body_statement();
+            else_branch = parse_body_statement(start_loc.column);
         }
     }
 
@@ -232,7 +289,7 @@ std::unique_ptr<Stmt> Parser::parse_if_statement() {
 std::unique_ptr<Stmt> Parser::parse_while_statement() {
     SourceLocation start_loc = previous().span.start;
     auto condition = parse_expression();
-    auto body = parse_body_statement();
+    auto body = parse_body_statement(start_loc.column);
 
     SourceSpan span(start_loc, previous().span.end, previous().span.file_path);
     return std::make_unique<WhileStmt>(std::move(condition), std::move(body), span);
@@ -243,7 +300,7 @@ std::unique_ptr<Stmt> Parser::parse_for_in_statement() {
     Token var_tok = consume(TokenType::IDENTIFIER, "expected loop variable name after 'for'");
     consume(TokenType::KEYWORD_IN, "expected 'in' after loop variable");
     auto iterable = parse_expression();
-    auto body = parse_body_statement();
+    auto body = parse_body_statement(start_loc.column);
 
     SourceSpan span(start_loc, previous().span.end, previous().span.file_path);
     return std::make_unique<ForInStmt>(var_tok.text, std::move(iterable), std::move(body), span);

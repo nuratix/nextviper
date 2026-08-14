@@ -20,6 +20,8 @@ class Value;
 struct FunctionObject {
     std::string name;
     std::vector<std::string> params;
+    std::vector<std::string> param_types;
+    std::string return_type;
     const FnDeclStmt* decl = nullptr;
     std::shared_ptr<Environment> closure;
 };
@@ -77,6 +79,16 @@ public:
     static Value make_array(std::vector<Value> elements = {});
     static Value make_object(std::map<std::string, Value> entries = {});
     static Value make_function(FunctionPtr fn) { return Value(std::move(fn)); }
+    static Value make_function(std::string name, std::vector<std::string> params, std::vector<std::string> param_types, std::string return_type, const FnDeclStmt* decl, std::shared_ptr<Environment> closure) {
+        auto fn = std::make_shared<FunctionObject>();
+        fn->name = std::move(name);
+        fn->params = std::move(params);
+        fn->param_types = std::move(param_types);
+        fn->return_type = std::move(return_type);
+        fn->decl = decl;
+        fn->closure = std::move(closure);
+        return Value(std::move(fn));
+    }
     static Value make_native_fn(std::string name, int arity, NativeFn func);
     static Value make_compiled_fn(CompiledFnPtr cfn) { return Value(std::move(cfn)); }
 

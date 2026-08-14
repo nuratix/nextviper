@@ -515,6 +515,19 @@ void Interpreter::visit_call(const CallExpr& expr) {
     last_evaluated_value_ = call_function(callee, args, expr.span());
 }
 
+static bool check_type_compat(const Value& val, const std::string& type_name) {
+    if (type_name.empty() || type_name == "any" || type_name == "Any") return true;
+    if (type_name == "int" || type_name == "Int") return val.is_int();
+    if (type_name == "float" || type_name == "Float") return val.is_float();
+    if (type_name == "number" || type_name == "Number") return val.is_number();
+    if (type_name == "string" || type_name == "str" || type_name == "String") return val.is_string();
+    if (type_name == "bool" || type_name == "Bool") return val.is_bool();
+    if (type_name == "array" || type_name == "Array" || type_name == "list") return val.is_array();
+    if (type_name == "object" || type_name == "Object" || type_name == "map") return val.is_object();
+    if (type_name == "nil" || type_name == "null" || type_name == "void" || type_name == "None") return val.is_nil();
+    return true; // Extensible for future type system
+}
+
 Value Interpreter::call_function(const Value& callee, const std::vector<Value>& args, SourceSpan span) {
     if (!callee.is_callable()) {
         runtime_error("cannot call non-function value of type " + callee.type_name(), span);
@@ -522,8 +535,8 @@ Value Interpreter::call_function(const Value& callee, const std::vector<Value>& 
 
     if (callee.type() == ValueType::NATIVE_FUNCTION) {
         auto nfn = callee.as_native_fn();
-        if (nfn->arity != -1 && static_cast<int>(args.size()) != nfn->arity) {
-            runtime_error("function '" + nfn->name + "' expects " + std::to_string(nfn->arity) +
+        if (nfn->arity >= 0 && static_cast<int>(args.size()) != nfn->arity) {
+            runtime_error("native function '" + nfn->name + "' expects " + std::to_string(nfn->arity) +
                           " argument(s), got " + std::to_string(args.size()), span);
         }
         return nfn->func(args, span);
@@ -534,6 +547,17 @@ Value Interpreter::call_function(const Value& callee, const std::vector<Value>& 
         if (args.size() != fn->params.size()) {
             runtime_error("function '" + fn->name + "' expects " + std::to_string(fn->params.size()) +
                           " argument(s), got " + std::to_string(args.size()), span);
+        }
+
+        // Validate parameter type annotations if present
+        for (size_t i = 0; i < fn->params.size(); ++i) {
+            if (i < fn->param_types.size() && !fn->param_types[i].empty()) {
+                const auto& expected = fn->param_types[i];
+                if (!check_type_compat(args[i], expected)) {
+                    type_error("expected parameter '" + fn->params[i] + "' to have type '" + expected +
+                               "', got '" + args[i].type_name() + "'", span);
+                }
+            }
         }
 
         auto fn_env = Environment::create(fn->closure);
@@ -560,6 +584,15 @@ Value Interpreter::call_function(const Value& callee, const std::vector<Value>& 
         }
 
         environment_ = previous_env;
+
+        // Validate return type annotation if present
+        if (!fn->return_type.empty()) {
+            if (!check_type_compat(return_val, fn->return_type)) {
+                type_error("function '" + fn->name + "' expected return type '" + fn->return_type +
+                           "', got '" + return_val.type_name() + "'", span);
+            }
+        }
+
         return return_val;
     }
 
@@ -915,7 +948,9 @@ void Interpreter::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     fn_obj->name = stmt.name();
     for (const auto& p : stmt.params()) {
         fn_obj->params.push_back(p.name);
+        fn_obj->param_types.push_back(p.type_annotation);
     }
+    fn_obj->return_type = stmt.return_type();
     fn_obj->decl = &stmt;
     fn_obj->closure = environment_;
 

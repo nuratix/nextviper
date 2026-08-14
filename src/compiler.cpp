@@ -379,7 +379,7 @@ void BytecodeCompiler::visit_let_stmt(const LetStmt& stmt) {
         emit_opcode(OpCode::OP_NIL);
     }
 
-    if (current_ctx_->scope_depth > 0) {
+    if (current_ctx_->scope_depth > 0 || current_ctx_->enclosing != nullptr) {
         add_local(stmt.name(), stmt.is_mut());
     } else {
         size_t name_idx = current_chunk().add_constant(Value::make_string(stmt.name()));
