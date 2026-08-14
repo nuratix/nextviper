@@ -202,33 +202,7 @@ std::unique_ptr<Stmt> Parser::parse_body_statement() {
         if (check(TokenType::LBRACE)) {
             return parse_block_statement();
         }
-        SourceLocation start_loc = previous().span.start;
-        std::vector<std::unique_ptr<Stmt>> statements;
-
-        auto first = parse_statement();
-        if (first) {
-            statements.push_back(std::move(first));
-        }
-
-        // Collect statements inside block before 'else', '}', or EOF
-        while (!check(TokenType::KEYWORD_ELSE) && !check(TokenType::RBRACE) && !is_at_end()) {
-            if (check(TokenType::KEYWORD_LET) || check(TokenType::KEYWORD_IF) ||
-                check(TokenType::KEYWORD_WHILE) || check(TokenType::KEYWORD_FOR) ||
-                check(TokenType::KEYWORD_RETURN) || check(TokenType::KEYWORD_BREAK) ||
-                check(TokenType::KEYWORD_CONTINUE) || check(TokenType::IDENTIFIER)) {
-                auto s = parse_statement();
-                if (s) statements.push_back(std::move(s));
-                else break;
-            } else {
-                break;
-            }
-        }
-
-        SourceSpan span(start_loc, previous().span.end, previous().span.file_path);
-        if (statements.size() == 1) {
-            return std::move(statements[0]);
-        }
-        return std::make_unique<BlockStmt>(std::move(statements), span);
+        return parse_statement();
     }
 
     // Default: expect '{'

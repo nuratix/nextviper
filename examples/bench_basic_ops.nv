@@ -1,0 +1,24 @@
+// ===========================================================
+// NextViper Benchmark - Basic Arithmetic & Variable Operations
+// ===========================================================
+
+print("=== Benchmarking Basic Arithmetic & Variable Ops ===")
+
+let t0 = clock()
+
+let mut acc = 0
+let mut i = 0
+
+while i < 1000000 {
+    let a = i * 2
+    let b = a + 10
+    let c = b - 5
+    acc = acc + (c % 7)
+    i = i + 1
+}
+
+let t1 = clock()
+
+print("Iterations completed:", 1000000)
+print("Accumulator result:  ", acc)
+print("Elapsed time:        ", (t1 - t0) * 1000.0, "ms")

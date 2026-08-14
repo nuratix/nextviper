@@ -20,9 +20,34 @@ Interpreter::Interpreter(DiagnosticEngine& diagnostics)
     init_builtins();
 }
 
-void Interpreter::runtime_error(const std::string& message, SourceSpan span) {
-    diagnostics_.error(message, span);
-    throw RuntimeError(message, span);
+void Interpreter::runtime_error(const std::string& message, SourceSpan span, std::string help) {
+    diagnostics_.error("RuntimeError: " + message, span, help);
+    throw RuntimeError(RuntimeErrorKind::GENERIC_ERROR, message, span, help);
+}
+
+void Interpreter::type_error(const std::string& message, SourceSpan span, std::string help) {
+    diagnostics_.error("TypeError: " + message, span, help);
+    throw RuntimeError(RuntimeErrorKind::TYPE_ERROR, message, span, help);
+}
+
+void Interpreter::name_error(const std::string& message, SourceSpan span, std::string help) {
+    diagnostics_.error("NameError: " + message, span, help.empty() ? "make sure the variable is declared before use" : help);
+    throw RuntimeError(RuntimeErrorKind::NAME_ERROR, message, span, help);
+}
+
+void Interpreter::division_by_zero_error(SourceSpan span, std::string help) {
+    diagnostics_.error("DivisionByZeroError: cannot divide by zero", span, help);
+    throw RuntimeError(RuntimeErrorKind::DIVISION_BY_ZERO, "cannot divide by zero", span, help);
+}
+
+void Interpreter::mutability_error(const std::string& message, SourceSpan span, std::string help) {
+    diagnostics_.error("MutabilityError: " + message, span, help.empty() ? "use 'let mut' to make the variable reassignable" : help);
+    throw RuntimeError(RuntimeErrorKind::MUTABILITY_ERROR, message, span, help);
+}
+
+void Interpreter::index_error(const std::string& message, SourceSpan span, std::string help) {
+    diagnostics_.error("IndexError: " + message, span, help);
+    throw RuntimeError(RuntimeErrorKind::INDEX_ERROR, message, span, help);
 }
 
 void Interpreter::init_builtins() {
@@ -294,7 +319,7 @@ void Interpreter::visit_literal(const LiteralExpr& expr) {
 void Interpreter::visit_identifier(const IdentifierExpr& expr) {
     auto val = environment_->get(expr.name());
     if (!val) {
-        runtime_error("undefined variable '" + expr.name() + "'", expr.span());
+        name_error("undefined variable '" + expr.name() + "'", expr.span());
     }
     last_evaluated_value_ = *val;
 }
@@ -316,7 +341,7 @@ void Interpreter::visit_unary(const UnaryExpr& expr) {
                 last_evaluated_value_ = Value::make_float(-right.as_float());
                 return;
             }
-            runtime_error("unary minus operator '-' requires a number, got " + right.type_name(), expr.span());
+            type_error("unary minus operator '-' requires a number, got " + right.type_name(), expr.span());
             return;
         default:
             runtime_error("unsupported unary operator", expr.span());
@@ -370,7 +395,7 @@ void Interpreter::visit_binary(const BinaryExpr& expr) {
                 last_evaluated_value_ = Value::make_array(std::move(new_arr));
                 return;
             }
-            runtime_error("operator '+' not supported between " + left.type_name() + " and " + right.type_name(), expr.span());
+            type_error("operator '+' not supported between " + left.type_name() + " and " + right.type_name(), expr.span());
             return;
 
         case TokenType::MINUS:
@@ -382,7 +407,7 @@ void Interpreter::visit_binary(const BinaryExpr& expr) {
                 last_evaluated_value_ = Value::make_float(left.as_float() - right.as_float());
                 return;
             }
-            runtime_error("operator '-' requires numbers, got " + left.type_name() + " and " + right.type_name(), expr.span());
+            type_error("operator '-' requires numbers, got " + left.type_name() + " and " + right.type_name(), expr.span());
             return;
 
         case TokenType::STAR:
@@ -401,14 +426,14 @@ void Interpreter::visit_binary(const BinaryExpr& expr) {
                 last_evaluated_value_ = Value::make_string(res);
                 return;
             }
-            runtime_error("operator '*' not supported between " + left.type_name() + " and " + right.type_name(), expr.span());
+            type_error("operator '*' not supported between " + left.type_name() + " and " + right.type_name(), expr.span());
             return;
 
         case TokenType::SLASH:
             if (left.is_number() && right.is_number()) {
                 double r = right.as_float();
                 if (r == 0.0) {
-                    runtime_error("division by zero", expr.span());
+                    division_by_zero_error(expr.span(), "cannot divide by zero");
                 }
                 if (left.is_int() && right.is_int() && left.as_int() % right.as_int() == 0) {
                     last_evaluated_value_ = Value::make_int(left.as_int() / right.as_int());
@@ -417,19 +442,19 @@ void Interpreter::visit_binary(const BinaryExpr& expr) {
                 }
                 return;
             }
-            runtime_error("operator '/' requires numbers", expr.span());
+            type_error("operator '/' requires numbers, got " + left.type_name() + " and " + right.type_name(), expr.span());
             return;
 
         case TokenType::PERCENT:
             if (left.is_int() && right.is_int()) {
                 int64_t r = right.as_int();
                 if (r == 0) {
-                    runtime_error("modulo by zero", expr.span());
+                    division_by_zero_error(expr.span(), "modulo by zero is not allowed");
                 }
                 last_evaluated_value_ = Value::make_int(left.as_int() % r);
                 return;
             }
-            runtime_error("operator '%' requires integers", expr.span());
+            type_error("operator '%' requires integers, got " + left.type_name() + " and " + right.type_name(), expr.span());
             return;
 
         case TokenType::POWER:
@@ -445,7 +470,7 @@ void Interpreter::visit_binary(const BinaryExpr& expr) {
                 }
                 return;
             }
-            runtime_error("power operator '**' requires numbers", expr.span());
+            type_error("power operator '**' requires numbers, got " + left.type_name() + " and " + right.type_name(), expr.span());
             return;
 
         case TokenType::EQUAL_EQUAL:
