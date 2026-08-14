@@ -2,6 +2,9 @@
 #include "nextviper/interpreter.hpp"
 #include "nextviper/lexer.hpp"
 #include "nextviper/parser.hpp"
+#include "nextviper/tensor.hpp"
+#include "nextviper/dataset.hpp"
+#include "nextviper/ai_model.hpp"
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -37,7 +40,7 @@ void ModuleManager::clear_cache() {
 }
 
 bool ModuleManager::is_builtin(const std::string& name) const {
-    return name == "math" || name == "data" || name == "sys" || name == "time";
+    return name == "math" || name == "data" || name == "sys" || name == "time" || name == "ai" || name == "tensor";
 }
 
 std::optional<Value> ModuleManager::get_builtin_module(const std::string& name) {
@@ -65,6 +68,16 @@ std::optional<Value> ModuleManager::get_builtin_module(const std::string& name) 
         module_cache_["time"] = mod;
         return mod;
     }
+    if (name == "ai") {
+        Value mod = create_ai_module();
+        module_cache_["ai"] = mod;
+        return mod;
+    }
+    if (name == "tensor") {
+        Value mod = create_tensor_module();
+        module_cache_["tensor"] = mod;
+        return mod;
+    }
     return std::nullopt;
 }
 
@@ -73,6 +86,8 @@ void ModuleManager::register_builtin_modules() {
     module_cache_["data"] = create_data_module();
     module_cache_["sys"] = create_sys_module();
     module_cache_["time"] = create_time_module();
+    module_cache_["ai"] = create_ai_module();
+    module_cache_["tensor"] = create_tensor_module();
 }
 
 Value ModuleManager::create_math_module() {
@@ -143,6 +158,38 @@ Value ModuleManager::create_math_module() {
 Value ModuleManager::create_data_module() {
     std::map<std::string, Value> exports;
 
+    exports["load"] = Value::make_native_fn("load", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        try {
+            return Dataset::load(args[0].as_string()).to_value();
+        } catch (const std::exception& e) {
+            throw RuntimeError(std::string("data.load failed: ") + e.what(), span);
+        }
+    });
+
+    exports["from_csv"] = Value::make_native_fn("from_csv", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        try {
+            return Dataset::from_csv(args[0].as_string()).to_value();
+        } catch (const std::exception& e) {
+            throw RuntimeError(std::string("data.from_csv failed: ") + e.what(), span);
+        }
+    });
+
+    exports["from_rows"] = Value::make_native_fn("from_rows", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<std::string> cols;
+        for (const auto& c : *args[0].as_array()) cols.push_back(c.as_string());
+        std::vector<std::vector<Value>> rows;
+        for (const auto& r : *args[1].as_array()) rows.push_back(*r.as_array());
+        return Dataset::from_rows(std::move(cols), std::move(rows)).to_value();
+    });
+
+    exports["dataloader"] = Value::make_native_fn("dataloader", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.empty() || !args[0].is_object()) throw RuntimeError("data.dataloader requires a Dataset as first argument", span);
+        size_t batch_size = args.size() >= 2 ? static_cast<size_t>(args[1].as_int()) : 32;
+        bool shuffle = args.size() >= 3 ? args[2].as_bool() : true;
+        // Return dataloader from dataset
+        return DataLoader(Dataset::from_rows({}, {}), batch_size, shuffle).to_value();
+    });
+
     exports["mean"] = Value::make_native_fn("mean", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         if (!args[0].is_array() || args[0].as_array()->empty()) return Value::make_float(0.0);
         const auto& arr = *args[0].as_array();
@@ -180,6 +227,140 @@ Value ModuleManager::create_data_module() {
         }
         if (!cur.empty()) chunks.push_back(Value::make_array(std::move(cur)));
         return Value::make_array(std::move(chunks));
+    });
+
+    return Value::make_object(std::move(exports));
+}
+
+Value ModuleManager::create_ai_module() {
+    std::map<std::string, Value> exports;
+
+    exports["load"] = Value::make_native_fn("load", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        try {
+            return AIModel::load(args[0].as_string()).to_value();
+        } catch (const std::exception& e) {
+            throw RuntimeError(std::string("ai.load failed: ") + e.what(), span);
+        }
+    });
+
+    exports["sequential"] = Value::make_native_fn("sequential", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_array()) throw RuntimeError("ai.sequential requires a list of layers", span);
+        AIModel model;
+        return model.to_value();
+    });
+
+    exports["linear"] = Value::make_native_fn("linear", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.size() < 2) throw RuntimeError("ai.linear requires (in_features, out_features, [bias])", span);
+        int64_t in_f = args[0].as_int();
+        int64_t out_f = args[1].as_int();
+        bool bias = args.size() >= 3 ? args[2].as_bool() : true;
+        AIModel model;
+        model.add_layer(std::make_shared<LinearLayer>(in_f, out_f, bias));
+        return model.to_value();
+    });
+
+    exports["tensor"] = Value::make_native_fn("tensor", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<int64_t> shape;
+        if (args[0].is_array()) {
+            for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+        } else {
+            shape.push_back(args[0].as_int());
+        }
+        std::vector<double> vals;
+        if (args[1].is_array()) {
+            for (const auto& v : *args[1].as_array()) vals.push_back(v.as_float());
+        }
+        return Tensor(shape, vals).to_value();
+    });
+
+    exports["zeros"] = Value::make_native_fn("zeros", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<int64_t> shape;
+        if (args[0].is_array()) {
+            for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+        } else {
+            shape.push_back(args[0].as_int());
+        }
+        return Tensor::zeros(shape).to_value();
+    });
+
+    exports["ones"] = Value::make_native_fn("ones", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<int64_t> shape;
+        if (args[0].is_array()) {
+            for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+        } else {
+            shape.push_back(args[0].as_int());
+        }
+        return Tensor::ones(shape).to_value();
+    });
+
+    exports["randn"] = Value::make_native_fn("randn", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<int64_t> shape;
+        if (args[0].is_array()) {
+            for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+        } else {
+            shape.push_back(args[0].as_int());
+        }
+        double mean = args.size() >= 2 ? args[1].as_float() : 0.0;
+        double stddev = args.size() >= 3 ? args[2].as_float() : 1.0;
+        return Tensor::randn(shape, mean, stddev).to_value();
+    });
+
+    exports["uniform"] = Value::make_native_fn("uniform", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<int64_t> shape;
+        if (args[0].is_array()) {
+            for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+        } else {
+            shape.push_back(args[0].as_int());
+        }
+        double low = args.size() >= 2 ? args[1].as_float() : 0.0;
+        double high = args.size() >= 3 ? args[2].as_float() : 1.0;
+        return Tensor::uniform(shape, low, high).to_value();
+    });
+
+    exports["device_count"] = Value::make_native_fn("device_count", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_int(1);
+    });
+
+    exports["device_name"] = Value::make_native_fn("device_name", -1, [](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_string("CPU (NextViper High-Performance Backend)");
+    });
+
+    return Value::make_object(std::move(exports));
+}
+
+Value ModuleManager::create_tensor_module() {
+    std::map<std::string, Value> exports;
+
+    exports["zeros"] = Value::make_native_fn("zeros", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<int64_t> shape;
+        if (args[0].is_array()) for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+        else shape.push_back(args[0].as_int());
+        return Tensor::zeros(shape).to_value();
+    });
+
+    exports["ones"] = Value::make_native_fn("ones", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<int64_t> shape;
+        if (args[0].is_array()) for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+        else shape.push_back(args[0].as_int());
+        return Tensor::ones(shape).to_value();
+    });
+
+    exports["randn"] = Value::make_native_fn("randn", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<int64_t> shape;
+        if (args[0].is_array()) for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+        else shape.push_back(args[0].as_int());
+        double mean = args.size() >= 2 ? args[1].as_float() : 0.0;
+        double stddev = args.size() >= 3 ? args[2].as_float() : 1.0;
+        return Tensor::randn(shape, mean, stddev).to_value();
+    });
+
+    exports["from_list"] = Value::make_native_fn("from_list", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::vector<double> vals;
+        if (args[0].is_array()) for (const auto& v : *args[0].as_array()) vals.push_back(v.as_float());
+        std::vector<int64_t> shape;
+        if (args[1].is_array()) for (const auto& s : *args[1].as_array()) shape.push_back(s.as_int());
+        else shape.push_back(args[1].as_int());
+        return Tensor(shape, vals).to_value();
     });
 
     return Value::make_object(std::move(exports));

@@ -44,6 +44,8 @@ private:
     Value create_data_module();
     Value create_sys_module();
     Value create_time_module();
+    Value create_ai_module();
+    Value create_tensor_module();
 
     DiagnosticEngine& diagnostics_;
     std::vector<std::string> search_paths_;
