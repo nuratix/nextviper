@@ -1,0 +1,57 @@
+// ==========================================
+// NextViper 0.1.0 - Language Basics
+// ==========================================
+
+print("=== NextViper Basics ===")
+
+// 1. Variable Declarations
+// Immutable by default
+let language = "NextViper"
+let version = "0.1.0"
+let speed_rating = 99.8
+let is_compiled_soon = true
+
+print("Language:", language)
+print("Version:", version)
+print("Speed rating:", speed_rating)
+
+// 2. Explicit Mutability (let mut)
+let mut counter = 0
+counter += 1
+counter += 5
+print("Counter after mutations:", counter)
+
+// 3. Arrays and Indexing
+let mut scores = [85, 92, 78, 99, 90]
+print("Scores array:", scores)
+print("First score:", scores[0])
+print("Last score (negative index):", scores[-1])
+print("Array length:", len(scores))
+
+push(scores, 100)
+print("Scores after push:", scores)
+
+// 4. Objects / Key-Value Maps
+let config = {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "debug": true
+}
+print("Config map:", config)
+print("Host:", config["host"])
+
+// 5. Control Flow: if / else if / else
+let temperature = 28
+if temperature > 30 {
+    print("Weather: Hot")
+} else if temperature > 20 {
+    print("Weather: Pleasant")
+} else {
+    print("Weather: Cold")
+}
+
+// 6. Loops: for..in and while
+print("\nIterating over range:")
+for i in range(1, 6) {
+    print("  Step:", i)
+}

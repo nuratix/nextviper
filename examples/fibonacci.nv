@@ -1,0 +1,23 @@
+// ==========================================
+// NextViper 0.1.0 - Fibonacci Generator
+// ==========================================
+
+fn fibonacci(n: Int) -> Int {
+    if n <= 0 { return 0 }
+    if n == 1 { return 1 }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+print("=== Computing Fibonacci Sequence ===")
+let t0 = clock()
+
+let mut sequence = []
+for i in range(0, 15) {
+    let val = fibonacci(i)
+    push(sequence, val)
+}
+
+let t1 = clock()
+
+print("First 15 Fibonacci numbers:", sequence)
+print("Elapsed time (sec):", t1 - t0)

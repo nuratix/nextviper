@@ -1,0 +1,19 @@
+// ===================================================
+// NextViper Performance Benchmark - Recursive Fibonacci
+// ===================================================
+
+fn fib(n) {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+let n = 28
+print("Computing fib(", n, ")...")
+let t0 = clock()
+let result = fib(n)
+let t1 = clock()
+
+print("Result:", result)
+print("Execution time:", (t1 - t0) * 1000.0, "ms")

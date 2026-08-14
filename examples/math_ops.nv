@@ -1,0 +1,33 @@
+// ==========================================
+// NextViper 0.1.0 - Mathematical Operations
+// ==========================================
+
+print("=== Math & Numerical Operations ===")
+
+let a = 45
+let b = 12
+
+print("a =", a, ", b =", b)
+print("a + b  =", a + b)
+print("a - b  =", a - b)
+print("a * b  =", a * b)
+print("a / b  =", a / b)
+print("a % b  =", a % b)
+print("2 ** 10 =", 2 ** 10)
+
+// Built-in math helpers
+print("abs(-42)    =", abs(-42))
+print("min(15, 80) =", min(15, 80))
+print("max(15, 80) =", max(15, 80))
+print("sqrt(144.0) =", sqrt(144.0))
+print("pow(3, 4)   =", pow(3, 4))
+
+// Euclidean Distance Calculation
+fn euclidean_distance(x1, y1, x2, y2) {
+    let dx = x2 - x1
+    let dy = y2 - y1
+    return sqrt((dx ** 2 + dy ** 2) * 1.0)
+}
+
+let dist = euclidean_distance(0, 0, 3, 4)
+print("Distance between (0,0) and (3,4):", dist)

@@ -1,0 +1,10 @@
+// ==========================================
+// NextViper 0.1.0 - Hello World Example
+// ==========================================
+
+fn main() {
+    let greeting = "Hello, World! Welcome to NextViper."
+    print(greeting)
+}
+
+main()

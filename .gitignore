@@ -1,0 +1,16 @@
+# Binaries & Build Output
+bin/
+build/
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+
+# Scratch & test outputs
+/tmp/

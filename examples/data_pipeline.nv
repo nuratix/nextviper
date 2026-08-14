@@ -1,0 +1,39 @@
+// ==========================================
+// NextViper 0.1.0 - Data Processing Pipeline
+// ==========================================
+
+print("=== Data Processing & Pipeline Operator ===")
+
+// Transform functions
+fn double_val(x) => x * 2
+fn add_bias(x) => x + 10
+fn normalize_sample(x) => (x * 1.0) / 100.0
+
+// NextViper pipeline operator |> passes the result of the left expression
+// as the first argument to the right function call
+let raw_sensor_val = 45
+
+let processed = raw_sensor_val 
+    |> double_val() 
+    |> add_bias() 
+    |> normalize_sample()
+
+print("Raw input value:", raw_sensor_val)
+print("Pipeline result:", processed)
+
+// Batch Data Vector Processing
+fn process_vector(data) {
+    let mut results = []
+    for val in data {
+        let transformed = val |> double_val() |> add_bias()
+        push(results, transformed)
+    }
+    return results
+}
+
+let dataset = [10, 20, 30, 40, 50]
+let transformed_dataset = process_vector(dataset)
+
+print("Original dataset:   ", dataset)
+print("Transformed dataset:", transformed_dataset)
+print("Dataset size:       ", len(dataset))

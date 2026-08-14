@@ -1,0 +1,17 @@
+// ===================================================
+// NextViper Performance Benchmark - High-Iteration Loop
+// ===================================================
+
+print("Starting 1,000,000 arithmetic loop benchmark...")
+let t0 = clock()
+
+let mut sum = 0
+let mut i = 0
+while i < 1000000 {
+    sum += i % 10
+    i += 1
+}
+
+let t1 = clock()
+print("Total sum:", sum)
+print("Loop execution time:", (t1 - t0) * 1000.0, "ms")

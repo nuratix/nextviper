@@ -1,0 +1,46 @@
+// ==========================================
+// NextViper 0.1.0 - Functions
+// ==========================================
+
+print("=== Functions & Higher-Order Functions ===")
+
+// 1. Standard Function
+fn add(a: Int, b: Int) -> Int {
+    return a + b
+}
+
+let sum = add(15, 27)
+print("15 + 27 =", sum)
+
+// 2. Concise Arrow Function (Expression body)
+fn square(x) => x * x
+fn cube(x) => x * x * x
+
+print("square(7) =", square(7))
+print("cube(4) =", cube(4))
+
+// 3. Recursive Function
+fn factorial(n: Int) -> Int {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+print("factorial(5) =", factorial(5))
+print("factorial(7) =", factorial(7))
+
+// 4. Higher-Order Functions (Passing functions as arguments)
+fn apply_fn(f, val) {
+    return f(val)
+}
+
+fn apply_twice(f, val) {
+    return f(f(val))
+}
+
+let res1 = apply_fn(square, 9)
+let res2 = apply_twice(square, 3) // square(square(3)) = square(9) = 81
+
+print("apply_fn(square, 9) =", res1)
+print("apply_twice(square, 3) =", res2)
