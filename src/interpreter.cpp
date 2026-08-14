@@ -1,4 +1,5 @@
 #include "nextviper/interpreter.hpp"
+#include "nextviper/module.hpp"
 #include <iostream>
 #include <chrono>
 #include <cmath>
@@ -17,6 +18,7 @@ Interpreter::Interpreter(DiagnosticEngine& diagnostics)
     : diagnostics_(diagnostics) {
     globals_ = Environment::create();
     environment_ = globals_;
+    module_manager_ = std::make_shared<ModuleManager>(diagnostics_);
     init_builtins();
 }
 
@@ -1296,6 +1298,50 @@ void Interpreter::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     fn_obj->closure = environment_;
 
     environment_->define(stmt.name(), Value::make_function(fn_obj), false);
+}
+
+void Interpreter::visit_import_stmt(const ImportStmt& stmt) {
+    if (!module_manager_) {
+        module_manager_ = std::make_shared<ModuleManager>(diagnostics_);
+    }
+
+    auto mod_opt = module_manager_->load_module(stmt.module_name(), current_file_, *this);
+    if (!mod_opt) {
+        runtime_error("failed to import module '" + stmt.module_name() + "'", stmt.span());
+    }
+
+    Value mod_obj = *mod_opt;
+    if (!mod_obj.is_object()) {
+        runtime_error("invalid module export for '" + stmt.module_name() + "'", stmt.span());
+    }
+
+    auto exports = mod_obj.as_object();
+
+    if (stmt.is_from_import()) {
+        for (const auto& item : stmt.items()) {
+            auto it = exports->find(item.symbol_name);
+            if (it == exports->end()) {
+                runtime_error("module '" + stmt.module_name() + "' does not export symbol '" + item.symbol_name + "'", stmt.span());
+            }
+            environment_->define(item.alias, it->second, false);
+        }
+    } else {
+        std::string bind_name = stmt.alias().empty() ? stmt.module_name() : stmt.alias();
+        if (stmt.alias().empty()) {
+            size_t slash = bind_name.find_last_of("/\\");
+            if (slash != std::string::npos) {
+                bind_name = bind_name.substr(slash + 1);
+            }
+            if (bind_name.size() >= 3 && bind_name.substr(bind_name.size() - 3) == ".nv") {
+                bind_name = bind_name.substr(0, bind_name.size() - 3);
+            }
+        }
+        environment_->define(bind_name, mod_obj, false);
+    }
+}
+
+void Interpreter::visit_export_stmt(const ExportStmt& stmt) {
+    execute_statement(stmt.inner_stmt());
 }
 
 } // namespace nextviper

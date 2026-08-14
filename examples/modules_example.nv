@@ -1,0 +1,28 @@
+// NextViper Module System Showcase
+
+// 1. Full Standard Library Import
+import math
+import data
+import sys
+
+print("=== NextViper System Info ===")
+print("System Version :", sys.version)
+print("Platform       :", sys.platform)
+
+// 2. Selective Import from Standard Library
+from math import sqrt, pi, sin, cos
+
+print("\n=== Math Module ===")
+print("Pi constant   :", pi)
+print("sqrt(144.0)   :", sqrt(144.0))
+print("sin(0.0)      :", sin(0.0))
+print("cos(0.0)      :", cos(0.0))
+print("math.pow(2, 5):", math.pow(2.0, 5.0))
+
+// 3. Data Processing Module
+print("\n=== Data Module ===")
+let dataset = [12, 18, 24, 30, 36, 42, 48]
+print("Dataset       :", dataset)
+print("Mean average  :", data.mean(dataset))
+print("Total sum     :", data.sum(dataset))
+print("Chunks of 3   :", data.chunk(dataset, 3))

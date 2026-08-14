@@ -34,6 +34,9 @@ std::string_view token_type_to_string(TokenType type) {
         case TokenType::KEYWORD_STRUCT: return "struct";
         case TokenType::KEYWORD_TYPE: return "type";
         case TokenType::KEYWORD_IMPORT: return "import";
+        case TokenType::KEYWORD_FROM: return "from";
+        case TokenType::KEYWORD_AS: return "as";
+        case TokenType::KEYWORD_EXPORT: return "export";
         case TokenType::KEYWORD_AND: return "and";
         case TokenType::KEYWORD_OR: return "or";
         case TokenType::KEYWORD_NOT: return "not";

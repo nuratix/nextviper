@@ -28,6 +28,9 @@ private:
     std::unique_ptr<Stmt> parse_return_statement();
     std::unique_ptr<Stmt> parse_break_statement();
     std::unique_ptr<Stmt> parse_continue_statement();
+    std::unique_ptr<Stmt> parse_import_statement();
+    std::unique_ptr<Stmt> parse_from_import_statement();
+    std::unique_ptr<Stmt> parse_export_statement();
     std::unique_ptr<BlockStmt> parse_block_statement();
     std::unique_ptr<Stmt> parse_body_statement(size_t parent_col = 0);
     std::unique_ptr<Stmt> parse_expression_statement();

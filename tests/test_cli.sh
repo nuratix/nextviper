@@ -64,8 +64,35 @@ if [[ "$PARSE_OUT" != *"Program:"* ]]; then
 fi
 echo "  ✓ PASS: AST parsing succeeded"
 
-# Test 7: Error handling with exit code
-echo "7. Checking error exit codes"
+# Test 7: Formatter command
+echo "7. Checking fmt command"
+FMT_OUT=$($BIN fmt examples/modules_example.nv)
+if [[ "$FMT_OUT" != *"import math"* ]]; then
+    echo "FAIL: fmt output unexpected"
+    exit 1
+fi
+echo "  ✓ PASS: fmt command succeeded"
+
+# Test 8: Build command
+echo "8. Checking build command"
+BUILD_OUT=$($BIN build examples/modules_example.nv -o build/test_cli_build.nvc)
+if [[ "$BUILD_OUT" != *"Successfully compiled and built"* ]]; then
+    echo "FAIL: build command failed"
+    exit 1
+fi
+echo "  ✓ PASS: build command succeeded"
+
+# Test 9: Package command
+echo "9. Checking package command"
+PKG_OUT=$($BIN package help)
+if [[ "$PKG_OUT" != *"NextViper Package Manager"* ]]; then
+    echo "FAIL: package help failed"
+    exit 1
+fi
+echo "  ✓ PASS: package command succeeded"
+
+# Test 10: Error handling with exit code
+echo "10. Checking error exit codes"
 set +e
 $BIN run non_existent_file.nv > /dev/null 2>&1
 EXIT_CODE=$?

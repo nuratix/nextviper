@@ -680,4 +680,12 @@ void BytecodeCompiler::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     }
 }
 
+void BytecodeCompiler::visit_import_stmt(const ImportStmt&) {
+    // Top-level module import handled in AST environment / ModuleManager
+}
+
+void BytecodeCompiler::visit_export_stmt(const ExportStmt& stmt) {
+    stmt.inner_stmt().accept(*this);
+}
+
 } // namespace nextviper

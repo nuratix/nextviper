@@ -115,6 +115,15 @@ std::unique_ptr<Stmt> Parser::parse_statement() {
     if (match(TokenType::KEYWORD_CONTINUE)) {
         return parse_continue_statement();
     }
+    if (match(TokenType::KEYWORD_IMPORT)) {
+        return parse_import_statement();
+    }
+    if (match(TokenType::KEYWORD_FROM)) {
+        return parse_from_import_statement();
+    }
+    if (match(TokenType::KEYWORD_EXPORT)) {
+        return parse_export_statement();
+    }
     if (check(TokenType::LBRACE)) {
         return parse_block_statement();
     }
@@ -204,15 +213,22 @@ std::unique_ptr<Stmt> Parser::parse_fn_declaration() {
         if (check(TokenType::LBRACE)) {
             body = parse_block_statement();
         } else {
-            size_t fn_col = start_loc.column;
+            size_t fn_col = 1;
             std::vector<std::unique_ptr<Stmt>> stmts;
 
             if (!is_at_end() && peek().span.start.line == previous().span.start.line) {
                 auto s = parse_statement();
                 if (s) stmts.push_back(std::move(s));
             } else {
+                size_t min_body_col = 0;
                 while (!is_at_end() && !check(TokenType::RBRACE)) {
-                    if (peek().span.start.column <= fn_col) {
+                    if (min_body_col == 0) {
+                        min_body_col = peek().span.start.column;
+                        if (min_body_col <= fn_col) {
+                            break;
+                        }
+                    }
+                    if (peek().span.start.column < min_body_col) {
                         break;
                     }
                     auto s = parse_statement();
@@ -248,7 +264,7 @@ std::unique_ptr<Stmt> Parser::parse_body_statement(size_t parent_col) {
 
         SourceLocation start_loc = previous().span.start;
         if (parent_col == 0) {
-            parent_col = previous().span.start.column;
+            parent_col = 1;
         }
 
         // If statement is on the same line as ':'
@@ -257,8 +273,15 @@ std::unique_ptr<Stmt> Parser::parse_body_statement(size_t parent_col) {
         }
 
         std::vector<std::unique_ptr<Stmt>> statements;
+        size_t min_body_col = 0;
         while (!is_at_end() && !check(TokenType::RBRACE) && !check(TokenType::KEYWORD_ELSE)) {
-            if (peek().span.start.column <= parent_col) {
+            if (min_body_col == 0) {
+                min_body_col = peek().span.start.column;
+                if (min_body_col <= parent_col) {
+                    break;
+                }
+            }
+            if (peek().span.start.column < min_body_col) {
                 break;
             }
             auto s = parse_statement();
@@ -343,6 +366,68 @@ std::unique_ptr<Stmt> Parser::parse_continue_statement() {
     SourceSpan span = previous().span;
     match(TokenType::SEMICOLON);
     return std::make_unique<ContinueStmt>(span);
+}
+
+std::unique_ptr<Stmt> Parser::parse_import_statement() {
+    SourceLocation start_loc = previous().span.start;
+    std::string mod_name;
+    if (check(TokenType::STRING_LITERAL)) {
+        Token tok = advance();
+        mod_name = tok.string_value.empty() ? tok.text : tok.string_value;
+    } else {
+        Token tok = consume(TokenType::IDENTIFIER, "expected module name after 'import'");
+        mod_name = tok.text;
+    }
+
+    std::string alias = "";
+    if (match(TokenType::KEYWORD_AS)) {
+        Token alias_tok = consume(TokenType::IDENTIFIER, "expected alias name after 'as'");
+        alias = alias_tok.text;
+    }
+
+    match(TokenType::SEMICOLON);
+    SourceSpan span(start_loc, previous().span.end, previous().span.file_path);
+    return std::make_unique<ImportStmt>(mod_name, alias, std::vector<ImportStmt::ImportItem>{}, false, span);
+}
+
+std::unique_ptr<Stmt> Parser::parse_from_import_statement() {
+    SourceLocation start_loc = previous().span.start;
+    std::string mod_name;
+    if (check(TokenType::STRING_LITERAL)) {
+        Token tok = advance();
+        mod_name = tok.string_value.empty() ? tok.text : tok.string_value;
+    } else {
+        Token tok = consume(TokenType::IDENTIFIER, "expected module name after 'from'");
+        mod_name = tok.text;
+    }
+
+    consume(TokenType::KEYWORD_IMPORT, "expected 'import' after module name");
+
+    std::vector<ImportStmt::ImportItem> items;
+    do {
+        Token sym_tok = consume(TokenType::IDENTIFIER, "expected symbol name to import");
+        std::string alias = sym_tok.text;
+        if (match(TokenType::KEYWORD_AS)) {
+            Token alias_tok = consume(TokenType::IDENTIFIER, "expected alias name after 'as'");
+            alias = alias_tok.text;
+        }
+        items.push_back({sym_tok.text, alias});
+    } while (match(TokenType::COMMA));
+
+    match(TokenType::SEMICOLON);
+    SourceSpan span(start_loc, previous().span.end, previous().span.file_path);
+    return std::make_unique<ImportStmt>(mod_name, "", std::move(items), true, span);
+}
+
+std::unique_ptr<Stmt> Parser::parse_export_statement() {
+    SourceLocation start_loc = previous().span.start;
+    auto inner = parse_statement();
+    if (!inner) {
+        diagnostics_.error("expected declaration after 'export'", SourceSpan(start_loc, previous().span.end, previous().span.file_path));
+        return nullptr;
+    }
+    SourceSpan span(start_loc, inner->span().end, previous().span.file_path);
+    return std::make_unique<ExportStmt>(std::move(inner), span);
 }
 
 std::unique_ptr<BlockStmt> Parser::parse_block_statement() {

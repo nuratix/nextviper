@@ -364,4 +364,33 @@ void ASTPrinter::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     indent_level_--;
 }
 
+void ASTPrinter::visit_import_stmt(const ImportStmt& stmt) {
+    indent();
+    if (stmt.is_from_import()) {
+        result_ += "ImportStmt (from " + stmt.module_name() + " import ";
+        for (size_t i = 0; i < stmt.items().size(); ++i) {
+            if (i > 0) result_ += ", ";
+            result_ += stmt.items()[i].symbol_name;
+            if (!stmt.items()[i].alias.empty()) {
+                result_ += " as " + stmt.items()[i].alias;
+            }
+        }
+        result_ += ")\n";
+    } else {
+        result_ += "ImportStmt (import " + stmt.module_name();
+        if (!stmt.alias().empty()) {
+            result_ += " as " + stmt.alias();
+        }
+        result_ += ")\n";
+    }
+}
+
+void ASTPrinter::visit_export_stmt(const ExportStmt& stmt) {
+    indent();
+    result_ += "ExportStmt:\n";
+    indent_level_++;
+    stmt.inner_stmt().accept(*this);
+    indent_level_--;
+}
+
 } // namespace nextviper

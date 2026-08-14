@@ -47,6 +47,8 @@ public:
     void visit_break_stmt(const BreakStmt& stmt) override;
     void visit_continue_stmt(const ContinueStmt& stmt) override;
     void visit_fn_decl_stmt(const FnDeclStmt& stmt) override;
+    void visit_import_stmt(const ImportStmt& stmt) override;
+    void visit_export_stmt(const ExportStmt& stmt) override;
 
 private:
     struct CompilerContext {

@@ -19,6 +19,8 @@ CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/value.cpp \
             $(SRC_DIR)/environment.cpp \
             $(SRC_DIR)/interpreter.cpp \
+            $(SRC_DIR)/module.cpp \
+            $(SRC_DIR)/formatter.cpp \
             $(SRC_DIR)/chunk.cpp \
             $(SRC_DIR)/compiler.cpp \
             $(SRC_DIR)/vm.cpp \
@@ -36,6 +38,7 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_type_system.cpp \
             $(TEST_DIR)/test_collections.cpp \
             $(TEST_DIR)/test_loops.cpp \
+            $(TEST_DIR)/test_modules.cpp \
             $(TEST_DIR)/test_vm.cpp \
             $(TEST_DIR)/test_diagnostics.cpp
 

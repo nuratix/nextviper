@@ -504,4 +504,38 @@ void TypeChecker::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     current_function_return_type_ = prev_ret;
 }
 
+void TypeChecker::visit_import_stmt(const ImportStmt& stmt) {
+    if (stmt.is_from_import()) {
+        for (const auto& item : stmt.items()) {
+            if (stmt.module_name() == "math") {
+                if (item.symbol_name == "pi" || item.symbol_name == "e") {
+                    current_env_->define(item.alias, Type::make_float(), false);
+                } else if (item.symbol_name == "pow" || item.symbol_name == "min" || item.symbol_name == "max") {
+                    current_env_->define(item.alias, Type::make_function({Type::make_float(), Type::make_float()}, Type::make_float()), false);
+                } else {
+                    current_env_->define(item.alias, Type::make_function({Type::make_float()}, Type::make_float()), false);
+                }
+            } else {
+                current_env_->define(item.alias, Type::make_any(), false);
+            }
+        }
+    } else {
+        std::string bind_name = stmt.alias().empty() ? stmt.module_name() : stmt.alias();
+        if (stmt.alias().empty()) {
+            size_t slash = bind_name.find_last_of("/\\");
+            if (slash != std::string::npos) {
+                bind_name = bind_name.substr(slash + 1);
+            }
+            if (bind_name.size() >= 3 && bind_name.substr(bind_name.size() - 3) == ".nv") {
+                bind_name = bind_name.substr(0, bind_name.size() - 3);
+            }
+        }
+        current_env_->define(bind_name, Type::make_map(Type::make_string(), Type::make_any()), false);
+    }
+}
+
+void TypeChecker::visit_export_stmt(const ExportStmt& stmt) {
+    check_statement(stmt.inner_stmt());
+}
+
 } // namespace nextviper

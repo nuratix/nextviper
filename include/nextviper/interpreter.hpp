@@ -100,6 +100,12 @@ public:
     void visit_break_stmt(const BreakStmt& stmt) override;
     void visit_continue_stmt(const ContinueStmt& stmt) override;
     void visit_fn_decl_stmt(const FnDeclStmt& stmt) override;
+    void visit_import_stmt(const ImportStmt& stmt) override;
+    void visit_export_stmt(const ExportStmt& stmt) override;
+
+    void set_environment(std::shared_ptr<Environment> env) { environment_ = std::move(env); }
+    void set_current_file(std::string file_path) { current_file_ = std::move(file_path); }
+    const std::string& current_file() const { return current_file_; }
 
 private:
     void init_builtins();
@@ -110,6 +116,8 @@ private:
     std::shared_ptr<Environment> globals_;
     std::shared_ptr<Environment> environment_;
     Value last_evaluated_value_;
+    std::string current_file_;
+    std::shared_ptr<class ModuleManager> module_manager_;
 };
 
 } // namespace nextviper

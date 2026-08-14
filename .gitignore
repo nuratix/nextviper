@@ -14,3 +14,5 @@ build/
 
 # Scratch & test outputs
 /tmp/
+*.nvc
+tests/my_test_calc.nv

@@ -71,6 +71,8 @@ public:
     virtual void visit_break_stmt(const BreakStmt& stmt) = 0;
     virtual void visit_continue_stmt(const ContinueStmt& stmt) = 0;
     virtual void visit_fn_decl_stmt(const FnDeclStmt& stmt) = 0;
+    virtual void visit_import_stmt(const class ImportStmt& stmt) = 0;
+    virtual void visit_export_stmt(const class ExportStmt& stmt) = 0;
 };
 
 // Base AST Node
@@ -470,6 +472,43 @@ private:
     std::unique_ptr<Expr> expr_body_;
 };
 
+class ImportStmt : public Stmt {
+public:
+    struct ImportItem {
+        std::string symbol_name;
+        std::string alias;
+    };
+
+    ImportStmt(std::string module_name, std::string alias, std::vector<ImportItem> items, bool is_from_import, SourceSpan span)
+        : Stmt(span), module_name_(std::move(module_name)), alias_(std::move(alias)), items_(std::move(items)), is_from_import_(is_from_import) {}
+
+    const std::string& module_name() const { return module_name_; }
+    const std::string& alias() const { return alias_; }
+    const std::vector<ImportItem>& items() const { return items_; }
+    bool is_from_import() const { return is_from_import_; }
+
+    void accept(ASTVisitor& visitor) const override { visitor.visit_import_stmt(*this); }
+
+private:
+    std::string module_name_;
+    std::string alias_;
+    std::vector<ImportItem> items_;
+    bool is_from_import_;
+};
+
+class ExportStmt : public Stmt {
+public:
+    ExportStmt(std::unique_ptr<Stmt> inner_stmt, SourceSpan span)
+        : Stmt(span), inner_stmt_(std::move(inner_stmt)) {}
+
+    const Stmt& inner_stmt() const { return *inner_stmt_; }
+
+    void accept(ASTVisitor& visitor) const override { visitor.visit_export_stmt(*this); }
+
+private:
+    std::unique_ptr<Stmt> inner_stmt_;
+};
+
 // Program representation (list of statements)
 class Program {
 public:
@@ -513,6 +552,8 @@ public:
     virtual void visit_break_stmt(const BreakStmt& stmt) override;
     virtual void visit_continue_stmt(const ContinueStmt& stmt) override;
     virtual void visit_fn_decl_stmt(const FnDeclStmt& stmt) override;
+    virtual void visit_import_stmt(const ImportStmt& stmt) override;
+    virtual void visit_export_stmt(const ExportStmt& stmt) override;
 
 private:
     std::string result_;
