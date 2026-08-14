@@ -27,8 +27,8 @@ public:
         : std::runtime_error(message), kind_(kind), message_(std::move(message)), span_(span), help_(std::move(help)) {}
 
     // Backward compatibility constructor
-    RuntimeError(std::string message, SourceSpan span)
-        : std::runtime_error(message), kind_(RuntimeErrorKind::GENERIC_ERROR), message_(std::move(message)), span_(span) {}
+    RuntimeError(std::string message, SourceSpan span, std::string help = "")
+        : std::runtime_error(message), kind_(RuntimeErrorKind::GENERIC_ERROR), message_(std::move(message)), span_(span), help_(std::move(help)) {}
 
     RuntimeErrorKind kind() const { return kind_; }
     const std::string& message() const { return message_; }
@@ -107,11 +107,18 @@ public:
     void set_current_file(std::string file_path) { current_file_ = std::move(file_path); }
     const std::string& current_file() const { return current_file_; }
 
+    static constexpr size_t MAX_CALL_STACK_DEPTH = 1000;
+    static constexpr size_t MAX_STRING_BYTES = 64 * 1024 * 1024;
+    static constexpr size_t MAX_ARRAY_ELEMENTS = 10'000'000;
+
+    size_t call_stack_depth() const { return call_stack_depth_; }
+
 private:
     void init_builtins();
     Value call_function(const Value& callee, const std::vector<Value>& args, SourceSpan span);
     void execute_block(const std::vector<std::unique_ptr<Stmt>>& statements, std::shared_ptr<Environment> env);
 
+    size_t call_stack_depth_ = 0;
     DiagnosticEngine& diagnostics_;
     std::shared_ptr<Environment> globals_;
     std::shared_ptr<Environment> environment_;

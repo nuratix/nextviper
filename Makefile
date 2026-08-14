@@ -49,7 +49,8 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_formatter.cpp \
             $(TEST_DIR)/test_tooling.cpp \
             $(TEST_DIR)/test_vm.cpp \
-            $(TEST_DIR)/test_diagnostics.cpp
+            $(TEST_DIR)/test_diagnostics.cpp \
+            $(TEST_DIR)/test_fuzz.cpp
 
 TEST_OBJS = $(patsubst $(TEST_DIR)/%.cpp, $(BUILD_DIR)/tests/%.o, $(TEST_SRCS))
 

@@ -70,9 +70,13 @@ Tensor::Tensor()
 
 Tensor::Tensor(std::vector<int64_t> shape, DType dtype, Device device)
     : shape_(std::move(shape)), dtype_(dtype), device_(device), is_contiguous_(true) {
+    constexpr int64_t MAX_TENSOR_NUMEL = 100'000'000;
     numel_ = 1;
     for (int64_t dim : shape_) {
         if (dim < 0) throw std::invalid_argument("Negative dimension size in Tensor");
+        if (dim > MAX_TENSOR_NUMEL || (dim > 0 && numel_ > MAX_TENSOR_NUMEL / dim)) {
+            throw std::invalid_argument("Tensor shape exceeds maximum allowed elements (100,000,000)");
+        }
         numel_ *= dim;
     }
     compute_strides();
@@ -83,8 +87,15 @@ Tensor::Tensor(std::vector<int64_t> shape, DType dtype, Device device)
 
 Tensor::Tensor(std::vector<int64_t> shape, const std::vector<double>& values, DType dtype, Device device)
     : shape_(std::move(shape)), dtype_(dtype), device_(device), is_contiguous_(true) {
+    constexpr int64_t MAX_TENSOR_NUMEL = 100'000'000;
     numel_ = 1;
-    for (int64_t dim : shape_) numel_ *= dim;
+    for (int64_t dim : shape_) {
+        if (dim < 0) throw std::invalid_argument("Negative dimension size in Tensor");
+        if (dim > MAX_TENSOR_NUMEL || (dim > 0 && numel_ > MAX_TENSOR_NUMEL / dim)) {
+            throw std::invalid_argument("Tensor shape exceeds maximum allowed elements (100,000,000)");
+        }
+        numel_ *= dim;
+    }
     compute_strides();
     size_t bytes = numel_ * dtype_size(dtype_);
     data_ = CPUTensorBackend::instance().allocate(bytes);

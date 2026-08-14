@@ -15,10 +15,9 @@ struct BreakSignal {};
 struct ContinueSignal {};
 
 Interpreter::Interpreter(DiagnosticEngine& diagnostics)
-    : diagnostics_(diagnostics) {
-    globals_ = Environment::create();
-    environment_ = globals_;
-    module_manager_ = std::make_shared<ModuleManager>(diagnostics_);
+    : call_stack_depth_(0), diagnostics_(diagnostics), globals_(Environment::create()),
+      environment_(globals_), last_evaluated_value_(), current_file_(),
+      module_manager_(std::make_shared<ModuleManager>(diagnostics)) {
     init_builtins();
 }
 
@@ -127,7 +126,18 @@ void Interpreter::init_builtins() {
             if (step == 0) throw RuntimeError("range() step cannot be zero", span);
         }
 
+        int64_t count = 0;
+        if (step > 0 && end > start) {
+            count = (end - start + step - 1) / step;
+        } else if (step < 0 && start > end) {
+            count = (start - end - step - 1) / (-step);
+        }
+        if (count > static_cast<int64_t>(MAX_ARRAY_ELEMENTS)) {
+            throw RuntimeError("range() element count (" + std::to_string(count) + ") exceeds maximum allowed limit (10,000,000)", span);
+        }
+
         std::vector<Value> result;
+        result.reserve(static_cast<size_t>(count));
         if (step > 0) {
             for (int64_t i = start; i < end; i += step) {
                 result.push_back(Value::make_int(i));
@@ -145,7 +155,11 @@ void Interpreter::init_builtins() {
         if (!args[0].is_array()) {
             throw RuntimeError("push() requires Array as first argument", span);
         }
-        args[0].as_array()->push_back(args[1]);
+        auto arr = args[0].as_array();
+        if (arr->size() >= MAX_ARRAY_ELEMENTS) {
+            throw RuntimeError("array size exceeds maximum allowed limit (10,000,000 elements)", span);
+        }
+        arr->push_back(args[1]);
         return args[0];
     }));
 
@@ -153,7 +167,11 @@ void Interpreter::init_builtins() {
         if (!args[0].is_array()) {
             throw RuntimeError("append() requires Array as first argument", span);
         }
-        args[0].as_array()->push_back(args[1]);
+        auto arr = args[0].as_array();
+        if (arr->size() >= MAX_ARRAY_ELEMENTS) {
+            throw RuntimeError("array size exceeds maximum allowed limit (10,000,000 elements)", span);
+        }
+        arr->push_back(args[1]);
         return args[0];
     }));
 
@@ -491,7 +509,8 @@ bool Interpreter::execute(const Program& program) {
             execute_statement(*stmt);
         }
         return true;
-    } catch (const RuntimeError&) {
+    } catch (const RuntimeError& e) {
+        diagnostics_.error(e.message(), e.span(), e.help(), "NV100");
         return false;
     } catch (const ReturnSignal&) {
         diagnostics_.error("return statement outside function", SourceSpan{});
@@ -750,6 +769,17 @@ Value Interpreter::call_function(const Value& callee, const std::vector<Value>& 
     if (!callee.is_callable()) {
         runtime_error("cannot call non-function value of type " + callee.type_name(), span);
     }
+
+    if (call_stack_depth_ >= MAX_CALL_STACK_DEPTH) {
+        throw RuntimeError("maximum call stack depth exceeded (limit: 1000 frames)", span, "check for infinite recursion");
+    }
+
+    struct CallDepthGuard {
+        size_t& depth;
+        CallDepthGuard(size_t& d) : depth(d) { ++depth; }
+        ~CallDepthGuard() { if (depth > 0) --depth; }
+    };
+    CallDepthGuard depth_guard(call_stack_depth_);
 
     if (callee.type() == ValueType::NATIVE_FUNCTION) {
         auto nfn = callee.as_native_fn();

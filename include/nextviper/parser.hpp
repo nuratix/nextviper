@@ -66,7 +66,16 @@ private:
     bool match(std::initializer_list<TokenType> types);
     Token consume(TokenType type, const std::string& message, const std::string& hint = "");
     void synchronize();
+    static constexpr size_t MAX_RECURSION_DEPTH = 500;
 
+    struct RecursionGuard {
+        Parser& parser;
+        bool ok = true;
+        RecursionGuard(Parser& p);
+        ~RecursionGuard();
+    };
+
+    size_t recursion_depth_ = 0;
     std::vector<Token> tokens_;
     DiagnosticEngine& diagnostics_;
     size_t current_ = 0;

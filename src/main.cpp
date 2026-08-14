@@ -494,6 +494,7 @@ int eval_code(const std::string& code) {
     }
 
     Interpreter interpreter(diagnostics);
+    interpreter.set_current_file(source_name);
     if (!interpreter.execute(*program)) {
         diagnostics.render(std::cerr);
         return 1;

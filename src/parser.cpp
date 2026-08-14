@@ -3,7 +3,19 @@
 namespace nextviper {
 
 Parser::Parser(std::vector<Token> tokens, DiagnosticEngine& diagnostics)
-    : tokens_(std::move(tokens)), diagnostics_(diagnostics) {}
+    : recursion_depth_(0), tokens_(std::move(tokens)), diagnostics_(diagnostics), current_(0) {}
+
+Parser::RecursionGuard::RecursionGuard(Parser& p) : parser(p) {
+    if (++parser.recursion_depth_ > MAX_RECURSION_DEPTH) {
+        ok = false;
+        parser.diagnostics_.error("maximum parsing nesting depth exceeded (limit: 500)", parser.peek().span,
+                                  "simplify deeply nested expressions or blocks", "NV110");
+    }
+}
+
+Parser::RecursionGuard::~RecursionGuard() {
+    if (parser.recursion_depth_ > 0) --parser.recursion_depth_;
+}
 
 bool Parser::is_at_end() const {
     return peek().type == TokenType::EOF_TOKEN;
@@ -79,7 +91,7 @@ void Parser::synchronize() {
 
 std::unique_ptr<Program> Parser::parse_program() {
     std::vector<std::unique_ptr<Stmt>> statements;
-    while (!is_at_end()) {
+    while (!is_at_end() && diagnostics_.error_count() < 100) {
         auto stmt = parse_statement();
         if (stmt) {
             statements.push_back(std::move(stmt));
@@ -91,6 +103,9 @@ std::unique_ptr<Program> Parser::parse_program() {
 }
 
 std::unique_ptr<Stmt> Parser::parse_statement() {
+    RecursionGuard guard(*this);
+    if (!guard.ok) return nullptr;
+
     if (match(TokenType::KEYWORD_LET)) {
         return parse_let_statement();
     }
@@ -452,12 +467,15 @@ std::unique_ptr<BlockStmt> Parser::parse_block_statement() {
 std::unique_ptr<Stmt> Parser::parse_expression_statement() {
     SourceLocation start_loc = peek().span.start;
     auto expr = parse_expression();
+    if (!expr) return nullptr;
     match(TokenType::SEMICOLON);
     SourceSpan span(start_loc, previous().span.end, previous().span.file_path);
     return std::make_unique<ExprStmt>(std::move(expr), span);
 }
 
 std::unique_ptr<Expr> Parser::parse_expression() {
+    RecursionGuard guard(*this);
+    if (!guard.ok) return nullptr;
     return parse_assignment();
 }
 
@@ -468,6 +486,10 @@ std::unique_ptr<Expr> Parser::parse_assignment() {
                TokenType::STAR_ASSIGN, TokenType::SLASH_ASSIGN, TokenType::PERCENT_ASSIGN})) {
         TokenType op = previous().type;
         auto value = parse_assignment();
+
+        if (!expr || !value) {
+            return nullptr;
+        }
 
         if (auto* id_expr = dynamic_cast<IdentifierExpr*>(expr.get())) {
             SourceSpan span = SourceSpan::merge(id_expr->span(), value->span());
@@ -491,6 +513,7 @@ std::unique_ptr<Expr> Parser::parse_pipe() {
     while (match(TokenType::PIPE_GREATER)) {
         Token pipe_tok = previous();
         auto transform = parse_logical_or();
+        if (!expr || !transform) return expr ? std::move(expr) : nullptr;
         SourceSpan span = SourceSpan::merge(expr->span(), transform->span());
         expr = std::make_unique<PipeExpr>(std::move(expr), std::move(transform), span);
     }
@@ -504,6 +527,7 @@ std::unique_ptr<Expr> Parser::parse_logical_or() {
     while (match({TokenType::PIPE_PIPE, TokenType::KEYWORD_OR})) {
         TokenType op = previous().type;
         auto right = parse_logical_and();
+        if (!expr || !right) return expr ? std::move(expr) : nullptr;
         SourceSpan span = SourceSpan::merge(expr->span(), right->span());
         expr = std::make_unique<BinaryExpr>(std::move(expr), op, std::move(right), span);
     }
@@ -517,6 +541,7 @@ std::unique_ptr<Expr> Parser::parse_logical_and() {
     while (match({TokenType::AMP_AMP, TokenType::KEYWORD_AND})) {
         TokenType op = previous().type;
         auto right = parse_equality();
+        if (!expr || !right) return expr ? std::move(expr) : nullptr;
         SourceSpan span = SourceSpan::merge(expr->span(), right->span());
         expr = std::make_unique<BinaryExpr>(std::move(expr), op, std::move(right), span);
     }
@@ -530,6 +555,7 @@ std::unique_ptr<Expr> Parser::parse_equality() {
     while (match({TokenType::EQUAL_EQUAL, TokenType::BANG_EQUAL})) {
         TokenType op = previous().type;
         auto right = parse_comparison();
+        if (!expr || !right) return expr ? std::move(expr) : nullptr;
         SourceSpan span = SourceSpan::merge(expr->span(), right->span());
         expr = std::make_unique<BinaryExpr>(std::move(expr), op, std::move(right), span);
     }
@@ -543,6 +569,7 @@ std::unique_ptr<Expr> Parser::parse_comparison() {
     while (match({TokenType::LESS, TokenType::LESS_EQUAL, TokenType::GREATER, TokenType::GREATER_EQUAL})) {
         TokenType op = previous().type;
         auto right = parse_range();
+        if (!expr || !right) return expr ? std::move(expr) : nullptr;
         SourceSpan span = SourceSpan::merge(expr->span(), right->span());
         expr = std::make_unique<BinaryExpr>(std::move(expr), op, std::move(right), span);
     }
@@ -560,6 +587,7 @@ std::unique_ptr<Expr> Parser::parse_range() {
             !check(TokenType::RBRACE) && !check(TokenType::SEMICOLON) && !is_at_end()) {
             right = parse_term();
         }
+        if (!expr) return nullptr;
         SourceSpan span = right ? SourceSpan::merge(expr->span(), right->span()) : expr->span();
         return std::make_unique<RangeExpr>(std::move(expr), std::move(right), inclusive, span);
     }
@@ -573,6 +601,7 @@ std::unique_ptr<Expr> Parser::parse_term() {
     while (match({TokenType::PLUS, TokenType::MINUS})) {
         TokenType op = previous().type;
         auto right = parse_factor();
+        if (!expr || !right) return expr ? std::move(expr) : nullptr;
         SourceSpan span = SourceSpan::merge(expr->span(), right->span());
         expr = std::make_unique<BinaryExpr>(std::move(expr), op, std::move(right), span);
     }
@@ -586,6 +615,7 @@ std::unique_ptr<Expr> Parser::parse_factor() {
     while (match({TokenType::STAR, TokenType::SLASH, TokenType::PERCENT})) {
         TokenType op = previous().type;
         auto right = parse_power();
+        if (!expr || !right) return expr ? std::move(expr) : nullptr;
         SourceSpan span = SourceSpan::merge(expr->span(), right->span());
         expr = std::make_unique<BinaryExpr>(std::move(expr), op, std::move(right), span);
     }
@@ -598,7 +628,8 @@ std::unique_ptr<Expr> Parser::parse_power() {
 
     while (match(TokenType::POWER)) {
         TokenType op = previous().type;
-        auto right = parse_unary(); // Right-associative or standard binary
+        auto right = parse_unary();
+        if (!expr || !right) return expr ? std::move(expr) : nullptr;
         SourceSpan span = SourceSpan::merge(expr->span(), right->span());
         expr = std::make_unique<BinaryExpr>(std::move(expr), op, std::move(right), span);
     }
@@ -610,6 +641,7 @@ std::unique_ptr<Expr> Parser::parse_unary() {
     if (match({TokenType::BANG, TokenType::KEYWORD_NOT, TokenType::MINUS})) {
         Token op_tok = previous();
         auto operand = parse_unary();
+        if (!operand) return nullptr;
         SourceSpan span = SourceSpan::merge(op_tok.span, operand->span());
         return std::make_unique<UnaryExpr>(op_tok.type, std::move(operand), span);
     }
@@ -619,10 +651,12 @@ std::unique_ptr<Expr> Parser::parse_unary() {
 
 std::unique_ptr<Expr> Parser::parse_postfix() {
     auto expr = parse_primary();
+    if (!expr) return nullptr;
 
     while (true) {
         if (match(TokenType::LPAREN)) {
             expr = finish_call(std::move(expr));
+            if (!expr) return nullptr;
         } else if (match(TokenType::LBRACKET)) {
             if (match(TokenType::COLON_COLON)) {
                 std::unique_ptr<Expr> step = nullptr;
@@ -690,10 +724,12 @@ std::unique_ptr<Expr> Parser::parse_postfix() {
 }
 
 std::unique_ptr<Expr> Parser::finish_call(std::unique_ptr<Expr> callee) {
+    if (!callee) return nullptr;
     std::vector<std::unique_ptr<Expr>> args;
     if (!check(TokenType::RPAREN)) {
         do {
-            args.push_back(parse_expression());
+            auto arg = parse_expression();
+            if (arg) args.push_back(std::move(arg));
         } while (match(TokenType::COMMA));
     }
 
@@ -709,7 +745,8 @@ std::unique_ptr<Expr> Parser::parse_array_literal() {
     if (!check(TokenType::RBRACKET)) {
         do {
             if (check(TokenType::RBRACKET)) break; // trailing comma support
-            elements.push_back(parse_expression());
+            auto elem = parse_expression();
+            if (elem) elements.push_back(std::move(elem));
         } while (match(TokenType::COMMA));
     }
 
@@ -737,7 +774,7 @@ std::unique_ptr<Expr> Parser::parse_object_literal() {
 
             consume(TokenType::COLON, "expected ':' after object key");
             auto val = parse_expression();
-            entries.emplace_back(std::move(key), std::move(val));
+            if (val) entries.emplace_back(std::move(key), std::move(val));
         } while (match(TokenType::COMMA));
     }
 
@@ -808,7 +845,9 @@ std::unique_ptr<Expr> Parser::parse_primary() {
         SourceLocation start_loc = previous().span.start;
         auto expr = parse_expression();
         Token rparen = consume(TokenType::RPAREN, "expected ')' after expression");
-        expr->set_span(SourceSpan(start_loc, rparen.span.end, rparen.span.file_path));
+        if (expr) {
+            expr->set_span(SourceSpan(start_loc, rparen.span.end, rparen.span.file_path));
+        }
         return expr;
     }
 

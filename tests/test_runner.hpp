@@ -40,19 +40,19 @@ public:
         for (const auto& test : tests_) {
             if (test.suite != current_suite) {
                 current_suite = test.suite;
-                std::cout << "\033[1m[" << current_suite << "]\033[0m\n";
+                std::cout << "\033[1m[" << current_suite << "]\033[0m\n" << std::flush;
             }
 
             try {
                 test.func();
-                std::cout << "  \033[1;32m✓ PASS\033[0m: " << test.name << "\n";
+                std::cout << "  \033[1;32m✓ PASS\033[0m: " << test.name << "\n" << std::flush;
                 passed++;
             } catch (const std::exception& e) {
-                std::cout << "  \033[1;31m✗ FAIL\033[0m: " << test.name << "\n";
-                std::cout << "    \033[31mError: " << e.what() << "\033[0m\n";
+                std::cout << "  \033[1;31m✗ FAIL\033[0m: " << test.name << "\n" << std::flush;
+                std::cout << "    \033[31mError: " << e.what() << "\033[0m\n" << std::flush;
                 failed++;
             } catch (...) {
-                std::cout << "  \033[1;31m✗ FAIL\033[0m: " << test.name << " (unknown exception)\n";
+                std::cout << "  \033[1;31m✗ FAIL\033[0m: " << test.name << " (unknown exception)\n" << std::flush;
                 failed++;
             }
         }
