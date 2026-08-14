@@ -442,12 +442,18 @@ void BytecodeCompiler::visit_while_stmt(const WhileStmt& stmt) {
     size_t loop_start = current_chunk().count();
     current_ctx_->loop_starts.push_back(loop_start);
     current_ctx_->break_jumps.push_back({});
+    current_ctx_->continue_jumps.push_back({});
 
     stmt.condition().accept(*this);
     size_t exit_jump = emit_jump(OpCode::OP_JUMP_IF_FALSE);
     emit_opcode(OpCode::OP_POP);
 
     stmt.body().accept(*this);
+
+    for (size_t cj : current_ctx_->continue_jumps.back()) {
+        patch_jump(cj);
+    }
+
     emit_loop(loop_start);
 
     patch_jump(exit_jump);
@@ -459,13 +465,83 @@ void BytecodeCompiler::visit_while_stmt(const WhileStmt& stmt) {
 
     current_ctx_->loop_starts.pop_back();
     current_ctx_->break_jumps.pop_back();
+    current_ctx_->continue_jumps.pop_back();
 }
 
 void BytecodeCompiler::visit_for_in_stmt(const ForInStmt& stmt) {
     line_ = stmt.span().start.line;
-    // Scope for iterable and loop index
     begin_scope();
 
+    // Check if iterable is a static RangeExpr: for i in 0..10 or for i in 0..=10
+    if (const auto* range_expr = dynamic_cast<const RangeExpr*>(&stmt.iterable())) {
+        // 1. Initial value: start
+        if (range_expr->start()) {
+            range_expr->start()->accept(*this);
+        } else {
+            emit_constant(Value::make_int(0));
+        }
+        add_local(stmt.variable_name(), true);
+        int var_local = resolve_local(current_ctx_, stmt.variable_name());
+
+        // 2. End bound
+        if (range_expr->end()) {
+            range_expr->end()->accept(*this);
+        } else {
+            emit_constant(Value::make_int(0));
+        }
+        add_local("$end", false);
+        int end_local = resolve_local(current_ctx_, "$end");
+
+        size_t loop_start = current_chunk().count();
+        current_ctx_->loop_starts.push_back(loop_start);
+        current_ctx_->break_jumps.push_back({});
+        current_ctx_->continue_jumps.push_back({});
+
+        // Condition: var < end (or <= end)
+        emit_opcode(OpCode::OP_GET_LOCAL);
+        emit_byte(static_cast<uint8_t>(var_local));
+        emit_opcode(OpCode::OP_GET_LOCAL);
+        emit_byte(static_cast<uint8_t>(end_local));
+        if (range_expr->inclusive()) {
+            emit_opcode(OpCode::OP_LESS_EQUAL);
+        } else {
+            emit_opcode(OpCode::OP_LESS);
+        }
+
+        size_t exit_jump = emit_jump(OpCode::OP_JUMP_IF_FALSE);
+        emit_opcode(OpCode::OP_POP);
+
+        stmt.body().accept(*this);
+
+        for (size_t cj : current_ctx_->continue_jumps.back()) {
+            patch_jump(cj);
+        }
+
+        // Increment: var += 1
+        emit_opcode(OpCode::OP_GET_LOCAL);
+        emit_byte(static_cast<uint8_t>(var_local));
+        emit_constant(Value::make_int(1));
+        emit_opcode(OpCode::OP_ADD);
+        emit_opcode(OpCode::OP_SET_LOCAL);
+        emit_byte(static_cast<uint8_t>(var_local));
+        emit_opcode(OpCode::OP_POP);
+
+        emit_loop(loop_start);
+        patch_jump(exit_jump);
+        emit_opcode(OpCode::OP_POP);
+
+        for (size_t bj : current_ctx_->break_jumps.back()) {
+            patch_jump(bj);
+        }
+
+        current_ctx_->loop_starts.pop_back();
+        current_ctx_->break_jumps.pop_back();
+        current_ctx_->continue_jumps.pop_back();
+        end_scope();
+        return;
+    }
+
+    // Generic collection iteration
     // 1. Evaluate iterable
     stmt.iterable().accept(*this);
     add_local("$iter", false);
@@ -477,6 +553,7 @@ void BytecodeCompiler::visit_for_in_stmt(const ForInStmt& stmt) {
     size_t loop_start = current_chunk().count();
     current_ctx_->loop_starts.push_back(loop_start);
     current_ctx_->break_jumps.push_back({});
+    current_ctx_->continue_jumps.push_back({});
 
     // Condition: $idx < len($iter)
     size_t len_fn_idx = current_chunk().add_constant(Value::make_string("len"));
@@ -510,6 +587,10 @@ void BytecodeCompiler::visit_for_in_stmt(const ForInStmt& stmt) {
     stmt.body().accept(*this);
     end_scope();
 
+    for (size_t cj : current_ctx_->continue_jumps.back()) {
+        patch_jump(cj);
+    }
+
     // Increment index: $idx += 1
     emit_opcode(OpCode::OP_GET_LOCAL);
     emit_byte(static_cast<uint8_t>(idx_local));
@@ -529,6 +610,7 @@ void BytecodeCompiler::visit_for_in_stmt(const ForInStmt& stmt) {
 
     current_ctx_->loop_starts.pop_back();
     current_ctx_->break_jumps.pop_back();
+    current_ctx_->continue_jumps.pop_back();
     end_scope();
 }
 
@@ -552,11 +634,12 @@ void BytecodeCompiler::visit_break_stmt(const BreakStmt&) {
 }
 
 void BytecodeCompiler::visit_continue_stmt(const ContinueStmt&) {
-    if (current_ctx_->loop_starts.empty()) {
+    if (current_ctx_->continue_jumps.empty()) {
         diagnostics_.error("continue statement outside loop", SourceSpan{});
         return;
     }
-    emit_loop(current_ctx_->loop_starts.back());
+    size_t jump = emit_jump(OpCode::OP_JUMP);
+    current_ctx_->continue_jumps.back().push_back(jump);
 }
 
 void BytecodeCompiler::visit_fn_decl_stmt(const FnDeclStmt& stmt) {

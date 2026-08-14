@@ -56,6 +56,7 @@ private:
         CompilerContext* enclosing = nullptr;
         std::vector<size_t> loop_starts;
         std::vector<std::vector<size_t>> break_jumps;
+        std::vector<std::vector<size_t>> continue_jumps;
     };
 
     Chunk& current_chunk();

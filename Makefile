@@ -35,6 +35,7 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_interpreter.cpp \
             $(TEST_DIR)/test_type_system.cpp \
             $(TEST_DIR)/test_collections.cpp \
+            $(TEST_DIR)/test_loops.cpp \
             $(TEST_DIR)/test_vm.cpp \
             $(TEST_DIR)/test_diagnostics.cpp
 

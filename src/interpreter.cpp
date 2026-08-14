@@ -1167,6 +1167,39 @@ void Interpreter::visit_while_stmt(const WhileStmt& stmt) {
 }
 
 void Interpreter::visit_for_in_stmt(const ForInStmt& stmt) {
+    if (const auto* range_expr = dynamic_cast<const RangeExpr*>(&stmt.iterable())) {
+        int64_t start = 0;
+        int64_t end = 0;
+        if (range_expr->start()) {
+            Value sv = evaluate(*range_expr->start());
+            if (!sv.is_int()) runtime_error("range start must be an integer", range_expr->start()->span());
+            start = sv.as_int();
+        }
+        if (range_expr->end()) {
+            Value ev = evaluate(*range_expr->end());
+            if (!ev.is_int()) runtime_error("range end must be an integer", range_expr->end()->span());
+            end = ev.as_int();
+        }
+        bool inclusive = range_expr->inclusive();
+        for (int64_t i = start; inclusive ? (i <= end) : (i < end); ++i) {
+            auto loop_env = Environment::create(environment_);
+            loop_env->define(stmt.variable_name(), Value::make_int(i), true);
+            auto prev_env = environment_;
+            environment_ = loop_env;
+            try {
+                execute_statement(stmt.body());
+            } catch (const BreakSignal&) {
+                environment_ = prev_env;
+                break;
+            } catch (const ContinueSignal&) {
+                environment_ = prev_env;
+                continue;
+            }
+            environment_ = prev_env;
+        }
+        return;
+    }
+
     Value iter = evaluate(stmt.iterable());
 
     if (iter.is_array()) {
