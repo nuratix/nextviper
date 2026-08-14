@@ -1,0 +1,36 @@
+// NextViper 1.0 Tutorial 3: Control Flow & Modern Loops
+
+print("=== NextViper 1.0 Loops & Control Flow ===")
+
+// 1. If-elif-else
+let score = 85
+if score >= 90:
+    print("Grade: A")
+elif score >= 80:
+    print("Grade: B")
+else:
+    print("Grade: C")
+
+// 2. Range loops (Half-open 0..5 and Inclusive 0..=5)
+print("\nHalf-open range 0..5:")
+for i in 0..5:
+    print("  i = " + str(i))
+
+print("\nInclusive range 0..=5:")
+for i in 0..=5:
+    print("  i = " + str(i))
+
+// 3. Iterating collections
+let languages = ["NextViper", "Rust", "Python", "C++"]
+print("\nIterating languages:")
+for lang in languages:
+    print("  - " + lang)
+
+// 4. While loop with break & continue
+print("\nWhile loop filtering even numbers up to 10:")
+let mut n = 0
+while n < 10:
+    n = n + 1
+    if n % 2 != 0:
+        continue
+    print("  Even: " + str(n))

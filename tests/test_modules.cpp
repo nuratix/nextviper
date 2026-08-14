@@ -71,7 +71,7 @@ NV_TEST(Modules, ImportDataAndSysStdlib) {
     NV_ASSERT_TRUE(ch.has_value() && ch->is_array() && ch->as_array()->size() == 3);
 
     auto ver = interp.globals()->get("sys_ver");
-    NV_ASSERT_TRUE(ver.has_value() && ver->is_string() && ver->as_string() == "0.1.0");
+    NV_ASSERT_TRUE(ver.has_value() && ver->is_string() && ver->as_string() == "1.0.0");
 }
 
 NV_TEST(Modules, FileBasedCustomModuleResolution) {

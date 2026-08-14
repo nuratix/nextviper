@@ -29,6 +29,7 @@ const std::unordered_map<std::string_view, TokenType> Lexer::keywords_ = {
     {"fn", TokenType::KEYWORD_FN},
     {"return", TokenType::KEYWORD_RETURN},
     {"if", TokenType::KEYWORD_IF},
+    {"elif", TokenType::KEYWORD_ELIF},
     {"else", TokenType::KEYWORD_ELSE},
     {"while", TokenType::KEYWORD_WHILE},
     {"for", TokenType::KEYWORD_FOR},

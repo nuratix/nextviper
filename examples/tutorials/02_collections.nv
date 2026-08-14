@@ -1,0 +1,37 @@
+// NextViper 1.0 Tutorial 2: Lists, Maps & Functional Methods
+
+print("=== NextViper 1.0 Collections Tutorial ===")
+
+// 1. Lists
+let scores = [95, 88, 72, 100, 64]
+print("Initial scores: " + str(scores))
+print("First score: " + str(scores[0]))
+print("Total scores count: " + str(scores.len()))
+
+// Appending
+scores.append(85)
+print("After append: " + str(scores))
+
+// Slicing
+let top_three = scores.slice(0, 3)
+print("Top 3 scores: " + str(top_three))
+
+// Higher-order operations
+let doubled = [1, 2, 3, 4].map(fn(x): x * 2)
+let passed = scores.filter(fn(x): x >= 80)
+let total_sum = scores.reduce(0, fn(acc, x): acc + x)
+
+print("Doubled: " + str(doubled))
+print("Passed: " + str(passed))
+print("Total sum: " + str(total_sum))
+
+// 2. Maps (Dictionaries)
+let student = {
+    "name": "Junaid",
+    "age": 15,
+    "grade": "A+"
+}
+
+print("Student name: " + str(student["name"]))
+print("Has grade: " + str(student.has("grade")))
+print("Keys: " + str(student.keys()))

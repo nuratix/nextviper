@@ -268,10 +268,19 @@ Value Dataset::to_value() const {
     methods["$type"] = Value::make_string("Dataset");
     methods["num_rows"] = Value::make_int(static_cast<int64_t>(num_rows()));
     methods["num_cols"] = Value::make_int(static_cast<int64_t>(num_cols()));
+    methods["rows"] = Value::make_native_fn("rows", 0, [self_ds](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_int(static_cast<int64_t>(self_ds->num_rows()));
+    });
+    methods["cols"] = Value::make_native_fn("cols", 0, [self_ds](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_int(static_cast<int64_t>(self_ds->num_cols()));
+    });
 
     std::vector<Value> col_vals;
     for (const auto& c : columns_) col_vals.push_back(Value::make_string(c));
-    methods["columns"] = Value::make_array(std::move(col_vals));
+    methods["columns"] = Value::make_array(std::vector<Value>(col_vals));
+    methods["column_names"] = Value::make_native_fn("column_names", 0, [col_vals](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_array(std::vector<Value>(col_vals));
+    });
 
     methods["clean"] = Value::make_native_fn("clean", -1, [self_ds](const std::vector<Value>& args, SourceSpan) -> Value {
         bool drop_nulls = args.empty() ? true : args[0].as_bool();

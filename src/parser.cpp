@@ -289,7 +289,7 @@ std::unique_ptr<Stmt> Parser::parse_body_statement(size_t parent_col) {
 
         std::vector<std::unique_ptr<Stmt>> statements;
         size_t min_body_col = 0;
-        while (!is_at_end() && !check(TokenType::RBRACE) && !check(TokenType::KEYWORD_ELSE)) {
+        while (!is_at_end() && !check(TokenType::RBRACE) && !check(TokenType::KEYWORD_ELSE) && !check(TokenType::KEYWORD_ELIF)) {
             if (min_body_col == 0) {
                 min_body_col = peek().span.start.column;
                 if (min_body_col <= parent_col) {
@@ -326,7 +326,9 @@ std::unique_ptr<Stmt> Parser::parse_if_statement() {
     auto then_branch = parse_body_statement(start_loc.column);
     std::unique_ptr<Stmt> else_branch = nullptr;
 
-    if (match(TokenType::KEYWORD_ELSE)) {
+    if (match(TokenType::KEYWORD_ELIF)) {
+        else_branch = parse_if_statement();
+    } else if (match(TokenType::KEYWORD_ELSE)) {
         if (match(TokenType::KEYWORD_IF)) {
             else_branch = parse_if_statement();
         } else {
@@ -802,6 +804,12 @@ std::unique_ptr<Expr> Parser::parse_lambda() {
 
     if (match(TokenType::FAT_ARROW)) {
         body_expr = parse_expression();
+    } else if (match(TokenType::COLON)) {
+        if (check(TokenType::LBRACE)) {
+            body_block = parse_block_statement();
+        } else {
+            body_expr = parse_expression();
+        }
     } else {
         body_block = parse_block_statement();
     }

@@ -19,6 +19,7 @@ std::string_view token_type_to_string(TokenType type) {
         case TokenType::KEYWORD_FN: return "fn";
         case TokenType::KEYWORD_RETURN: return "return";
         case TokenType::KEYWORD_IF: return "if";
+        case TokenType::KEYWORD_ELIF: return "elif";
         case TokenType::KEYWORD_ELSE: return "else";
         case TokenType::KEYWORD_WHILE: return "while";
         case TokenType::KEYWORD_FOR: return "for";

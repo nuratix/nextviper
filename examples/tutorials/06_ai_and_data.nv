@@ -1,0 +1,31 @@
+// NextViper 1.0 Tutorial 6: AI & Tabular Data Foundations
+
+print("=== NextViper 1.0 AI & Data Foundations ===")
+
+// 1. Tabular Data
+import data
+
+let csv_raw = "name,age,salary\nAlice,30,75000\nBob,25,55000\nCharlie,35,90000"
+let df = data.from_csv(csv_raw)
+
+print("Dataset loaded successfully.")
+print("Rows count: " + str(df.rows()))
+print("Columns: " + str(df.column_names()))
+
+// 2. High-Performance Tensors & Linear Algebra
+import tensor
+
+let mat_a = tensor.tensor([[1.0, 2.0], [3.0, 4.0]])
+let mat_b = tensor.tensor([[5.0, 6.0], [7.0, 8.0]])
+let mat_c = tensor.matmul(mat_a, mat_b)
+
+print("Matrix multiplication complete:")
+print(mat_c)
+
+// 3. AI Linear Model Layer
+import ai
+
+let linear_layer = ai.create_linear(2, 1)
+let predictions = linear_layer.predict(mat_c)
+print("Forward pass predictions:")
+print(predictions)

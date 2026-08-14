@@ -1,0 +1,30 @@
+// NextViper 1.0 Tutorial 1: Basics & Variables
+
+// 1. Hello World
+print("=== NextViper 1.0 Basics Tutorial ===")
+
+// 2. Variables & Mutability
+let language = "NextViper"
+let version = "1.0.0"
+let mut year = 2026
+
+print("Language: " + language)
+print("Version: " + version)
+print("Release Year: " + str(year))
+
+// 3. Basic Arithmetic
+let x = 10
+let y = 25
+let sum = x + y
+let product = x * y
+let power = 2 ** 8
+
+print("Sum: " + str(sum))
+print("Product: " + str(product))
+print("2^8: " + str(power))
+
+// 4. Boolean logic
+let is_fast = true
+let is_hard = false
+if is_fast && !is_hard:
+    print("NextViper combines speed with simplicity!")

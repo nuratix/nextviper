@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -Iinclude -pthread
+CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -Iinclude -pthread -MMD -MP
 LDFLAGS = 
 
 SRC_DIR = src
@@ -103,3 +103,6 @@ examples: $(TARGET)
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 	@echo "\033[1;33m[Cleaned]\033[0m Build artifacts removed"
+
+-include $(wildcard $(BUILD_DIR)/*.d) $(wildcard $(BUILD_DIR)/tests/*.d)
+

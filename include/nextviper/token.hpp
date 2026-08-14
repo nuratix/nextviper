@@ -24,6 +24,7 @@ enum class TokenType {
     KEYWORD_FN,
     KEYWORD_RETURN,
     KEYWORD_IF,
+    KEYWORD_ELIF,
     KEYWORD_ELSE,
     KEYWORD_WHILE,
     KEYWORD_FOR,

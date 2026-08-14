@@ -32,7 +32,7 @@ public:
         std::string current_suite = "";
 
         std::cout << "\033[1;36m====================================================\033[0m\n";
-        std::cout << "\033[1;35m  NextViper 0.1.0 Test Suite Runner\033[0m\n";
+        std::cout << "\033[1;35m  NextViper 1.0.0 Test Suite Runner\033[0m\n";
         std::cout << "\033[1;36m====================================================\033[0m\n\n";
 
         auto start_time = std::chrono::high_resolution_clock::now();

@@ -826,6 +826,14 @@ Value Interpreter::call_function(const Value& callee, const std::vector<Value>& 
                         execute_statement(*s);
                     }
                 }
+            } else if (fn->lambda_decl) {
+                if (fn->lambda_decl->body_expr()) {
+                    return_val = evaluate(*fn->lambda_decl->body_expr());
+                } else if (fn->lambda_decl->body_block()) {
+                    for (const auto& s : fn->lambda_decl->body_block()->statements()) {
+                        execute_statement(*s);
+                    }
+                }
             }
         } catch (const ReturnSignal& sig) {
             return_val = sig.value;
@@ -853,6 +861,93 @@ void Interpreter::visit_index(const IndexExpr& expr) {
 
     if (target.is_array()) {
         auto arr = target.as_array();
+        if (index.is_string()) {
+            std::string method = index.as_string();
+            if (method == "len") {
+                last_evaluated_value_ = Value::make_native_fn("len", 0, [arr](const std::vector<Value>&, SourceSpan) -> Value {
+                    return Value::make_int(static_cast<int64_t>(arr->size()));
+                });
+                return;
+            }
+            if (method == "append" || method == "push") {
+                last_evaluated_value_ = Value::make_native_fn("append", 1, [arr](const std::vector<Value>& args, SourceSpan span) -> Value {
+                    if (arr->size() >= MAX_ARRAY_ELEMENTS) {
+                        throw RuntimeError("array size exceeds maximum allowed limit (10,000,000 items)", span, "prevent heap exhaustion");
+                    }
+                    arr->push_back(args[0]);
+                    return Value::make_nil();
+                });
+                return;
+            }
+            if (method == "insert") {
+                last_evaluated_value_ = Value::make_native_fn("insert", 2, [arr](const std::vector<Value>& args, SourceSpan span) -> Value {
+                    if (!args[0].is_int()) throw RuntimeError("insert index must be an integer", span);
+                    int64_t idx = args[0].as_int();
+                    if (idx < 0) idx = 0;
+                    if (idx > static_cast<int64_t>(arr->size())) idx = static_cast<int64_t>(arr->size());
+                    arr->insert(arr->begin() + idx, args[1]);
+                    return Value::make_nil();
+                });
+                return;
+            }
+            if (method == "remove") {
+                last_evaluated_value_ = Value::make_native_fn("remove", 1, [arr](const std::vector<Value>& args, SourceSpan span) -> Value {
+                    if (!args[0].is_int()) throw RuntimeError("remove index must be an integer", span);
+                    int64_t idx = args[0].as_int();
+                    if (idx < 0 || idx >= static_cast<int64_t>(arr->size())) {
+                        throw RuntimeError("remove index out of bounds", span);
+                    }
+                    Value val = (*arr)[idx];
+                    arr->erase(arr->begin() + idx);
+                    return val;
+                });
+                return;
+            }
+            if (method == "slice") {
+                last_evaluated_value_ = Value::make_native_fn("slice", 2, [arr](const std::vector<Value>& args, SourceSpan span) -> Value {
+                    if (!args[0].is_int() || !args[1].is_int()) throw RuntimeError("slice indices must be integers", span);
+                    int64_t start = std::max<int64_t>(0, args[0].as_int());
+                    int64_t end = std::min<int64_t>(static_cast<int64_t>(arr->size()), args[1].as_int());
+                    std::vector<Value> sub;
+                    for (int64_t i = start; i < end; ++i) sub.push_back((*arr)[i]);
+                    return Value::make_array(std::move(sub));
+                });
+                return;
+            }
+            if (method == "map") {
+                last_evaluated_value_ = Value::make_native_fn("map", 1, [this, arr](const std::vector<Value>& args, SourceSpan span) -> Value {
+                    std::vector<Value> res;
+                    for (const auto& item : *arr) {
+                        res.push_back(this->call_function(args[0], {item}, span));
+                    }
+                    return Value::make_array(std::move(res));
+                });
+                return;
+            }
+            if (method == "filter") {
+                last_evaluated_value_ = Value::make_native_fn("filter", 1, [this, arr](const std::vector<Value>& args, SourceSpan span) -> Value {
+                    std::vector<Value> res;
+                    for (const auto& item : *arr) {
+                        Value pred = this->call_function(args[0], {item}, span);
+                        if (pred.as_bool()) res.push_back(item);
+                    }
+                    return Value::make_array(std::move(res));
+                });
+                return;
+            }
+            if (method == "reduce") {
+                last_evaluated_value_ = Value::make_native_fn("reduce", 2, [this, arr](const std::vector<Value>& args, SourceSpan span) -> Value {
+                    Value acc = args[0];
+                    for (const auto& item : *arr) {
+                        acc = this->call_function(args[1], {acc, item}, span);
+                    }
+                    return acc;
+                });
+                return;
+            }
+            runtime_error("unknown list method '" + method + "'", expr.span());
+        }
+
         if (!index.is_int()) {
             runtime_error("array index must be an integer, got " + index.type_name(), expr.span());
         }
@@ -886,12 +981,56 @@ void Interpreter::visit_index(const IndexExpr& expr) {
         if (!index.is_string()) {
             runtime_error("object property key must be a string, got " + index.type_name(), expr.span());
         }
-        auto it = obj->find(index.as_string());
+        std::string key = index.as_string();
+        auto it = obj->find(key);
         if (it != obj->end()) {
             last_evaluated_value_ = it->second;
-        } else {
-            last_evaluated_value_ = Value::make_nil();
+            return;
         }
+
+        // Built-in map helper methods
+        if (key == "has") {
+            last_evaluated_value_ = Value::make_native_fn("has", 1, [obj](const std::vector<Value>& args, SourceSpan span) -> Value {
+                if (!args[0].is_string()) throw RuntimeError("map.has() requires string key", span);
+                return Value::make_bool(obj->find(args[0].as_string()) != obj->end());
+            });
+            return;
+        }
+        if (key == "keys") {
+            last_evaluated_value_ = Value::make_native_fn("keys", 0, [obj](const std::vector<Value>&, SourceSpan) -> Value {
+                std::vector<Value> ks;
+                for (const auto& [k, _] : *obj) ks.push_back(Value::make_string(k));
+                return Value::make_array(std::move(ks));
+            });
+            return;
+        }
+        if (key == "values") {
+            last_evaluated_value_ = Value::make_native_fn("values", 0, [obj](const std::vector<Value>&, SourceSpan) -> Value {
+                std::vector<Value> vs;
+                for (const auto& [_, v] : *obj) vs.push_back(v);
+                return Value::make_array(std::move(vs));
+            });
+            return;
+        }
+        if (key == "len") {
+            last_evaluated_value_ = Value::make_native_fn("len", 0, [obj](const std::vector<Value>&, SourceSpan) -> Value {
+                return Value::make_int(static_cast<int64_t>(obj->size()));
+            });
+            return;
+        }
+        if (key == "remove") {
+            last_evaluated_value_ = Value::make_native_fn("remove", 1, [obj](const std::vector<Value>& args, SourceSpan span) -> Value {
+                if (!args[0].is_string()) throw RuntimeError("map.remove() requires string key", span);
+                auto oit = obj->find(args[0].as_string());
+                if (oit == obj->end()) return Value::make_nil();
+                Value res = oit->second;
+                obj->erase(oit);
+                return res;
+            });
+            return;
+        }
+
+        last_evaluated_value_ = Value::make_nil();
         return;
     }
 
@@ -1134,12 +1273,7 @@ void Interpreter::visit_lambda(const LambdaExpr& expr) {
     fn_obj->name = "anonymous";
     fn_obj->params = expr.params();
     fn_obj->closure = environment_;
-
-    // Create anonymous function wrapper
-    if (expr.body_expr()) {
-        // Direct expression body
-        fn_obj->decl = nullptr; // Handled in closure
-    }
+    fn_obj->lambda_decl = &expr;
 
     last_evaluated_value_ = Value::make_function(fn_obj);
 }

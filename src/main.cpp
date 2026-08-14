@@ -601,7 +601,7 @@ int package_command(int argc, char* argv[]) {
         if (pkg_file.is_open()) {
             pkg_file << "{\n"
                      << "  \"name\": \"" << pkg_name << "\",\n"
-                     << "  \"version\": \"0.1.0\",\n"
+                     << "  \"version\": \"1.0.0\",\n"
                      << "  \"description\": \"A modern NextViper package\",\n"
                      << "  \"main\": \"src/main.nv\",\n"
                      << "  \"license\": \"MIT\",\n"

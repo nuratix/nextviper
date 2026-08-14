@@ -5,6 +5,7 @@
 #include "nextviper/tensor.hpp"
 #include "nextviper/dataset.hpp"
 #include "nextviper/ai_model.hpp"
+#include "nextviper/version.hpp"
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -258,6 +259,7 @@ Value ModuleManager::create_ai_module() {
         model.add_layer(std::make_shared<LinearLayer>(in_f, out_f, bias));
         return model.to_value();
     });
+    exports["create_linear"] = exports["linear"];
 
     exports["tensor"] = Value::make_native_fn("tensor", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
         std::vector<int64_t> shape;
@@ -331,6 +333,61 @@ Value ModuleManager::create_ai_module() {
 Value ModuleManager::create_tensor_module() {
     std::map<std::string, Value> exports;
 
+    exports["tensor"] = Value::make_native_fn("tensor", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.empty()) throw RuntimeError("tensor() requires array data", span);
+        if (args.size() == 1 && args[0].is_array()) {
+            const auto& arr = *args[0].as_array();
+            if (!arr.empty() && arr[0].is_array()) {
+                int64_t rows = static_cast<int64_t>(arr.size());
+                int64_t cols = static_cast<int64_t>(arr[0].as_array()->size());
+                std::vector<double> vals;
+                for (const auto& r : arr) {
+                    if (r.is_array()) {
+                        for (const auto& el : *r.as_array()) {
+                            vals.push_back(el.as_float());
+                        }
+                    }
+                }
+                return Tensor({rows, cols}, vals).to_value();
+            } else {
+                std::vector<double> vals;
+                for (const auto& el : arr) vals.push_back(el.as_float());
+                return Tensor({static_cast<int64_t>(vals.size())}, vals).to_value();
+            }
+        }
+        if (args.size() >= 2 && args[0].is_array() && args[1].is_array()) {
+            std::vector<int64_t> shape;
+            for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
+            std::vector<double> vals;
+            for (const auto& v : *args[1].as_array()) vals.push_back(v.as_float());
+            return Tensor(shape, vals).to_value();
+        }
+        throw RuntimeError("tensor() invalid arguments", span);
+    });
+
+    exports["matmul"] = Value::make_native_fn("matmul", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        try {
+            auto extract_tensor = [](const Value& val, SourceSpan s) -> Tensor {
+                if (!val.is_object()) throw RuntimeError("Expected Tensor object", s);
+                auto obj = val.as_object();
+                auto to_list = obj->find("to_list");
+                auto shape_it = obj->find("shape");
+                if (to_list == obj->end() || shape_it == obj->end()) throw RuntimeError("Invalid Tensor value", s);
+                Value arr_val = to_list->second.as_native_fn()->func({}, s);
+                std::vector<double> vals;
+                for (const auto& v : *arr_val.as_array()) vals.push_back(v.as_float());
+                std::vector<int64_t> shape;
+                for (const auto& el : *shape_it->second.as_array()) shape.push_back(el.as_int());
+                return Tensor(shape, vals);
+            };
+            Tensor a = extract_tensor(args[0], span);
+            Tensor b = extract_tensor(args[1], span);
+            return a.matmul(b).to_value();
+        } catch (const std::exception& e) {
+            throw RuntimeError(std::string("matmul error: ") + e.what(), span);
+        }
+    });
+
     exports["zeros"] = Value::make_native_fn("zeros", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         std::vector<int64_t> shape;
         if (args[0].is_array()) for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
@@ -368,7 +425,7 @@ Value ModuleManager::create_tensor_module() {
 
 Value ModuleManager::create_sys_module() {
     std::map<std::string, Value> exports;
-    exports["version"] = Value::make_string("0.1.0");
+    exports["version"] = Value::make_string(std::string(VERSION_STRING));
 #if defined(_WIN32)
     exports["platform"] = Value::make_string("windows");
 #elif defined(__APPLE__)

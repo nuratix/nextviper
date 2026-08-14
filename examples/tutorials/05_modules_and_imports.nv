@@ -1,0 +1,21 @@
+// NextViper 1.0 Tutorial 5: Modules & Imports
+
+print("=== NextViper 1.0 Modules & Imports ===")
+
+// 1. Math stdlib
+import math
+let root = math.sqrt(81.0)
+let hypotenuse = math.sqrt(3.0 ** 2.0 + 4.0 ** 2.0)
+
+print("Sqrt(81): " + str(root))
+print("Hypotenuse (3, 4): " + str(hypotenuse))
+
+// 2. Selective import
+from math import pi, sin, cos
+print("Pi constant: " + str(pi))
+print("Cos(0): " + str(cos(0.0)))
+
+// 3. Sys module
+import sys
+print("Runtime version: " + str(sys.version))
+print("Platform: " + str(sys.platform))

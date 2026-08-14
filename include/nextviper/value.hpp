@@ -13,6 +13,7 @@ namespace nextviper {
 
 // Forward declarations
 class FnDeclStmt;
+class LambdaExpr;
 class Environment;
 class CompiledFunction;
 class Value;
@@ -23,6 +24,7 @@ struct FunctionObject {
     std::vector<std::string> param_types;
     std::string return_type;
     const FnDeclStmt* decl = nullptr;
+    const LambdaExpr* lambda_decl = nullptr;
     std::shared_ptr<Environment> closure;
 };
 

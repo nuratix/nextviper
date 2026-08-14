@@ -13,7 +13,7 @@ echo "Testing NextViper CLI Tooling..."
 # Test 1: --version
 echo "1. Checking --version"
 VERSION_OUT=$($BIN --version)
-if [[ "$VERSION_OUT" != *"NextViper 0.1.0"* ]]; then
+if [[ "$VERSION_OUT" != *"NextViper 1.0.0"* ]]; then
     echo "FAIL: unexpected version output: $VERSION_OUT"
     exit 1
 fi

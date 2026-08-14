@@ -1,0 +1,29 @@
+// NextViper 1.0 Tutorial 4: Functions & Closures
+
+print("=== NextViper 1.0 Functions & Closures ===")
+
+// 1. Basic function
+fn greet(name):
+    return "Hello, " + name + "!"
+
+print(greet("NextViper Developer"))
+
+// 2. Arrow expression function
+fn square(x) => x * x
+print("Square of 9: " + str(square(9)))
+
+// 3. Typed function
+fn calculate_area(width: float, height: float) -> float:
+    return width * height
+
+print("Area: " + str(calculate_area(5.5, 4.0)))
+
+// 4. Closures & Higher-Order Functions
+fn make_adder(amount):
+    return fn(x) => x + amount
+
+let add_10 = make_adder(10)
+let add_50 = make_adder(50)
+
+print("Add 10 to 5: " + str(add_10(5)))
+print("Add 50 to 5: " + str(add_50(5)))
