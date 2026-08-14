@@ -260,12 +260,7 @@ VMResult VM::run_interpreter() {
             }
             case OpCode::OP_SET_GLOBAL: {
                 std::string name = READ_STRING();
-                auto it = globals_.find(name);
-                if (it == globals_.end()) {
-                    runtime_error("undefined variable '" + name + "'");
-                    return VMResult::RUNTIME_ERROR;
-                }
-                it->second = peek(0);
+                globals_[name] = peek(0);
                 break;
             }
             case OpCode::OP_DEFINE_GLOBAL: {

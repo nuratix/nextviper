@@ -21,8 +21,9 @@ bool Environment::assign(const std::string& name, Value value, std::string& erro
         return enclosing_->assign(name, std::move(value), error_msg);
     }
 
-    error_msg = "undefined variable '" + name + "'";
-    return false;
+    // Auto-declare global variable on first direct assignment
+    bindings_[name] = VariableBinding{std::move(value), true, ""};
+    return true;
 }
 
 std::optional<Value> Environment::get(const std::string& name) const {

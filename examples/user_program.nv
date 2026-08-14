@@ -1,0 +1,20 @@
+// ==========================================
+// NextViper - Modern Readable Syntax Example
+// ==========================================
+
+let name = "Junaid"
+let age = 15
+
+x = 10
+y = 20
+
+result = x + y
+
+print("User:", name)
+print("Age:", age)
+print("Result x + y:", result)
+
+if age >= 18:
+    print("Status: Adult")
+else:
+    print("Status: Minor")
