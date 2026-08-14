@@ -539,10 +539,58 @@ std::unique_ptr<Expr> Parser::parse_postfix() {
         if (match(TokenType::LPAREN)) {
             expr = finish_call(std::move(expr));
         } else if (match(TokenType::LBRACKET)) {
-            auto index = parse_expression();
-            consume(TokenType::RBRACKET, "expected ']' after index expression");
-            SourceSpan span = SourceSpan::merge(expr->span(), previous().span);
-            expr = std::make_unique<IndexExpr>(std::move(expr), std::move(index), span);
+            if (match(TokenType::COLON_COLON)) {
+                std::unique_ptr<Expr> step = nullptr;
+                if (!check(TokenType::RBRACKET)) {
+                    step = parse_expression();
+                }
+                consume(TokenType::RBRACKET, "expected ']' after slice");
+                SourceSpan span = SourceSpan::merge(expr->span(), previous().span);
+                expr = std::make_unique<SliceExpr>(std::move(expr), nullptr, nullptr, std::move(step), span);
+            } else if (match(TokenType::COLON)) {
+                std::unique_ptr<Expr> end = nullptr;
+                if (!check(TokenType::RBRACKET) && !check(TokenType::COLON) && !check(TokenType::COLON_COLON)) {
+                    end = parse_expression();
+                }
+                std::unique_ptr<Expr> step = nullptr;
+                if (match(TokenType::COLON)) {
+                    if (!check(TokenType::RBRACKET)) {
+                        step = parse_expression();
+                    }
+                }
+                consume(TokenType::RBRACKET, "expected ']' after slice");
+                SourceSpan span = SourceSpan::merge(expr->span(), previous().span);
+                expr = std::make_unique<SliceExpr>(std::move(expr), nullptr, std::move(end), std::move(step), span);
+            } else {
+                auto first = parse_expression();
+                if (match(TokenType::COLON_COLON)) {
+                    std::unique_ptr<Expr> step = nullptr;
+                    if (!check(TokenType::RBRACKET)) {
+                        step = parse_expression();
+                    }
+                    consume(TokenType::RBRACKET, "expected ']' after slice");
+                    SourceSpan span = SourceSpan::merge(expr->span(), previous().span);
+                    expr = std::make_unique<SliceExpr>(std::move(expr), std::move(first), nullptr, std::move(step), span);
+                } else if (match(TokenType::COLON)) {
+                    std::unique_ptr<Expr> end = nullptr;
+                    if (!check(TokenType::RBRACKET) && !check(TokenType::COLON) && !check(TokenType::COLON_COLON)) {
+                        end = parse_expression();
+                    }
+                    std::unique_ptr<Expr> step = nullptr;
+                    if (match(TokenType::COLON)) {
+                        if (!check(TokenType::RBRACKET)) {
+                            step = parse_expression();
+                        }
+                    }
+                    consume(TokenType::RBRACKET, "expected ']' after slice");
+                    SourceSpan span = SourceSpan::merge(expr->span(), previous().span);
+                    expr = std::make_unique<SliceExpr>(std::move(expr), std::move(first), std::move(end), std::move(step), span);
+                } else {
+                    consume(TokenType::RBRACKET, "expected ']' after index expression");
+                    SourceSpan span = SourceSpan::merge(expr->span(), previous().span);
+                    expr = std::make_unique<IndexExpr>(std::move(expr), std::move(first), span);
+                }
+            }
         } else if (match(TokenType::DOT)) {
             Token name_tok = consume(TokenType::IDENTIFIER, "expected member name after '.'");
             auto member_name = std::make_unique<LiteralExpr>(name_tok.text, name_tok.span);

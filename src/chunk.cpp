@@ -41,6 +41,7 @@ std::string_view opcode_to_string(OpCode op) {
         case OpCode::OP_BUILD_OBJECT: return "OP_BUILD_OBJECT";
         case OpCode::OP_INDEX_GET: return "OP_INDEX_GET";
         case OpCode::OP_INDEX_SET: return "OP_INDEX_SET";
+        case OpCode::OP_SLICE: return "OP_SLICE";
         case OpCode::OP_PRINT: return "OP_PRINT";
     }
     return "UNKNOWN_OPCODE";

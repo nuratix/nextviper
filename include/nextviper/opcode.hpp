@@ -53,6 +53,7 @@ enum class OpCode : uint8_t {
     OP_BUILD_OBJECT,
     OP_INDEX_GET,
     OP_INDEX_SET,
+    OP_SLICE,
 
     // Built-in
     OP_PRINT

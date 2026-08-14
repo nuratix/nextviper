@@ -1,0 +1,75 @@
+// NextViper Modern Collections Showcase
+
+// 1. List Creation and Indexing
+let numbers = [1, 2, 3, 4]
+print("Numbers:", numbers)
+print("First element:", numbers[0])
+print("Last element:", numbers[-1])
+
+// 2. Map Creation and Access
+let user = {
+    "name": "Junaid",
+    "age": 15,
+    "role": "Creator",
+    "active": true
+}
+
+print("\nUser Object:")
+print("Name:", user["name"])
+print("Age:", user["age"])
+print("Total keys:", len(user))
+
+// 3. Slicing
+let full_list = [10, 20, 30, 40, 50, 60]
+print("\nSlicing [10, 20, 30, 40, 50, 60]:")
+print("Slice [1:4]:", full_list[1:4])
+print("Prefix [:3]:", full_list[:3])
+print("Suffix [3:]:", full_list[3:])
+print("Step by 2 [::2]:", full_list[::2])
+
+// 4. Mutation: append, insert, remove, pop
+print("\nCollection Mutations:")
+let items = [10, 20, 30]
+append(items, 40)
+print("After append(40):", items)
+insert(items, 1, 15)
+print("After insert(1, 15):", items)
+let popped = pop(items)
+print("Popped last element:", popped, "Remaining:", items)
+remove(items, 15)
+print("After remove(15):", items)
+
+// 5. Iteration (for..in)
+print("\nIterating over list:")
+for n in numbers:
+    print(" - number:", n)
+
+print("\nIterating over map keys:")
+for k in user:
+    print(" - key:", k, "=>", user[k])
+
+// 6. Functional Operations: map, filter, reduce
+fn double_val(x):
+    return x * 2
+
+fn is_greater_than_two(x):
+    return x > 2
+
+fn sum_items(acc, x):
+    return acc + x
+
+let doubled = map(numbers, double_val)
+let filtered = filter(numbers, is_greater_than_two)
+let total = reduce(numbers, sum_items, 0)
+
+print("\nFunctional High-Order Operations:")
+print("Doubled numbers:", doubled)
+print("Filtered (> 2):", filtered)
+print("Total sum:", total)
+
+// 7. Utility methods: keys, values, contains, join
+print("\nUtilities:")
+print("User keys:", keys(user))
+print("User values:", values(user))
+print("Contains 3 in numbers?", contains(numbers, 3))
+print("Joined string:", join(["NextViper", "is", "modern", "and", "fast!"], " "))

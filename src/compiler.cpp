@@ -227,6 +227,27 @@ void BytecodeCompiler::visit_index(const IndexExpr& expr) {
     emit_opcode(OpCode::OP_INDEX_GET);
 }
 
+void BytecodeCompiler::visit_slice(const SliceExpr& expr) {
+    line_ = expr.span().start.line;
+    expr.target().accept(*this);
+    if (expr.start()) {
+        expr.start()->accept(*this);
+    } else {
+        emit_opcode(OpCode::OP_NIL);
+    }
+    if (expr.end()) {
+        expr.end()->accept(*this);
+    } else {
+        emit_opcode(OpCode::OP_NIL);
+    }
+    if (expr.step()) {
+        expr.step()->accept(*this);
+    } else {
+        emit_opcode(OpCode::OP_NIL);
+    }
+    emit_opcode(OpCode::OP_SLICE);
+}
+
 void BytecodeCompiler::visit_array(const ArrayExpr& expr) {
     line_ = expr.span().start.line;
     for (const auto& el : expr.elements()) {

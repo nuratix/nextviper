@@ -114,13 +114,195 @@ void VM::init_builtins() {
         return args[0];
     });
 
-    define_native("pop", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
-        if (args[0].is_array() && !args[0].as_array()->empty()) {
-            Value last = args[0].as_array()->back();
-            args[0].as_array()->pop_back();
+    define_native("append", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args[0].is_array()) {
+            args[0].as_array()->push_back(args[1]);
+        }
+        return args[0];
+    });
+
+    define_native("insert", 3, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (!args[0].is_array() || !args[1].is_int()) return args[0];
+        auto arr = args[0].as_array();
+        int64_t idx = args[1].as_int();
+        if (idx < 0) idx += arr->size();
+        if (idx >= 0 && static_cast<size_t>(idx) <= arr->size()) {
+            arr->insert(arr->begin() + idx, args[2]);
+        }
+        return args[0];
+    });
+
+    define_native("pop", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args.empty() || !args[0].is_array()) return Value::make_nil();
+        auto arr = args[0].as_array();
+        if (arr->empty()) return Value::make_nil();
+        int64_t idx = -1;
+        if (args.size() > 1 && args[1].is_int()) idx = args[1].as_int();
+        if (idx < 0) idx += arr->size();
+        if (idx >= 0 && static_cast<size_t>(idx) < arr->size()) {
+            Value last = (*arr)[static_cast<size_t>(idx)];
+            arr->erase(arr->begin() + idx);
             return last;
         }
         return Value::make_nil();
+    });
+
+    define_native("remove", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args[0].is_array()) {
+            auto arr = args[0].as_array();
+            if (args[1].is_int()) {
+                int64_t idx = args[1].as_int();
+                if (idx < 0) idx += arr->size();
+                if (idx >= 0 && static_cast<size_t>(idx) < arr->size()) {
+                    Value removed = (*arr)[static_cast<size_t>(idx)];
+                    arr->erase(arr->begin() + idx);
+                    return removed;
+                }
+            }
+            auto it = std::find(arr->begin(), arr->end(), args[1]);
+            if (it != arr->end()) {
+                Value removed = *it;
+                arr->erase(it);
+                return removed;
+            }
+            return Value::make_nil();
+        }
+        if (args[0].is_object()) {
+            auto obj = args[0].as_object();
+            std::string key = args[1].to_string();
+            auto it = obj->find(key);
+            if (it != obj->end()) {
+                Value val = it->second;
+                obj->erase(it);
+                return val;
+            }
+            return Value::make_nil();
+        }
+        return Value::make_nil();
+    });
+
+    define_native("keys", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (!args[0].is_object()) return Value::make_array({});
+        const auto& obj = *args[0].as_object();
+        std::vector<Value> res;
+        for (const auto& [k, v] : obj) res.push_back(Value::make_string(k));
+        return Value::make_array(std::move(res));
+    });
+
+    define_native("values", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (!args[0].is_object()) return Value::make_array({});
+        const auto& obj = *args[0].as_object();
+        std::vector<Value> res;
+        for (const auto& [k, v] : obj) res.push_back(v);
+        return Value::make_array(std::move(res));
+    });
+
+    define_native("entries", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (!args[0].is_object()) return Value::make_array({});
+        const auto& obj = *args[0].as_object();
+        std::vector<Value> res;
+        for (const auto& [k, v] : obj) res.push_back(Value::make_array({Value::make_string(k), v}));
+        return Value::make_array(std::move(res));
+    });
+
+    define_native("contains", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args[0].is_array()) {
+            const auto& arr = *args[0].as_array();
+            return Value::make_bool(std::find(arr.begin(), arr.end(), args[1]) != arr.end());
+        }
+        if (args[0].is_object()) {
+            const auto& obj = *args[0].as_object();
+            return Value::make_bool(obj.find(args[1].to_string()) != obj.end());
+        }
+        if (args[0].is_string()) {
+            return Value::make_bool(args[0].as_string().find(args[1].to_string()) != std::string::npos);
+        }
+        return Value::make_bool(false);
+    });
+
+    define_native("has", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args[0].is_object()) {
+            const auto& obj = *args[0].as_object();
+            return Value::make_bool(obj.find(args[1].to_string()) != obj.end());
+        }
+        if (args[0].is_array()) {
+            const auto& arr = *args[0].as_array();
+            return Value::make_bool(std::find(arr.begin(), arr.end(), args[1]) != arr.end());
+        }
+        return Value::make_bool(false);
+    });
+
+    define_native("join", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args.empty() || !args[0].is_array()) return Value::make_string("");
+        std::string sep = (args.size() > 1) ? args[1].to_string() : "";
+        const auto& arr = *args[0].as_array();
+        std::string res;
+        for (size_t i = 0; i < arr.size(); ++i) {
+            if (i > 0) res += sep;
+            res += arr[i].to_string();
+        }
+        return Value::make_string(res);
+    });
+
+    define_native("reverse", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args[0].is_array()) {
+            auto arr = *args[0].as_array();
+            std::reverse(arr.begin(), arr.end());
+            return Value::make_array(std::move(arr));
+        }
+        if (args[0].is_string()) {
+            std::string s = args[0].as_string();
+            std::reverse(s.begin(), s.end());
+            return Value::make_string(std::move(s));
+        }
+        return args[0];
+    });
+
+    define_native("sort", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (!args[0].is_array()) return args[0];
+        auto arr = *args[0].as_array();
+        std::sort(arr.begin(), arr.end());
+        return Value::make_array(std::move(arr));
+    });
+
+    define_native("map", 2, [this](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (!args[0].is_array()) return Value::make_array({});
+        const auto& arr = *args[0].as_array();
+        std::vector<Value> res;
+        res.reserve(arr.size());
+        for (const auto& item : arr) {
+            res.push_back(this->call_value(args[1], {item}));
+        }
+        return Value::make_array(std::move(res));
+    });
+
+    define_native("filter", 2, [this](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (!args[0].is_array()) return Value::make_array({});
+        const auto& arr = *args[0].as_array();
+        std::vector<Value> res;
+        for (const auto& item : arr) {
+            Value keep = this->call_value(args[1], {item});
+            if (keep.is_truthy()) res.push_back(item);
+        }
+        return Value::make_array(std::move(res));
+    });
+
+    define_native("reduce", -1, [this](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args.size() < 2 || !args[0].is_array()) return Value::make_nil();
+        const auto& arr = *args[0].as_array();
+        if (arr.empty() && args.size() < 3) return Value::make_nil();
+        size_t start_idx = 0;
+        Value acc;
+        if (args.size() >= 3) {
+            acc = args[2];
+        } else {
+            acc = arr[0];
+            start_idx = 1;
+        }
+        for (size_t i = start_idx; i < arr.size(); ++i) {
+            acc = this->call_value(args[1], {acc, arr[i]});
+        }
+        return acc;
     });
 
     define_native("clock", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
@@ -214,7 +396,32 @@ VMResult VM::run(std::shared_ptr<CompiledFunction> function) {
     return run_interpreter();
 }
 
-VMResult VM::run_interpreter() {
+Value VM::call_value(Value callee, const std::vector<Value>& args) {
+    if (callee.type() == ValueType::NATIVE_FUNCTION) {
+        auto nfn = callee.as_native_fn();
+        return nfn->func(args, SourceSpan{});
+    }
+    if (callee.type() == ValueType::COMPILED_FUNCTION) {
+        auto fn = callee.as_compiled_fn();
+        size_t base_frame = frame_count_;
+        push(callee);
+        for (const auto& a : args) push(a);
+
+        CallFrame* new_frame = &frames_[frame_count_++];
+        new_frame->function = fn;
+        new_frame->ip = fn->chunk().code().data();
+        new_frame->slots = stack_top_ - args.size() - 1;
+
+        VMResult res = run_interpreter(base_frame);
+        if (res == VMResult::OK) {
+            return pop();
+        }
+        return Value::make_nil();
+    }
+    return Value::make_nil();
+}
+
+VMResult VM::run_interpreter(size_t target_frame_count) {
     CallFrame* frame = &frames_[frame_count_ - 1];
 
 #define READ_BYTE() (*frame->ip++)
@@ -476,13 +683,15 @@ VMResult VM::run_interpreter() {
             case OpCode::OP_RETURN: {
                 Value result = pop();
                 frame_count_--;
-                if (frame_count_ == 0) {
-                    pop(); // pop main script function
+                stack_top_ = frame->slots;
+                push(result);
+                if (frame_count_ == target_frame_count) {
+                    if (target_frame_count == 0) {
+                        pop(); // pop main script function
+                    }
                     return VMResult::OK;
                 }
 
-                stack_top_ = frame->slots;
-                push(result);
                 frame = &frames_[frame_count_ - 1];
                 break;
             }
@@ -543,6 +752,17 @@ VMResult VM::run_interpreter() {
 
                 if (target.is_object()) {
                     auto obj = target.as_object();
+                    if (index.is_int()) {
+                        int64_t idx = index.as_int();
+                        if (idx >= 0 && static_cast<size_t>(idx) < obj->size()) {
+                            auto it = obj->begin();
+                            std::advance(it, idx);
+                            push(Value::make_string(it->first));
+                            break;
+                        }
+                        push(Value::make_nil());
+                        break;
+                    }
                     auto it = obj->find(index.as_string());
                     push(it != obj->end() ? it->second : Value::make_nil());
                     break;
@@ -578,6 +798,90 @@ VMResult VM::run_interpreter() {
 
                 runtime_error("cannot set index on " + target.type_name());
                 return VMResult::RUNTIME_ERROR;
+            }
+
+            case OpCode::OP_SLICE: {
+                Value step_val = pop();
+                Value end_val = pop();
+                Value start_val = pop();
+                Value target = pop();
+
+                if (!target.is_array() && !target.is_string()) {
+                    runtime_error("slicing requires list or string, got " + target.type_name());
+                    return VMResult::RUNTIME_ERROR;
+                }
+
+                int64_t len = target.is_array() ? static_cast<int64_t>(target.as_array()->size()) : static_cast<int64_t>(target.as_string().size());
+                int64_t start = 0;
+                int64_t end = len;
+                int64_t step = 1;
+
+                if (!start_val.is_nil()) {
+                    if (!start_val.is_int()) {
+                        runtime_error("slice start must be integer");
+                        return VMResult::RUNTIME_ERROR;
+                    }
+                    start = start_val.as_int();
+                    if (start < 0) start += len;
+                    if (start < 0) start = 0;
+                    if (start > len) start = len;
+                }
+
+                if (!end_val.is_nil()) {
+                    if (!end_val.is_int()) {
+                        runtime_error("slice end must be integer");
+                        return VMResult::RUNTIME_ERROR;
+                    }
+                    end = end_val.as_int();
+                    if (end < 0) end += len;
+                    if (end < 0) end = 0;
+                    if (end > len) end = len;
+                }
+
+                if (!step_val.is_nil()) {
+                    if (!step_val.is_int()) {
+                        runtime_error("slice step must be integer");
+                        return VMResult::RUNTIME_ERROR;
+                    }
+                    step = step_val.as_int();
+                    if (step == 0) {
+                        runtime_error("slice step cannot be zero");
+                        return VMResult::RUNTIME_ERROR;
+                    }
+                }
+
+                if (target.is_array()) {
+                    const auto& arr = *target.as_array();
+                    std::vector<Value> sliced;
+                    if (step > 0) {
+                        for (int64_t i = start; i < end; i += step) {
+                            sliced.push_back(arr[static_cast<size_t>(i)]);
+                        }
+                    } else {
+                        for (int64_t i = start; i > end; i += step) {
+                            sliced.push_back(arr[static_cast<size_t>(i)]);
+                        }
+                    }
+                    push(Value::make_array(std::move(sliced)));
+                    break;
+                }
+
+                if (target.is_string()) {
+                    const auto& str = target.as_string();
+                    std::string sliced;
+                    if (step > 0) {
+                        for (int64_t i = start; i < end; i += step) {
+                            sliced += str[static_cast<size_t>(i)];
+                        }
+                    } else {
+                        for (int64_t i = start; i > end; i += step) {
+                            sliced += str[static_cast<size_t>(i)];
+                        }
+                    }
+                    push(Value::make_string(std::move(sliced)));
+                    break;
+                }
+                break;
             }
 
             case OpCode::OP_PRINT: {

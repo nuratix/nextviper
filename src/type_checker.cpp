@@ -18,6 +18,22 @@ void TypeChecker::init_builtins() {
     globals_->define("range", Type::make_function({Type::make_int(), Type::make_int()}, Type::make_list(Type::make_int())), false);
     globals_->define("clock", Type::make_function({}, Type::make_float()), false);
     globals_->define("assert", Type::make_function({Type::make_bool(), Type::make_string()}, Type::make_void()), false);
+    globals_->define("append", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_any()), false);
+    globals_->define("push", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_any()), false);
+    globals_->define("pop", Type::make_function({Type::make_any()}, Type::make_any()), false);
+    globals_->define("remove", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_any()), false);
+    globals_->define("insert", Type::make_function({Type::make_any(), Type::make_int(), Type::make_any()}, Type::make_any()), false);
+    globals_->define("keys", Type::make_function({Type::make_any()}, Type::make_list(Type::make_string())), false);
+    globals_->define("values", Type::make_function({Type::make_any()}, Type::make_list(Type::make_any())), false);
+    globals_->define("entries", Type::make_function({Type::make_any()}, Type::make_list(Type::make_any())), false);
+    globals_->define("contains", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_bool()), false);
+    globals_->define("has", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_bool()), false);
+    globals_->define("join", Type::make_function({Type::make_any(), Type::make_string()}, Type::make_string()), false);
+    globals_->define("reverse", Type::make_function({Type::make_any()}, Type::make_any()), false);
+    globals_->define("sort", Type::make_function({Type::make_any()}, Type::make_any()), false);
+    globals_->define("map", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_list(Type::make_any())), false);
+    globals_->define("filter", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_list(Type::make_any())), false);
+    globals_->define("reduce", Type::make_function({Type::make_any(), Type::make_any(), Type::make_any()}, Type::make_any()), false);
     globals_->define("min", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_any()), false);
     globals_->define("max", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_any()), false);
     globals_->define("abs", Type::make_function({Type::make_any()}, Type::make_any()), false);
@@ -245,6 +261,39 @@ void TypeChecker::visit_index(const IndexExpr& expr) {
     last_inferred_type_ = Type::make_any();
 }
 
+void TypeChecker::visit_slice(const SliceExpr& expr) {
+    TypePtr target_type = infer_expression(expr.target());
+
+    if (expr.start()) {
+        TypePtr start_type = infer_expression(*expr.start());
+        if (!start_type->is_int() && !start_type->is_any()) {
+            diagnostics_.error("TypeError: slice start must be an integer, got '" + start_type->to_string() + "'", expr.start()->span());
+        }
+    }
+    if (expr.end()) {
+        TypePtr end_type = infer_expression(*expr.end());
+        if (!end_type->is_int() && !end_type->is_any()) {
+            diagnostics_.error("TypeError: slice end must be an integer, got '" + end_type->to_string() + "'", expr.end()->span());
+        }
+    }
+    if (expr.step()) {
+        TypePtr step_type = infer_expression(*expr.step());
+        if (!step_type->is_int() && !step_type->is_any()) {
+            diagnostics_.error("TypeError: slice step must be an integer, got '" + step_type->to_string() + "'", expr.step()->span());
+        }
+    }
+
+    if (target_type->is_list()) {
+        last_inferred_type_ = target_type;
+        return;
+    }
+    if (target_type->is_string()) {
+        last_inferred_type_ = Type::make_string();
+        return;
+    }
+    last_inferred_type_ = Type::make_any();
+}
+
 void TypeChecker::visit_array(const ArrayExpr& expr) {
     TypePtr elem_type = nullptr;
     for (const auto& elem : expr.elements()) {
@@ -378,6 +427,8 @@ void TypeChecker::visit_for_in_stmt(const ForInStmt& stmt) {
     TypePtr elem_type = Type::make_any();
     if (iter_type->is_list()) {
         elem_type = iter_type->element_type();
+    } else if (iter_type->is_map()) {
+        elem_type = iter_type->key_type();
     } else if (iter_type->is_string()) {
         elem_type = Type::make_string();
     }

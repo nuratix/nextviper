@@ -40,11 +40,12 @@ public:
     void push(Value value);
     Value pop();
     Value peek(int distance = 0) const;
+    Value call_value(Value callee, const std::vector<Value>& args);
 
     const std::unordered_map<std::string, Value>& globals() const { return globals_; }
 
 private:
-    VMResult run_interpreter();
+    VMResult run_interpreter(size_t target_frame_count = 0);
     void init_builtins();
     void runtime_error(const std::string& message);
 

@@ -1,0 +1,24 @@
+// NextViper Collections Benchmark
+
+let mut data = []
+let mut i = 0
+while i < 10000:
+    append(data, i)
+    i = i + 1
+
+fn is_even(x):
+    return x % 2 == 0
+
+fn double_it(x):
+    return x * 2
+
+fn add_it(acc, x):
+    return acc + x
+
+let evens = filter(data, is_even)
+let doubled = map(evens, double_it)
+let total = reduce(doubled, add_it, 0)
+
+print("Benchmark items:", len(data))
+print("Evens count:    ", len(evens))
+print("Doubled total:  ", total)

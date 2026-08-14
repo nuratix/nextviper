@@ -117,6 +117,39 @@ void ASTPrinter::visit_index(const IndexExpr& expr) {
     indent_level_--;
 }
 
+void ASTPrinter::visit_slice(const SliceExpr& expr) {
+    indent();
+    result_ += "SliceExpr:\n";
+    indent_level_++;
+    indent();
+    result_ += "Target:\n";
+    indent_level_++;
+    expr.target().accept(*this);
+    indent_level_--;
+    if (expr.start()) {
+        indent();
+        result_ += "Start:\n";
+        indent_level_++;
+        expr.start()->accept(*this);
+        indent_level_--;
+    }
+    if (expr.end()) {
+        indent();
+        result_ += "End:\n";
+        indent_level_++;
+        expr.end()->accept(*this);
+        indent_level_--;
+    }
+    if (expr.step()) {
+        indent();
+        result_ += "Step:\n";
+        indent_level_++;
+        expr.step()->accept(*this);
+        indent_level_--;
+    }
+    indent_level_--;
+}
+
 void ASTPrinter::visit_array(const ArrayExpr& expr) {
     indent();
     result_ += "ArrayExpr (" + std::to_string(expr.elements().size()) + " elements):\n";

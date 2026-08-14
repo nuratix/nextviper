@@ -138,7 +138,7 @@ void Interpreter::init_builtins() {
         return Value::make_array(std::move(result));
     }));
 
-    // push(array, val)
+    // push(array, val) / append(array, val)
     globals_->define("push", Value::make_native_fn("push", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (!args[0].is_array()) {
             throw RuntimeError("push() requires Array as first argument", span);
@@ -147,18 +147,234 @@ void Interpreter::init_builtins() {
         return args[0];
     }));
 
-    // pop(array)
-    globals_->define("pop", Value::make_native_fn("pop", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+    globals_->define("append", Value::make_native_fn("append", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (!args[0].is_array()) {
-            throw RuntimeError("pop() requires Array as argument", span);
+            throw RuntimeError("append() requires Array as first argument", span);
+        }
+        args[0].as_array()->push_back(args[1]);
+        return args[0];
+    }));
+
+    // insert(array, index, val)
+    globals_->define("insert", Value::make_native_fn("insert", 3, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_array()) throw RuntimeError("insert() requires Array as first argument", span);
+        if (!args[1].is_int()) throw RuntimeError("insert() index must be an integer", span);
+        auto arr = args[0].as_array();
+        int64_t idx = args[1].as_int();
+        if (idx < 0) idx += arr->size();
+        if (idx < 0 || static_cast<size_t>(idx) > arr->size()) {
+            throw RuntimeError("insert() index out of bounds", span);
+        }
+        arr->insert(arr->begin() + idx, args[2]);
+        return args[0];
+    }));
+
+    // pop(array, [index])
+    globals_->define("pop", Value::make_native_fn("pop", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.empty() || args.size() > 2 || !args[0].is_array()) {
+            throw RuntimeError("pop() requires Array as first argument", span);
         }
         auto arr = args[0].as_array();
         if (arr->empty()) {
             throw RuntimeError("pop() called on empty Array", span);
         }
-        Value last = arr->back();
-        arr->pop_back();
-        return last;
+        int64_t idx = -1;
+        if (args.size() == 2) {
+            if (!args[1].is_int()) throw RuntimeError("pop() index must be an integer", span);
+            idx = args[1].as_int();
+        }
+        if (idx < 0) idx += arr->size();
+        if (idx < 0 || static_cast<size_t>(idx) >= arr->size()) {
+            throw RuntimeError("pop() index out of bounds", span);
+        }
+        Value val = (*arr)[static_cast<size_t>(idx)];
+        arr->erase(arr->begin() + idx);
+        return val;
+    }));
+
+    // remove(coll, key_or_val)
+    globals_->define("remove", Value::make_native_fn("remove", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args[0].is_array()) {
+            auto arr = args[0].as_array();
+            if (args[1].is_int()) {
+                int64_t idx = args[1].as_int();
+                if (idx < 0) idx += arr->size();
+                if (idx >= 0 && static_cast<size_t>(idx) < arr->size()) {
+                    Value removed = (*arr)[static_cast<size_t>(idx)];
+                    arr->erase(arr->begin() + idx);
+                    return removed;
+                }
+            }
+            auto it = std::find(arr->begin(), arr->end(), args[1]);
+            if (it != arr->end()) {
+                Value removed = *it;
+                arr->erase(it);
+                return removed;
+            }
+            return Value::make_nil();
+        }
+        if (args[0].is_object()) {
+            auto obj = args[0].as_object();
+            std::string key = args[1].to_string();
+            auto it = obj->find(key);
+            if (it != obj->end()) {
+                Value val = it->second;
+                obj->erase(it);
+                return val;
+            }
+            return Value::make_nil();
+        }
+        throw RuntimeError("remove() requires List or Map as first argument", span);
+    }));
+
+    // keys(map)
+    globals_->define("keys", Value::make_native_fn("keys", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_object()) throw RuntimeError("keys() requires Map as argument", span);
+        const auto& obj = *args[0].as_object();
+        std::vector<Value> res;
+        for (const auto& [k, v] : obj) {
+            res.push_back(Value::make_string(k));
+        }
+        return Value::make_array(std::move(res));
+    }));
+
+    // values(map)
+    globals_->define("values", Value::make_native_fn("values", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_object()) throw RuntimeError("values() requires Map as argument", span);
+        const auto& obj = *args[0].as_object();
+        std::vector<Value> res;
+        for (const auto& [k, v] : obj) {
+            res.push_back(v);
+        }
+        return Value::make_array(std::move(res));
+    }));
+
+    // entries(map)
+    globals_->define("entries", Value::make_native_fn("entries", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_object()) throw RuntimeError("entries() requires Map as argument", span);
+        const auto& obj = *args[0].as_object();
+        std::vector<Value> res;
+        for (const auto& [k, v] : obj) {
+            res.push_back(Value::make_array({Value::make_string(k), v}));
+        }
+        return Value::make_array(std::move(res));
+    }));
+
+    // contains(coll, item) / has(coll, key)
+    globals_->define("contains", Value::make_native_fn("contains", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args[0].is_array()) {
+            const auto& arr = *args[0].as_array();
+            return Value::make_bool(std::find(arr.begin(), arr.end(), args[1]) != arr.end());
+        }
+        if (args[0].is_object()) {
+            const auto& obj = *args[0].as_object();
+            return Value::make_bool(obj.find(args[1].to_string()) != obj.end());
+        }
+        if (args[0].is_string()) {
+            return Value::make_bool(args[0].as_string().find(args[1].to_string()) != std::string::npos);
+        }
+        throw RuntimeError("contains() requires List, Map, or String", span);
+    }));
+
+    globals_->define("has", Value::make_native_fn("has", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args[0].is_object()) {
+            const auto& obj = *args[0].as_object();
+            return Value::make_bool(obj.find(args[1].to_string()) != obj.end());
+        }
+        if (args[0].is_array()) {
+            const auto& arr = *args[0].as_array();
+            return Value::make_bool(std::find(arr.begin(), arr.end(), args[1]) != arr.end());
+        }
+        throw RuntimeError("has() requires Map or List", span);
+    }));
+
+    // join(list, separator)
+    globals_->define("join", Value::make_native_fn("join", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.empty() || !args[0].is_array()) throw RuntimeError("join() requires List as first argument", span);
+        std::string sep = (args.size() > 1) ? args[1].to_string() : "";
+        const auto& arr = *args[0].as_array();
+        std::string res;
+        for (size_t i = 0; i < arr.size(); ++i) {
+            if (i > 0) res += sep;
+            res += arr[i].to_string();
+        }
+        return Value::make_string(res);
+    }));
+
+    // reverse(list)
+    globals_->define("reverse", Value::make_native_fn("reverse", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args[0].is_array()) {
+            auto arr = *args[0].as_array();
+            std::reverse(arr.begin(), arr.end());
+            return Value::make_array(std::move(arr));
+        }
+        if (args[0].is_string()) {
+            std::string s = args[0].as_string();
+            std::reverse(s.begin(), s.end());
+            return Value::make_string(std::move(s));
+        }
+        throw RuntimeError("reverse() requires List or String", span);
+    }));
+
+    // sort(list)
+    globals_->define("sort", Value::make_native_fn("sort", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_array()) throw RuntimeError("sort() requires List as argument", span);
+        auto arr = *args[0].as_array();
+        std::sort(arr.begin(), arr.end());
+        return Value::make_array(std::move(arr));
+    }));
+
+    // map(list, fn)
+    globals_->define("map", Value::make_native_fn("map", 2, [this](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_array()) throw RuntimeError("map() requires List as first argument", span);
+        if (!args[1].is_callable()) throw RuntimeError("map() requires callable function as second argument", span);
+        const auto& arr = *args[0].as_array();
+        std::vector<Value> res;
+        res.reserve(arr.size());
+        for (const auto& item : arr) {
+            res.push_back(this->call_function(args[1], {item}, span));
+        }
+        return Value::make_array(std::move(res));
+    }));
+
+    // filter(list, fn)
+    globals_->define("filter", Value::make_native_fn("filter", 2, [this](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_array()) throw RuntimeError("filter() requires List as first argument", span);
+        if (!args[1].is_callable()) throw RuntimeError("filter() requires callable function as second argument", span);
+        const auto& arr = *args[0].as_array();
+        std::vector<Value> res;
+        for (const auto& item : arr) {
+            Value keep = this->call_function(args[1], {item}, span);
+            if (keep.is_truthy()) {
+                res.push_back(item);
+            }
+        }
+        return Value::make_array(std::move(res));
+    }));
+
+    // reduce(list, fn, [initial])
+    globals_->define("reduce", Value::make_native_fn("reduce", -1, [this](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.size() < 2 || args.size() > 3) {
+            throw RuntimeError("reduce() takes 2 or 3 arguments: reduce(list, fn, [initial])", span);
+        }
+        if (!args[0].is_array()) throw RuntimeError("reduce() requires List as first argument", span);
+        if (!args[1].is_callable()) throw RuntimeError("reduce() requires callable function as second argument", span);
+        const auto& arr = *args[0].as_array();
+        if (arr.empty() && args.size() < 3) {
+            throw RuntimeError("reduce() on empty List requires an initial value", span);
+        }
+        size_t start_idx = 0;
+        Value accumulator;
+        if (args.size() == 3) {
+            accumulator = args[2];
+        } else {
+            accumulator = arr[0];
+            start_idx = 1;
+        }
+        for (size_t i = start_idx; i < arr.size(); ++i) {
+            accumulator = this->call_function(args[1], {accumulator, arr[i]}, span);
+        }
+        return accumulator;
     }));
 
     // clock() -> seconds since epoch
@@ -650,6 +866,77 @@ void Interpreter::visit_index(const IndexExpr& expr) {
     runtime_error("indexing not supported on type " + target.type_name(), expr.span());
 }
 
+void Interpreter::visit_slice(const SliceExpr& expr) {
+    Value target = evaluate(expr.target());
+
+    if (!target.is_array() && !target.is_string()) {
+        type_error("slicing requires list or string, got " + target.type_name(), expr.span());
+    }
+
+    int64_t len = target.is_array() ? static_cast<int64_t>(target.as_array()->size()) : static_cast<int64_t>(target.as_string().size());
+
+    int64_t start = 0;
+    int64_t end = len;
+    int64_t step = 1;
+
+    if (expr.start()) {
+        Value v_start = evaluate(*expr.start());
+        if (!v_start.is_int()) type_error("slice start must be an integer, got " + v_start.type_name(), expr.start()->span());
+        start = v_start.as_int();
+        if (start < 0) start += len;
+        if (start < 0) start = 0;
+        if (start > len) start = len;
+    }
+
+    if (expr.end()) {
+        Value v_end = evaluate(*expr.end());
+        if (!v_end.is_int()) type_error("slice end must be an integer, got " + v_end.type_name(), expr.end()->span());
+        end = v_end.as_int();
+        if (end < 0) end += len;
+        if (end < 0) end = 0;
+        if (end > len) end = len;
+    }
+
+    if (expr.step()) {
+        Value v_step = evaluate(*expr.step());
+        if (!v_step.is_int()) type_error("slice step must be an integer, got " + v_step.type_name(), expr.step()->span());
+        step = v_step.as_int();
+        if (step == 0) runtime_error("slice step cannot be zero", expr.step()->span());
+    }
+
+    if (target.is_array()) {
+        const auto& arr = *target.as_array();
+        std::vector<Value> sliced;
+        if (step > 0) {
+            for (int64_t i = start; i < end; i += step) {
+                sliced.push_back(arr[static_cast<size_t>(i)]);
+            }
+        } else {
+            for (int64_t i = start; i > end; i += step) {
+                sliced.push_back(arr[static_cast<size_t>(i)]);
+            }
+        }
+        last_evaluated_value_ = Value::make_array(std::move(sliced));
+        return;
+    }
+
+    if (target.is_string()) {
+        const auto& str = target.as_string();
+        std::string sliced;
+        if (step > 0) {
+            for (int64_t i = start; i < end; i += step) {
+                sliced += str[static_cast<size_t>(i)];
+            }
+        } else {
+            for (int64_t i = start; i > end; i += step) {
+                sliced += str[static_cast<size_t>(i)];
+            }
+        }
+        last_evaluated_value_ = Value::make_string(std::move(sliced));
+        return;
+    }
+}
+
 void Interpreter::visit_array(const ArrayExpr& expr) {
     std::vector<Value> elements;
     elements.reserve(expr.elements().size());
@@ -924,7 +1211,28 @@ void Interpreter::visit_for_in_stmt(const ForInStmt& stmt) {
         return;
     }
 
-    runtime_error("for..in requires iterable (Array or String), got " + iter.type_name(), stmt.span());
+    if (iter.is_object()) {
+        auto obj = iter.as_object();
+        for (const auto& [key, val] : *obj) {
+            auto loop_env = Environment::create(environment_);
+            loop_env->define(stmt.variable_name(), Value::make_string(key), true);
+            auto prev_env = environment_;
+            environment_ = loop_env;
+            try {
+                execute_statement(stmt.body());
+            } catch (const BreakSignal&) {
+                environment_ = prev_env;
+                break;
+            } catch (const ContinueSignal&) {
+                environment_ = prev_env;
+                continue;
+            }
+            environment_ = prev_env;
+        }
+        return;
+    }
+
+    runtime_error("for..in requires iterable (Array, Map, or String), got " + iter.type_name(), stmt.span());
 }
 
 void Interpreter::visit_return_stmt(const ReturnStmt& stmt) {

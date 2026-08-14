@@ -81,6 +81,7 @@ public:
     void visit_binary(const BinaryExpr& expr) override;
     void visit_call(const CallExpr& expr) override;
     void visit_index(const IndexExpr& expr) override;
+    void visit_slice(const SliceExpr& expr) override;
     void visit_array(const ArrayExpr& expr) override;
     void visit_object(const ObjectExpr& expr) override;
     void visit_pipe(const PipeExpr& expr) override;

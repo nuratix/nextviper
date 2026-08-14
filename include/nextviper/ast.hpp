@@ -20,6 +20,7 @@ class UnaryExpr;
 class BinaryExpr;
 class CallExpr;
 class IndexExpr;
+class SliceExpr;
 class ArrayExpr;
 class ObjectExpr;
 class PipeExpr;
@@ -51,6 +52,7 @@ public:
     virtual void visit_binary(const BinaryExpr& expr) = 0;
     virtual void visit_call(const CallExpr& expr) = 0;
     virtual void visit_index(const IndexExpr& expr) = 0;
+    virtual void visit_slice(const SliceExpr& expr) = 0;
     virtual void visit_array(const ArrayExpr& expr) = 0;
     virtual void visit_object(const ObjectExpr& expr) = 0;
     virtual void visit_pipe(const PipeExpr& expr) = 0;
@@ -203,6 +205,25 @@ public:
 private:
     std::unique_ptr<Expr> target_;
     std::unique_ptr<Expr> index_;
+};
+
+// Slice Expression: target[start:end:step]
+class SliceExpr : public Expr {
+public:
+    SliceExpr(std::unique_ptr<Expr> target, std::unique_ptr<Expr> start, std::unique_ptr<Expr> end, std::unique_ptr<Expr> step, SourceSpan span)
+        : Expr(span), target_(std::move(target)), start_(std::move(start)), end_(std::move(end)), step_(std::move(step)) {}
+
+    const Expr& target() const { return *target_; }
+    const Expr* start() const { return start_.get(); }
+    const Expr* end() const { return end_.get(); }
+    const Expr* step() const { return step_.get(); }
+    void accept(ASTVisitor& visitor) const override { visitor.visit_slice(*this); }
+
+private:
+    std::unique_ptr<Expr> target_;
+    std::unique_ptr<Expr> start_;
+    std::unique_ptr<Expr> end_;
+    std::unique_ptr<Expr> step_;
 };
 
 // Array Expression
@@ -474,6 +495,7 @@ public:
     void visit_binary(const BinaryExpr& expr) override;
     void visit_call(const CallExpr& expr) override;
     void visit_index(const IndexExpr& expr) override;
+    void visit_slice(const SliceExpr& expr) override;
     void visit_array(const ArrayExpr& expr) override;
     void visit_object(const ObjectExpr& expr) override;
     void visit_pipe(const PipeExpr& expr) override;
