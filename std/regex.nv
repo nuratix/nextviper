@@ -1,0 +1,9 @@
+// NextViper Standard Library: std.regex
+// Regular expressions pattern matching and replacement.
+
+import regex
+
+let test = regex.test
+let match = regex.match
+let find_all = regex.find_all
+let replace = regex.replace

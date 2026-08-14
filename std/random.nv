@@ -1,0 +1,10 @@
+// NextViper Standard Library: std.random
+// Pseudo-random number generation and distributions.
+
+import random
+
+let choice = random.choice
+let randint = random.randint
+let shuffle = random.shuffle
+let uniform = random.uniform
+let seed = random.seed

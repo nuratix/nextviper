@@ -1,0 +1,8 @@
+// NextViper Standard Library: std.csv
+// Tabular CSV data parser and writer.
+
+import csv
+
+let parse = csv.parse
+let stringify = csv.stringify
+let read = csv.read

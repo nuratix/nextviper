@@ -1,0 +1,7 @@
+// NextViper Standard Library: std.json
+// High-speed JSON parser and serializer.
+
+import json
+
+let stringify = json.stringify
+let parse = json.parse

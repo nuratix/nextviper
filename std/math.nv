@@ -1,0 +1,37 @@
+// NextViper Standard Library: std.math
+// Mathematical functions, trigonometry, logarithms, and constants.
+
+import math
+
+let pi = math.pi
+let e = math.e
+let inf = math.inf
+let nan = math.nan
+
+let sqrt = math.sqrt
+let cbrt = math.cbrt
+let sin = math.sin
+let cos = math.cos
+let tan = math.tan
+let asin = math.asin
+let acos = math.acos
+let atan = math.atan
+let atan2 = math.atan2
+let sinh = math.sinh
+let cosh = math.cosh
+let tanh = math.tanh
+let pow = math.pow
+let exp = math.exp
+let log = math.log
+let log2 = math.log2
+let log10 = math.log10
+let abs = math.abs
+let floor = math.floor
+let ceil = math.ceil
+let round = math.round
+let trunc = math.trunc
+let min = math.min
+let max = math.max
+let clamp = math.clamp
+let deg2rad = math.deg2rad
+let rad2deg = math.rad2deg

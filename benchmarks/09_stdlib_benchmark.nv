@@ -1,0 +1,54 @@
+// NextViper Standard Library Benchmark: JSON, Crypto, String, Collections, Math
+import std.json
+import std.crypto
+import std.string
+import std.collections
+import std.math
+import std.time
+
+let start_time = time.now()
+
+// 1. JSON Stringify & Parse 1,000 iterations
+let mut i = 0
+let sample_obj = {
+    "id": 1001,
+    "user": "NextViper_Benchmark_Runner",
+    "metrics": [10, 20, 30, 40, 50],
+    "active": true
+}
+
+while (i < 1000) {
+    let text = json.stringify(sample_obj)
+    let parsed = json.parse(text)
+    i = i + 1
+}
+
+// 2. Crypto SHA-256 & MD5 5,000 iterations
+let mut j = 0
+while (j < 5000) {
+    let h256 = crypto.sha256("benchmark_payload_string_nextviper_high_performance")
+    let hmd5 = crypto.md5("benchmark_payload_string_nextviper_high_performance")
+    j = j + 1
+}
+
+// 3. String transformations 5,000 iterations
+let mut k = 0
+while (k < 5000) {
+    let s = string.to_upper("high performance standard library")
+    let parts = string.split(s, " ")
+    let joined = string.join(parts, "-")
+    k = k + 1
+}
+
+// 4. Collections Chunk & Sort
+let mut l = 0
+let numbers = [99, 42, 10, 88, 5, 23, 76, 12, 64, 31, 55, 18, 90, 3, 47]
+while (l < 1000) {
+    let srt = collections.sort(numbers)
+    let chunks = collections.chunk(srt, 4)
+    l = l + 1
+}
+
+let elapsed = time.elapsed(start_time)
+print("STDLIB_BENCHMARK_COMPLETED")
+print(elapsed)

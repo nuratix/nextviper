@@ -30,13 +30,39 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
     ss << "#include <stdlib.h>\n";
     ss << "#include <stdint.h>\n";
     ss << "#include <stdbool.h>\n";
+    ss << "#include <string.h>\n";
+    ss << "#include <time.h>\n";
+    ss << "#include <sys/time.h>\n";
+    ss << "#include <unistd.h>\n";
     ss << "#include <math.h>\n\n";
 
     // Standard NextViper Native Runtime helpers
     ss << "static inline void nv_print_i64(int64_t v) { printf(\"%ld\\n\", (long)v); }\n";
     ss << "static inline void nv_print_f64(double v) { printf(\"%f\\n\", v); }\n";
     ss << "static inline void nv_print_str(const char* s) { printf(\"%s\\n\", s ? s : \"null\"); }\n";
-    ss << "static inline void nv_print_bool(bool b) { printf(\"%s\\n\", b ? \"true\" : \"false\"); }\n\n";
+    ss << "static inline void nv_print_bool(bool b) { printf(\"%s\\n\", b ? \"true\" : \"false\"); }\n";
+    ss << "static inline int64_t nv_fn_print(int64_t v) { nv_print_i64(v); return 0; }\n";
+    ss << "static inline int64_t nv_fn_println(int64_t v) { nv_print_i64(v); return 0; }\n";
+    ss << "static inline int64_t nv_fn_math_sqrt(int64_t v) { return (int64_t)sqrt((double)v); }\n";
+    ss << "static inline int64_t nv_fn_sqrt(int64_t v) { return (int64_t)sqrt((double)v); }\n";
+    ss << "static inline int64_t nv_fn_math_cbrt(int64_t v) { return (int64_t)cbrt((double)v); }\n";
+    ss << "static inline int64_t nv_fn_math_pow(int64_t b, int64_t e) { return (int64_t)pow((double)b, (double)e); }\n";
+    ss << "static inline int64_t nv_fn_pow(int64_t b, int64_t e) { return (int64_t)pow((double)b, (double)e); }\n";
+    ss << "static inline int64_t nv_fn_math_abs(int64_t v) { return v < 0 ? -v : v; }\n";
+    ss << "static inline int64_t nv_fn_abs(int64_t v) { return v < 0 ? -v : v; }\n";
+    ss << "static inline int64_t nv_fn_math_min(int64_t a, int64_t b) { return a < b ? a : b; }\n";
+    ss << "static inline int64_t nv_fn_min(int64_t a, int64_t b) { return a < b ? a : b; }\n";
+    ss << "static inline int64_t nv_fn_math_max(int64_t a, int64_t b) { return a > b ? a : b; }\n";
+    ss << "static inline int64_t nv_fn_max(int64_t a, int64_t b) { return a > b ? a : b; }\n";
+    ss << "static inline int64_t nv_fn_math_floor(int64_t v) { return v; }\n";
+    ss << "static inline int64_t nv_fn_math_ceil(int64_t v) { return v; }\n";
+    ss << "static inline int64_t nv_fn_math_round(int64_t v) { return v; }\n";
+    ss << "static inline int64_t nv_fn_math_clamp(int64_t v, int64_t lo, int64_t hi) { if (v < lo) return lo; if (v > hi) return hi; return v; }\n";
+    ss << "static inline int64_t nv_fn_string_len(const char* s) { return s ? (int64_t)strlen(s) : 0; }\n";
+    ss << "static inline int64_t nv_fn_time_now(void) { return (int64_t)time(NULL); }\n";
+    ss << "static inline int64_t nv_fn_time_now_ms(void) { struct timeval tv; gettimeofday(&tv, NULL); return (int64_t)(tv.tv_sec * 1000 + tv.tv_usec / 1000); }\n";
+    ss << "static inline int64_t nv_fn_time_sleep(int64_t ms) { usleep(ms * 1000); return 0; }\n";
+    ss << "static inline int64_t nv_fn_process_exit(int64_t code) { exit((int)code); return 0; }\n\n";
 
     // Forward declarations
     for (const auto& fn : module.functions) {

@@ -963,6 +963,78 @@ void Interpreter::visit_index(const IndexExpr& expr) {
 
     if (target.is_string()) {
         const std::string& str = target.as_string();
+        if (index.is_string()) {
+            std::string method = index.as_string();
+            if (method == "len" || method == "size" || method == "length") {
+                last_evaluated_value_ = Value::make_native_fn(method, 0, [str](const std::vector<Value>&, SourceSpan) -> Value {
+                    return Value::make_int(static_cast<int64_t>(str.size()));
+                });
+                return;
+            }
+            if (method == "to_upper") {
+                last_evaluated_value_ = Value::make_native_fn(method, 0, [str](const std::vector<Value>&, SourceSpan) -> Value {
+                    std::string s = str;
+                    std::transform(s.begin(), s.end(), s.begin(), ::toupper);
+                    return Value::make_string(s);
+                });
+                return;
+            }
+            if (method == "to_lower") {
+                last_evaluated_value_ = Value::make_native_fn(method, 0, [str](const std::vector<Value>&, SourceSpan) -> Value {
+                    std::string s = str;
+                    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+                    return Value::make_string(s);
+                });
+                return;
+            }
+            if (method == "trim") {
+                last_evaluated_value_ = Value::make_native_fn(method, 0, [str](const std::vector<Value>&, SourceSpan) -> Value {
+                    size_t first = str.find_first_not_of(" \t\n\r");
+                    if (first == std::string::npos) return Value::make_string("");
+                    size_t last = str.find_last_not_of(" \t\n\r");
+                    return Value::make_string(str.substr(first, last - first + 1));
+                });
+                return;
+            }
+            if (method == "split") {
+                last_evaluated_value_ = Value::make_native_fn(method, 1, [str](const std::vector<Value>& args, SourceSpan) -> Value {
+                    std::string delim = args[0].as_string();
+                    std::vector<Value> res;
+                    if (delim.empty()) {
+                        for (char c : str) res.push_back(Value::make_string(std::string(1, c)));
+                        return Value::make_array(std::move(res));
+                    }
+                    size_t start = 0, end = 0;
+                    while ((end = str.find(delim, start)) != std::string::npos) {
+                        res.push_back(Value::make_string(str.substr(start, end - start)));
+                        start = end + delim.length();
+                    }
+                    res.push_back(Value::make_string(str.substr(start)));
+                    return Value::make_array(std::move(res));
+                });
+                return;
+            }
+            if (method == "contains") {
+                last_evaluated_value_ = Value::make_native_fn(method, 1, [str](const std::vector<Value>& args, SourceSpan) -> Value {
+                    return Value::make_bool(str.find(args[0].as_string()) != std::string::npos);
+                });
+                return;
+            }
+            if (method == "starts_with") {
+                last_evaluated_value_ = Value::make_native_fn(method, 1, [str](const std::vector<Value>& args, SourceSpan) -> Value {
+                    return Value::make_bool(str.rfind(args[0].as_string(), 0) == 0);
+                });
+                return;
+            }
+            if (method == "ends_with") {
+                last_evaluated_value_ = Value::make_native_fn(method, 1, [str](const std::vector<Value>& args, SourceSpan) -> Value {
+                    std::string suf = args[0].as_string();
+                    if (suf.size() > str.size()) return Value::make_bool(false);
+                    return Value::make_bool(str.compare(str.size() - suf.size(), suf.size(), suf) == 0);
+                });
+                return;
+            }
+        }
         if (!index.is_int()) {
             runtime_error("string index must be an integer, got " + index.type_name(), expr.span());
         }
@@ -1492,6 +1564,9 @@ void Interpreter::visit_import_stmt(const ImportStmt& stmt) {
     } else {
         std::string bind_name = stmt.alias().empty() ? stmt.module_name() : stmt.alias();
         if (stmt.alias().empty()) {
+            if (bind_name.rfind("std.", 0) == 0) {
+                bind_name = bind_name.substr(4);
+            }
             size_t slash = bind_name.find_last_of("/\\");
             if (slash != std::string::npos) {
                 bind_name = bind_name.substr(slash + 1);
@@ -1501,6 +1576,9 @@ void Interpreter::visit_import_stmt(const ImportStmt& stmt) {
             }
         }
         environment_->define(bind_name, mod_obj, false);
+        if (stmt.alias().empty() && stmt.module_name() != bind_name) {
+            environment_->define(stmt.module_name(), mod_obj, false);
+        }
     }
 }
 

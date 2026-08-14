@@ -1,0 +1,14 @@
+// NextViper Standard Library: std.collections
+// Data structures, transformations, and collection utilities.
+
+import collections
+
+let chunk = collections.chunk
+let flatten = collections.flatten
+let unique = collections.unique
+let reverse = collections.reverse
+let sort = collections.sort
+let zip = collections.zip
+let merge = collections.merge
+let keys = collections.keys
+let values = collections.values

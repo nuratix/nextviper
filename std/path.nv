@@ -1,0 +1,13 @@
+// NextViper Standard Library: std.path
+// File path manipulation and canonicalization.
+
+import path
+
+let join = path.join
+let dirname = path.dirname
+let basename = path.basename
+let extname = path.extname
+let extension = path.extension
+let is_absolute = path.is_absolute
+let normalize = path.normalize
+let separator = path.separator

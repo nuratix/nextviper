@@ -1,0 +1,18 @@
+// NextViper Standard Library: std.string
+// High-performance string manipulation utilities.
+
+import string
+
+let split = string.split
+let join = string.join
+let trim = string.trim
+let trim_start = string.trim_start
+let trim_end = string.trim_end
+let to_upper = string.to_upper
+let to_lower = string.to_lower
+let starts_with = string.starts_with
+let ends_with = string.ends_with
+let contains = string.contains
+let index_of = string.index_of
+let replace = string.replace
+let len = string.len

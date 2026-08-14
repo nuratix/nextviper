@@ -376,6 +376,17 @@ void IRGenerator::visit_call(const CallExpr& expr) {
     std::vector<IROperand> call_args;
     if (auto id = dynamic_cast<const IdentifierExpr*>(&expr.callee())) {
         call_args.push_back(IROperand::make_symbol(id->name()));
+    } else if (auto idx_expr = dynamic_cast<const IndexExpr*>(&expr.callee())) {
+        if (auto obj_id = dynamic_cast<const IdentifierExpr*>(&idx_expr->target())) {
+            if (auto mem_lit = dynamic_cast<const LiteralExpr*>(&idx_expr->index())) {
+                call_args.push_back(IROperand::make_symbol(obj_id->name() + "_" + mem_lit->string_value()));
+            } else {
+                call_args.push_back(IROperand::make_symbol(obj_id->name()));
+            }
+        } else {
+            expr.callee().accept(*this);
+            call_args.push_back(last_operand_);
+        }
     } else {
         expr.callee().accept(*this);
         call_args.push_back(last_operand_);

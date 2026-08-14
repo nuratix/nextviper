@@ -394,6 +394,10 @@ std::unique_ptr<Stmt> Parser::parse_import_statement() {
     } else {
         Token tok = consume(TokenType::IDENTIFIER, "expected module name after 'import'");
         mod_name = tok.text;
+        while (match(TokenType::DOT)) {
+            Token sub = consume(TokenType::IDENTIFIER, "expected identifier after '.' in module path");
+            mod_name += "." + sub.text;
+        }
     }
 
     std::string alias = "";
@@ -416,13 +420,22 @@ std::unique_ptr<Stmt> Parser::parse_from_import_statement() {
     } else {
         Token tok = consume(TokenType::IDENTIFIER, "expected module name after 'from'");
         mod_name = tok.text;
+        while (match(TokenType::DOT)) {
+            Token sub = consume(TokenType::IDENTIFIER, "expected identifier after '.' in module path");
+            mod_name += "." + sub.text;
+        }
     }
 
     consume(TokenType::KEYWORD_IMPORT, "expected 'import' after module name");
 
     std::vector<ImportStmt::ImportItem> items;
     do {
-        Token sym_tok = consume(TokenType::IDENTIFIER, "expected symbol name to import");
+        Token sym_tok;
+        if (check(TokenType::IDENTIFIER) || (peek().type >= TokenType::KEYWORD_LET && peek().type <= TokenType::KEYWORD_NOT)) {
+            sym_tok = advance();
+        } else {
+            sym_tok = consume(TokenType::IDENTIFIER, "expected symbol name to import");
+        }
         std::string alias = sym_tok.text;
         if (match(TokenType::KEYWORD_AS)) {
             Token alias_tok = consume(TokenType::IDENTIFIER, "expected alias name after 'as'");
@@ -713,7 +726,12 @@ std::unique_ptr<Expr> Parser::parse_postfix() {
                 }
             }
         } else if (match(TokenType::DOT)) {
-            Token name_tok = consume(TokenType::IDENTIFIER, "expected member name after '.'");
+            Token name_tok;
+            if (check(TokenType::IDENTIFIER) || (peek().type >= TokenType::KEYWORD_LET && peek().type <= TokenType::KEYWORD_NOT)) {
+                name_tok = advance();
+            } else {
+                name_tok = consume(TokenType::IDENTIFIER, "expected member name after '.'");
+            }
             auto member_name = std::make_unique<LiteralExpr>(name_tok.text, name_tok.span);
             SourceSpan span = SourceSpan::merge(expr->span(), name_tok.span);
             expr = std::make_unique<IndexExpr>(std::move(expr), std::move(member_name), span);

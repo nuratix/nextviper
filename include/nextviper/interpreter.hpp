@@ -106,6 +106,7 @@ public:
     void set_environment(std::shared_ptr<Environment> env) { environment_ = std::move(env); }
     void set_current_file(std::string file_path) { current_file_ = std::move(file_path); }
     const std::string& current_file() const { return current_file_; }
+    std::shared_ptr<class ModuleManager> module_manager() const { return module_manager_; }
 
     static constexpr size_t MAX_CALL_STACK_DEPTH = 1000;
     static constexpr size_t MAX_STRING_BYTES = 64 * 1024 * 1024;

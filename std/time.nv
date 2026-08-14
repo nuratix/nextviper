@@ -1,0 +1,11 @@
+// NextViper Standard Library: std.time
+// Clock, duration, sleeping, and timestamps.
+
+import time
+
+let now = time.now
+let now_ms = time.now_ms
+let timestamp_ms = time.timestamp_ms
+let sleep = time.sleep
+let elapsed = time.elapsed
+let format = time.format

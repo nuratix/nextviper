@@ -1,0 +1,10 @@
+// NextViper Standard Library: std.crypto
+// Cryptographic hashing, encoding, and random byte generation.
+
+import crypto
+
+let sha256 = crypto.sha256
+let md5 = crypto.md5
+let base64_encode = crypto.base64_encode
+let base64_decode = crypto.base64_decode
+let random_bytes = crypto.random_bytes

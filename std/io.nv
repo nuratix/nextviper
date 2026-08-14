@@ -1,0 +1,14 @@
+// NextViper Standard Library: std.io
+// Provides standard stream input/output capabilities.
+
+// Imports native io primitives
+import io
+
+let print = io.print
+let println = io.println
+let eprint = io.eprint
+let eprintln = io.eprintln
+let write = io.write
+let flush = io.flush
+let read_line = io.read_line
+let read_all = io.read_all

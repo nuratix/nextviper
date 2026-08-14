@@ -1,0 +1,10 @@
+// NextViper Standard Library: std.http
+// High-performance HTTP client.
+
+import http
+
+let get = http.get
+let post = http.post
+let put = http.put
+let delete = http.delete
+let request = http.request

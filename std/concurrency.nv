@@ -1,0 +1,7 @@
+// NextViper Standard Library: std.concurrency
+// Message passing channels and concurrent execution primitives.
+
+import concurrency
+
+let sleep = concurrency.sleep
+let channel = concurrency.channel

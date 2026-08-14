@@ -1,0 +1,25 @@
+// NextViper Standard Library: std.fs
+// Provides safe cross-platform filesystem operations.
+
+import fs
+
+let read_text = fs.read_text
+let read_file = fs.read_file
+let write_text = fs.write_text
+let write_file = fs.write_file
+let append_text = fs.append_text
+let append_file = fs.append_file
+let exists = fs.exists
+let is_file = fs.is_file
+let is_dir = fs.is_dir
+let list = fs.list
+let read_dir = fs.read_dir
+let make_dir = fs.make_dir
+let mkdir = fs.mkdir
+let remove = fs.remove
+let delete_file = fs.delete_file
+let remove_dir = fs.remove_dir
+let copy = fs.copy
+let move = fs.move
+let rename = fs.rename
+let size = fs.size

@@ -1,0 +1,10 @@
+// NextViper Standard Library: std.process
+// Process management, environment variables, execution, and exit.
+
+import process
+
+let exec = process.exec
+let exit = process.exit
+let env = process.env
+let cwd = process.cwd
+let pid = process.pid

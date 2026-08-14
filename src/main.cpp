@@ -10,6 +10,7 @@
 #include "nextviper/formatter.hpp"
 #include "nextviper/ir.hpp"
 #include "nextviper/native_compiler.hpp"
+#include "nextviper/package_manager.hpp"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -32,7 +33,7 @@ void print_help() {
     std::cout << "\033[1;32mNextViper Programming Language\033[0m (v" << VERSION_STRING << ")\n\n"
               << "\033[1mUSAGE:\033[0m\n"
               << "  nextviper <COMMAND> [OPTIONS] [FILES...]\n\n"
-              << "\033[1mCOMMANDS:\033[0m\n"
+              << "\033[1mCORE COMMANDS:\033[0m\n"
               << "  \033[1;36mrun\033[0m <file.nv> [args...]      Execute a NextViper program file\n"
               << "  \033[1;36mfmt\033[0m [options] <files...>     Format NextViper source code deterministically\n"
               << "  \033[1;36mbuild\033[0m <file.nv> [-o out]     Compile program to bytecode (.nvc) or native binary\n"
@@ -40,14 +41,15 @@ void print_help() {
               << "  \033[1;36mtest\033[0m [path]                  Run NextViper automated test suite\n"
               << "  \033[1;36mcheck\033[0m <files...>             Validate syntax and types statically without executing\n"
               << "  \033[1;36mrepl\033[0m                         Start the interactive NextViper shell\n"
-              << "  \033[1;36mpackage\033[0m <init|info|bundle>   Manage NextViper packages and dependencies\n"
-              << "  \033[1;36mbench\033[0m <file.nv>              Benchmark execution across Interpreter, VM, and Native\n"
-              << "  \033[1;36mdisasm\033[0m <file.nv>             Disassemble program into bytecode instructions\n"
-              << "  \033[1;36meval\033[0m <code>, -e                Evaluate an inline NextViper code string\n"
-              << "  \033[1;36mparse\033[0m <file.nv>              Parse source file and display AST hierarchy\n"
-              << "  \033[1;36mtokens\033[0m <file.nv>             Scan source file and dump token stream\n"
-              << "  \033[1;36mversion\033[0m, -v                  Display version and build information\n"
-              << "  \033[1;36mhelp\033[0m, -h                     Display this help message\n\n"
+              << "  \033[1;36meval\033[0m <code>, -e                Evaluate an inline NextViper code string\n\n"
+              << "\033[1mPACKAGE MANAGER COMMANDS:\033[0m\n"
+              << "  \033[1;36minit\033[0m [name]                  Initialize a new NextViper project (nextviper.toml)\n"
+              << "  \033[1;36madd\033[0m <pkg> [--path/--git]     Add a dependency to nextviper.toml and install it\n"
+              << "  \033[1;36mremove\033[0m <pkg>                 Remove a dependency and clean lockfile\n"
+              << "  \033[1;36minstall\033[0m                      Install all dependencies and verify integrity\n"
+              << "  \033[1;36mupdate\033[0m [pkg]                 Update dependencies to latest matching SemVer\n"
+              << "  \033[1;36mlist\033[0m                         Display dependency tree and checksum status\n"
+              << "  \033[1;36mpublish\033[0m [--dry-run]          Validate manifest and build package distribution\n\n"
               << "\033[1mFORMATTER OPTIONS:\033[0m\n"
               << "  -w, --write                  Write formatted output in-place to source file(s) [default]\n"
               << "  -c, --check                  Check if files are formatted, exit non-zero if not\n"
@@ -60,11 +62,10 @@ void print_help() {
               << "  --release                    Optimize with -O3 for maximum performance\n"
               << "  --no-color                   Disable ANSI colored terminal output\n\n"
               << "\033[1mEXAMPLES:\033[0m\n"
-              << "  nextviper run examples/hello_world.nv\n"
-              << "  nextviper fmt src/main.nv --check\n"
-              << "  nextviper check src/main.nv --format=json\n"
-              << "  nextviper build src/main.nv -o bin/app --native\n"
-              << "  nextviper test\n";
+              << "  nextviper init my_app\n"
+              << "  nextviper add math_utils --path ../math_utils\n"
+              << "  nextviper install\n"
+              << "  nextviper run src/main.nv\n";
 }
 
 std::string read_file(const std::string& path) {
@@ -585,66 +586,71 @@ int tokens_file(const std::string& path) {
 }
 
 int package_command(int argc, char* argv[]) {
+    PackageManager pm;
     if (argc < 3 || std::string(argv[2]) == "help") {
         std::cout << "NextViper Package Manager (nextviper package)\n\n"
                   << "Commands:\n"
-                  << "  nextviper package init [name]     Initialize a new NextViper package\n"
-                  << "  nextviper package info            Display package information\n"
-                  << "  nextviper package bundle          Validate and bundle package\n";
+                  << "  nextviper init [name]             Initialize a new NextViper project (nextviper.toml)\n"
+                  << "  nextviper add <pkg> [--path/--git] Add a dependency\n"
+                  << "  nextviper remove <pkg>            Remove a dependency\n"
+                  << "  nextviper install                 Install dependencies from nextviper.toml\n"
+                  << "  nextviper update [pkg]            Update dependencies\n"
+                  << "  nextviper list                    List dependencies\n"
+                  << "  nextviper publish [--dry-run]     Build package archive\n";
         return 0;
     }
 
     std::string sub = argv[2];
     if (sub == "init") {
-        std::string pkg_name = (argc >= 4) ? argv[3] : "my_package";
-        std::ofstream pkg_file("nextviper.json");
-        if (pkg_file.is_open()) {
-            pkg_file << "{\n"
-                     << "  \"name\": \"" << pkg_name << "\",\n"
-                     << "  \"version\": \"1.0.0\",\n"
-                     << "  \"description\": \"A modern NextViper package\",\n"
-                     << "  \"main\": \"src/main.nv\",\n"
-                     << "  \"license\": \"MIT\",\n"
-                     << "  \"dependencies\": {}\n"
-                     << "}\n";
-            pkg_file.close();
-        }
-
-        int sys_ret = system("mkdir -p src tests");
-        (void)sys_ret;
-        std::ofstream main_nv("src/main.nv");
-        if (main_nv.is_open()) {
-            main_nv << "// " << pkg_name << " entrypoint\n"
-                    << "import math\n\n"
-                    << "export fn run():\n"
-                    << "    print(\"Hello from " << pkg_name << "!\")\n";
-            main_nv.close();
-        }
-
-        std::cout << "✓ Initialized NextViper package '" << pkg_name << "'\n"
-                  << "  Created nextviper.json\n"
-                  << "  Created src/main.nv\n"
-                  << "  Created tests/\n";
-        return 0;
+        std::string name = (argc >= 4) ? argv[3] : "";
+        return pm.cmd_init(name);
     }
-
-    if (sub == "info") {
-        std::string info = read_file("nextviper.json");
-        if (info.empty()) {
-            std::cerr << "error[NV114]: no nextviper.json found in current directory\n";
+    if (sub == "add") {
+        if (argc < 4) {
+            std::cerr << "error: missing package name to add\n";
             return 1;
         }
-        std::cout << info << "\n";
-        return 0;
-    }
-
-    if (sub == "bundle") {
-        std::cout << "✓ Validating package modules...\n";
-        int res = run_file("src/main.nv");
-        if (res == 0) {
-            std::cout << "✓ Package bundle verified successfully!\n";
+        std::string pkg = argv[3];
+        std::string ver_or_path = (argc >= 5) ? argv[4] : "";
+        bool is_path = false;
+        std::string git_url = "";
+        std::string git_ref = "";
+        for (int i = 4; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--path" && i + 1 < argc) {
+                is_path = true;
+                ver_or_path = argv[++i];
+            } else if (arg == "--git" && i + 1 < argc) {
+                git_url = argv[++i];
+            } else if (arg == "--tag" && i + 1 < argc) {
+                git_ref = argv[++i];
+            }
         }
-        return res;
+        return pm.cmd_add(pkg, ver_or_path, is_path, git_url, git_ref);
+    }
+    if (sub == "remove") {
+        if (argc < 4) {
+            std::cerr << "error: missing package name to remove\n";
+            return 1;
+        }
+        return pm.cmd_remove(argv[3]);
+    }
+    if (sub == "install") {
+        return pm.cmd_install();
+    }
+    if (sub == "update") {
+        std::string pkg = (argc >= 4) ? argv[3] : "";
+        return pm.cmd_update(pkg);
+    }
+    if (sub == "list") {
+        return pm.cmd_list();
+    }
+    if (sub == "publish") {
+        bool dry_run = false;
+        for (int i = 3; i < argc; ++i) {
+            if (std::string(argv[i]) == "--dry-run") dry_run = true;
+        }
+        return pm.cmd_publish(dry_run);
     }
 
     std::cerr << "Unknown package command: " << sub << "\n";
@@ -676,6 +682,71 @@ int main(int argc, char* argv[]) {
     if (first_arg == "--help" || first_arg == "-h" || first_arg == "help") {
         nextviper::print_help();
         return 0;
+    }
+
+    if (first_arg == "init") {
+        nextviper::PackageManager pm;
+        std::string name = (argc >= 3) ? argv[2] : "";
+        return pm.cmd_init(name);
+    }
+
+    if (first_arg == "add") {
+        if (argc < 3) {
+            std::cerr << "error: missing package name to add\n";
+            return 1;
+        }
+        nextviper::PackageManager pm;
+        std::string pkg = argv[2];
+        std::string ver_or_path = (argc >= 4) ? argv[3] : "";
+        bool is_path = false;
+        std::string git_url = "";
+        std::string git_ref = "";
+        for (int i = 3; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--path" && i + 1 < argc) {
+                is_path = true;
+                ver_or_path = argv[++i];
+            } else if (arg == "--git" && i + 1 < argc) {
+                git_url = argv[++i];
+            } else if (arg == "--tag" && i + 1 < argc) {
+                git_ref = argv[++i];
+            }
+        }
+        return pm.cmd_add(pkg, ver_or_path, is_path, git_url, git_ref);
+    }
+
+    if (first_arg == "remove") {
+        if (argc < 3) {
+            std::cerr << "error: missing package name to remove\n";
+            return 1;
+        }
+        nextviper::PackageManager pm;
+        return pm.cmd_remove(argv[2]);
+    }
+
+    if (first_arg == "install") {
+        nextviper::PackageManager pm;
+        return pm.cmd_install();
+    }
+
+    if (first_arg == "update") {
+        nextviper::PackageManager pm;
+        std::string pkg = (argc >= 3) ? argv[2] : "";
+        return pm.cmd_update(pkg);
+    }
+
+    if (first_arg == "list") {
+        nextviper::PackageManager pm;
+        return pm.cmd_list();
+    }
+
+    if (first_arg == "publish") {
+        nextviper::PackageManager pm;
+        bool dry_run = false;
+        for (int i = 2; i < argc; ++i) {
+            if (std::string(argv[i]) == "--dry-run") dry_run = true;
+        }
+        return pm.cmd_publish(dry_run);
     }
 
     if (first_arg == "repl") {

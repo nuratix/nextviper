@@ -40,10 +40,23 @@ public:
 
 private:
     void register_builtin_modules();
+    Value create_io_module();
+    Value create_fs_module();
+    Value create_path_module();
+    Value create_string_module();
+    Value create_collections_module();
     Value create_math_module();
-    Value create_data_module();
-    Value create_sys_module();
+    Value create_json_module();
+    Value create_csv_module();
     Value create_time_module();
+    Value create_http_module();
+    Value create_process_module();
+    Value create_crypto_module();
+    Value create_regex_module();
+    Value create_random_module();
+    Value create_concurrency_module();
+    Value create_sys_module();
+    Value create_data_module();
     Value create_ai_module();
     Value create_tensor_module();
 
