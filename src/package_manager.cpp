@@ -706,10 +706,22 @@ DependencyResolver::ResolutionResult DependencyResolver::resolve(
             // Registry / Local packages search path
             pkg_dir = root_dir / ".nextviper" / "packages" / pkg_name;
             source_loc = "registry:" + spec.version_req.to_string();
+
+            std::error_code ec_dl;
+            if (!fs::exists(pkg_dir, ec_dl) || !fs::exists(pkg_dir / "nextviper.toml", ec_dl)) {
+                const char* reg_env = std::getenv("NEXTVIPER_REGISTRY_URL");
+                std::string registry_url = reg_env ? reg_env : "https://nextviper.nuratix.com";
+                
+                fs::create_directories(pkg_dir, ec_dl);
+                std::string ver_target = spec.version_req.raw_string.empty() || spec.version_req.raw_string == "*" ? "latest" : spec.version_req.raw_string;
+                std::string dl_cmd = "curl -s -f -L \"" + registry_url + "/api/packages/" + pkg_name + "/" + ver_target + "/download\" | tar -xz -C \"" + pkg_dir.string() + "\" 2>/dev/null";
+                int dl_res = system(dl_cmd.c_str());
+                (void)dl_res;
+            }
         }
 
         std::error_code ec;
-        if (!fs::exists(pkg_dir, ec)) {
+        if (!fs::exists(pkg_dir, ec) || !fs::exists(pkg_dir / "nextviper.toml", ec)) {
             // Try looking in root packages/ directory if available
             fs::path local_alt = root_dir / "packages" / pkg_name;
             if (fs::exists(local_alt, ec)) {

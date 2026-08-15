@@ -1,0 +1,181 @@
+// ============================================================================
+// NextViper Tic-Tac-Toe Game
+// Play against an AI opponent or 2-player local mode!
+// ============================================================================
+
+fn print_header() {
+    print("========================================")
+    print("        NEXTVIPER TIC-TAC-TOE           ")
+    print("========================================")
+    print("Positions are numbered 1 through 9:")
+    print("  1 | 2 | 3 ")
+    print(" ---+---+---")
+    print("  4 | 5 | 6 ")
+    print(" ---+---+---")
+    print("  7 | 8 | 9 ")
+    print("========================================")
+}
+
+fn print_board(b) {
+    print("")
+    print("  " + b[0] + " | " + b[1] + " | " + b[2] + " ")
+    print(" ---+---+---")
+    print("  " + b[3] + " | " + b[4] + " | " + b[5] + " ")
+    print(" ---+---+---")
+    print("  " + b[6] + " | " + b[7] + " | " + b[8] + " ")
+    print("")
+}
+
+fn check_winner(b, p) {
+    // Rows
+    if b[0] == p and b[1] == p and b[2] == p { return true }
+    if b[3] == p and b[4] == p and b[5] == p { return true }
+    if b[6] == p and b[7] == p and b[8] == p { return true }
+
+    // Columns
+    if b[0] == p and b[3] == p and b[6] == p { return true }
+    if b[1] == p and b[4] == p and b[7] == p { return true }
+    if b[2] == p and b[5] == p and b[8] == p { return true }
+
+    // Diagonals
+    if b[0] == p and b[4] == p and b[8] == p { return true }
+    if b[2] == p and b[4] == p and b[6] == p { return true }
+
+    return false
+}
+
+fn is_board_full(b) {
+    for i in 0..9 {
+        if b[i] == " " {
+            return false
+        }
+    }
+    return true
+}
+
+fn get_ai_move(b) {
+    // 1. Can AI ("O") win in one move?
+    for i in 0..9 {
+        if b[i] == " " {
+            let mut test_b = [b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8]]
+            test_b[i] = "O"
+            if check_winner(test_b, "O") {
+                return i
+            }
+        }
+    }
+
+    // 2. Can Player ("X") win in one move? Block it!
+    for i in 0..9 {
+        if b[i] == " " {
+            let mut test_b = [b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8]]
+            test_b[i] = "X"
+            if check_winner(test_b, "X") {
+                return i
+            }
+        }
+    }
+
+    // 3. Take Center if available
+    if b[4] == " " {
+        return 4
+    }
+
+    // 4. Take Corners if available
+    let corners = [0, 2, 6, 8]
+    for c in corners {
+        if b[c] == " " {
+            return c
+        }
+    }
+
+    // 5. Take any remaining open cell
+    for i in 0..9 {
+        if b[i] == " " {
+            return i
+        }
+    }
+
+    return 0
+}
+
+fn play_game() {
+    print_header()
+
+    print("Choose game mode:")
+    print("  1. Player vs Computer (AI)")
+    print("  2. Two Players (Pass & Play)")
+
+    let mut mode_str = input("Select mode (1 or 2, default 1): ")
+    let mut vs_ai = true
+    if mode_str == "2" {
+        vs_ai = false
+        print("\n--- Two Player Mode Selected ---")
+    } else {
+        print("\n--- Single Player Mode (vs AI) Selected ---")
+    }
+
+    let mut board = [" ", " ", " ", " ", " ", " ", " ", " ", " "]
+    let mut current_player = "X"
+    let mut game_over = false
+
+    while !game_over {
+        print_board(board)
+
+        if vs_ai and current_player == "O" {
+            print("Computer is thinking...")
+            let ai_pos = get_ai_move(board)
+            board[ai_pos] = "O"
+            print("Computer placed 'O' at position " + str(ai_pos + 1))
+        } else {
+            let mut valid_move = false
+            while !valid_move {
+                let prompt = "Player " + current_player + " - Choose position (1-9): "
+                let user_input = input(prompt)
+                
+                if user_input == nil or user_input == "" {
+                    print("Exiting game...")
+                    return
+                }
+
+                let num = int(user_input)
+                if num >= 1 and num <= 9 {
+                    let idx = num - 1
+                    if board[idx] == " " {
+                        board[idx] = current_player
+                        valid_move = true
+                    } else {
+                        print("Position " + str(num) + " is already occupied! Try another.")
+                    }
+                } else {
+                    print("Invalid input! Please enter a number between 1 and 9.")
+                }
+            }
+        }
+
+        // Check for Win
+        if check_winner(board, current_player) {
+            print_board(board)
+            if vs_ai and current_player == "O" {
+                print("Game Over: The Computer wins! Better luck next time!")
+            } else {
+                print("Congratulations! Player " + current_player + " wins the game!")
+            }
+            game_over = true
+        } else if is_board_full(board) {
+            print_board(board)
+            print("Game Over: It's a draw! Well played!")
+            game_over = true
+        } else {
+            // Switch Player
+            if current_player == "X" {
+                current_player = "O"
+            } else {
+                current_player = "X"
+            }
+        }
+    }
+}
+
+// Start Game
+play_game()
