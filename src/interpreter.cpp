@@ -22,32 +22,32 @@ Interpreter::Interpreter(DiagnosticEngine& diagnostics)
 }
 
 void Interpreter::runtime_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error(message, span, help, "NV100");
+    diagnostics_.error(message, span, help, "NV4005");
     throw RuntimeError(RuntimeErrorKind::GENERIC_ERROR, message, span, help);
 }
 
 void Interpreter::type_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error(message, span, help.empty() ? "ensure operands have compatible types" : help, "NV103");
+    diagnostics_.error(message, span, help.empty() ? "ensure operands have compatible types" : help, "NV1003");
     throw RuntimeError(RuntimeErrorKind::TYPE_ERROR, message, span, help);
 }
 
 void Interpreter::name_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error(message, span, help.empty() ? "make sure the variable is declared before use" : help, "NV102");
+    diagnostics_.error(message, span, help.empty() ? "make sure the identifier is declared before use" : help, "NV1001");
     throw RuntimeError(RuntimeErrorKind::NAME_ERROR, message, span, help);
 }
 
 void Interpreter::division_by_zero_error(SourceSpan span, std::string help) {
-    diagnostics_.error("division by zero", span, help.empty() ? "ensure denominator is non-zero before division" : help, "NV105");
+    diagnostics_.error("division by zero", span, help.empty() ? "ensure denominator is non-zero before division" : help, "NV4001");
     throw RuntimeError(RuntimeErrorKind::DIVISION_BY_ZERO, "cannot divide by zero", span, help);
 }
 
 void Interpreter::mutability_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error(message, span, help.empty() ? "use 'let mut' to make the variable reassignable" : help, "NV108");
+    diagnostics_.error(message, span, help.empty() ? "use 'let mut' to make the variable reassignable" : help, "NV1003");
     throw RuntimeError(RuntimeErrorKind::MUTABILITY_ERROR, message, span, help);
 }
 
 void Interpreter::index_error(const std::string& message, SourceSpan span, std::string help) {
-    diagnostics_.error(message, span, help.empty() ? "index is out of range for collection" : help, "NV106");
+    diagnostics_.error(message, span, help.empty() ? "index is out of range for collection" : help, "NV4002");
     throw RuntimeError(RuntimeErrorKind::INDEX_ERROR, message, span, help);
 }
 

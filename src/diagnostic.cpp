@@ -1,4 +1,5 @@
 #include "nextviper/diagnostic.hpp"
+#include "nextviper/error_registry.hpp"
 #include <iomanip>
 #include <sstream>
 
@@ -116,6 +117,8 @@ std::string Diagnostic::to_json() const {
         case DiagnosticLevel::HELP: level_str = "help"; break;
     }
 
+    std::string doc_url = get_error_doc_url(code);
+
     ss << "{\n"
        << "  \"level\": \"" << level_str << "\",\n"
        << "  \"code\": \"" << escape_json(code) << "\",\n"
@@ -125,8 +128,11 @@ std::string Diagnostic::to_json() const {
        << "  \"column\": " << span.start.column << ",\n"
        << "  \"end_line\": " << span.end.line << ",\n"
        << "  \"end_column\": " << span.end.column << ",\n"
-       << "  \"hint\": \"" << escape_json(hint) << "\"\n"
-       << "}";
+       << "  \"hint\": \"" << escape_json(hint) << "\"";
+    if (!doc_url.empty()) {
+        ss << ",\n  \"documentation\": \"" << escape_json(doc_url) << "\"";
+    }
+    ss << "\n}";
     return ss.str();
 }
 
@@ -140,11 +146,11 @@ void DiagnosticEngine::report(DiagnosticLevel level, const std::string& message,
 }
 
 void DiagnosticEngine::error(const std::string& message, SourceSpan span, const std::string& hint, const std::string& code) {
-    report(DiagnosticLevel::ERROR, message, span, hint, code);
+    report(DiagnosticLevel::ERROR, message, span, hint, code.empty() ? "NV1002" : code);
 }
 
 void DiagnosticEngine::warning(const std::string& message, SourceSpan span, const std::string& hint, const std::string& code) {
-    report(DiagnosticLevel::WARNING, message, span, hint, code);
+    report(DiagnosticLevel::WARNING, message, span, hint, code.empty() ? "NV200" : code);
 }
 
 void DiagnosticEngine::note(const std::string& message, SourceSpan span) {
@@ -215,7 +221,7 @@ void DiagnosticEngine::render_single(std::ostream& os, const Diagnostic& diag) c
     const char* cyan = use_color_ ? color::BOLD_CYAN : "";
     const char* green = use_color_ ? color::BOLD_GREEN : "";
 
-    // 1. Header: error[NV102]:
+    // 1. Header: error[NV1001]:
     os << level_color << level_str;
     if (!diag.code.empty()) {
         os << "[" << diag.code << "]";
@@ -264,6 +270,13 @@ void DiagnosticEngine::render_single(std::ostream& os, const Diagnostic& diag) c
     // 4. Help section: help: define `total` before using it
     if (!diag.hint.empty()) {
         os << "\n    " << green << "help: " << reset << bold << diag.hint << reset << "\n";
+    }
+
+    // 5. Learn more URL:
+    std::string doc_url = get_error_doc_url(diag.code);
+    if (!doc_url.empty()) {
+        os << "\n    " << bold << "Learn more:" << reset << "\n"
+           << "    " << cyan << doc_url << reset << "\n";
     }
 
     os << "\n";

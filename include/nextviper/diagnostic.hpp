@@ -54,7 +54,7 @@ public:
         : source_manager_(sm), use_color_(use_color) {}
 
     void report(DiagnosticLevel level, const std::string& message, SourceSpan span = {}, const std::string& hint = "", const std::string& code = "");
-    void error(const std::string& message, SourceSpan span = {}, const std::string& hint = "", const std::string& code = "NV100");
+    void error(const std::string& message, SourceSpan span = {}, const std::string& hint = "", const std::string& code = "NV1002");
     void warning(const std::string& message, SourceSpan span = {}, const std::string& hint = "", const std::string& code = "NV200");
     void note(const std::string& message, SourceSpan span = {});
     void help(const std::string& message, SourceSpan span = {});

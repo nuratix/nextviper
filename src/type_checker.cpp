@@ -34,8 +34,8 @@ void TypeChecker::init_builtins() {
     globals_->define("map", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_list(Type::make_any())), false);
     globals_->define("filter", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_list(Type::make_any())), false);
     globals_->define("reduce", Type::make_function({Type::make_any(), Type::make_any(), Type::make_any()}, Type::make_any()), false);
-    globals_->define("min", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_any()), false);
-    globals_->define("max", Type::make_function({Type::make_any(), Type::make_any()}, Type::make_any()), false);
+    globals_->define("min", Type::make_function({Type::make_any()}, Type::make_any()), false);
+    globals_->define("max", Type::make_function({Type::make_any()}, Type::make_any()), false);
     globals_->define("abs", Type::make_function({Type::make_any()}, Type::make_any()), false);
     globals_->define("sqrt", Type::make_function({Type::make_float()}, Type::make_float()), false);
     globals_->define("pow", Type::make_function({Type::make_float(), Type::make_float()}, Type::make_float()), false);
@@ -76,7 +76,7 @@ void TypeChecker::visit_literal(const LiteralExpr& expr) {
             last_inferred_type_ = Type::make_bool();
             break;
         case LiteralExpr::Kind::NIL:
-            last_inferred_type_ = Type::make_null();
+            last_inferred_type_ = Type::make_any();
             break;
     }
 }
@@ -84,8 +84,8 @@ void TypeChecker::visit_literal(const LiteralExpr& expr) {
 void TypeChecker::visit_identifier(const IdentifierExpr& expr) {
     auto type = current_env_->lookup(expr.name());
     if (!type) {
-        diagnostics_.error("unknown variable `" + expr.name() + "`", expr.span(),
-                          "define `" + expr.name() + "` before using it", "NV102");
+        diagnostics_.error("unknown identifier `" + expr.name() + "`", expr.span(),
+                          "declare `" + expr.name() + "` before using it", "NV1001");
         last_inferred_type_ = Type::make_unknown();
         return;
     }
@@ -113,7 +113,8 @@ void TypeChecker::visit_unary(const UnaryExpr& expr) {
                 last_inferred_type_ = Type::make_any();
                 return;
             }
-            diagnostics_.error("TypeError: unary '-' requires numeric type, got '" + operand_type->to_string() + "'", expr.span());
+            diagnostics_.error("TypeError: unary '-' requires numeric type, got '" + operand_type->to_string() + "'",
+                               expr.span(), "ensure operand is an integer or float", "NV1003");
             last_inferred_type_ = Type::make_unknown();
             return;
         default:
@@ -148,7 +149,8 @@ void TypeChecker::visit_binary(const BinaryExpr& expr) {
                 last_inferred_type_ = Type::make_any();
                 return;
             }
-            diagnostics_.error("TypeError: operator '+' not supported for '" + left->to_string() + "' and '" + right->to_string() + "'", expr.span());
+            diagnostics_.error("TypeError: operator '+' not supported for '" + left->to_string() + "' and '" + right->to_string() + "'",
+                               expr.span(), "convert operand using str() or int()", "NV1003");
             last_inferred_type_ = Type::make_unknown();
             return;
 
@@ -177,7 +179,8 @@ void TypeChecker::visit_binary(const BinaryExpr& expr) {
                 last_inferred_type_ = Type::make_any();
                 return;
             }
-            diagnostics_.error("TypeError: operator requires numeric types, got '" + left->to_string() + "' and '" + right->to_string() + "'", expr.span());
+            diagnostics_.error("TypeError: operator requires numeric types, got '" + left->to_string() + "' and '" + right->to_string() + "'",
+                               expr.span(), "ensure both operands are numeric", "NV1003");
             last_inferred_type_ = Type::make_unknown();
             return;
 
@@ -215,13 +218,14 @@ void TypeChecker::visit_call(const CallExpr& expr) {
         const auto& param_types = callee_type->param_types();
         if (param_types.size() != arg_types.size() && !param_types.empty() && !param_types[0]->is_any()) {
             diagnostics_.error("TypeError: function expects " + std::to_string(param_types.size()) +
-                               " argument(s), got " + std::to_string(arg_types.size()), expr.span());
+                               " argument(s), got " + std::to_string(arg_types.size()), expr.span(),
+                               "adjust argument count to match function signature", "NV1004");
         } else {
             for (size_t i = 0; i < std::min(param_types.size(), arg_types.size()); ++i) {
                 if (!param_types[i]->is_assignable_from(arg_types[i])) {
                     diagnostics_.error("TypeError: argument type mismatch for parameter " + std::to_string(i + 1) +
                                        ": expected '" + param_types[i]->to_string() + "', got '" + arg_types[i]->to_string() + "'",
-                                       expr.args()[i]->span());
+                                       expr.args()[i]->span(), "pass value matching parameter type", "NV1004");
                 }
             }
         }
@@ -238,7 +242,8 @@ void TypeChecker::visit_index(const IndexExpr& expr) {
 
     if (target_type->is_list()) {
         if (!index_type->is_int() && !index_type->is_any()) {
-            diagnostics_.error("TypeError: list index must be an integer, got '" + index_type->to_string() + "'", expr.index().span());
+            diagnostics_.error("TypeError: list index must be an integer, got '" + index_type->to_string() + "'",
+                               expr.index().span(), "use an integer index", "NV1003");
         }
         last_inferred_type_ = target_type->element_type();
         return;
@@ -247,7 +252,8 @@ void TypeChecker::visit_index(const IndexExpr& expr) {
     if (target_type->is_map()) {
         if (!target_type->key_type()->is_assignable_from(index_type)) {
             diagnostics_.error("TypeError: map key type mismatch: expected '" + target_type->key_type()->to_string() +
-                               "', got '" + index_type->to_string() + "'", expr.index().span());
+                               "', got '" + index_type->to_string() + "'", expr.index().span(),
+                               "use a string key", "NV1003");
         }
         last_inferred_type_ = target_type->value_type();
         return;
@@ -267,83 +273,77 @@ void TypeChecker::visit_slice(const SliceExpr& expr) {
     if (expr.start()) {
         TypePtr start_type = infer_expression(*expr.start());
         if (!start_type->is_int() && !start_type->is_any()) {
-            diagnostics_.error("TypeError: slice start must be an integer, got '" + start_type->to_string() + "'", expr.start()->span());
+            diagnostics_.error("TypeError: slice start must be an integer, got '" + start_type->to_string() + "'",
+                               expr.start()->span(), "use an integer for slice start", "NV1003");
         }
     }
     if (expr.end()) {
         TypePtr end_type = infer_expression(*expr.end());
         if (!end_type->is_int() && !end_type->is_any()) {
-            diagnostics_.error("TypeError: slice end must be an integer, got '" + end_type->to_string() + "'", expr.end()->span());
+            diagnostics_.error("TypeError: slice end must be an integer, got '" + end_type->to_string() + "'",
+                               expr.end()->span(), "use an integer for slice end", "NV1003");
         }
     }
     if (expr.step()) {
         TypePtr step_type = infer_expression(*expr.step());
         if (!step_type->is_int() && !step_type->is_any()) {
-            diagnostics_.error("TypeError: slice step must be an integer, got '" + step_type->to_string() + "'", expr.step()->span());
+            diagnostics_.error("TypeError: slice step must be an integer, got '" + step_type->to_string() + "'",
+                               expr.step()->span(), "use an integer for slice step", "NV1003");
         }
     }
 
-    if (target_type->is_list()) {
-        last_inferred_type_ = target_type;
-        return;
-    }
-    if (target_type->is_string()) {
-        last_inferred_type_ = Type::make_string();
-        return;
-    }
-    last_inferred_type_ = Type::make_any();
+    last_inferred_type_ = target_type;
 }
 
 void TypeChecker::visit_array(const ArrayExpr& expr) {
-    TypePtr elem_type = nullptr;
-    for (const auto& elem : expr.elements()) {
-        TypePtr t = infer_expression(*elem);
-        if (!elem_type) {
-            elem_type = t;
-        } else if (!elem_type->equals(t)) {
+    if (expr.elements().empty()) {
+        last_inferred_type_ = Type::make_list(Type::make_any());
+        return;
+    }
+
+    TypePtr elem_type = infer_expression(*expr.elements()[0]);
+    for (size_t i = 1; i < expr.elements().size(); ++i) {
+        TypePtr t = infer_expression(*expr.elements()[i]);
+        if (!elem_type->is_assignable_from(t)) {
             elem_type = Type::make_any();
+            break;
         }
     }
-    last_inferred_type_ = Type::make_list(elem_type ? elem_type : Type::make_any());
+    last_inferred_type_ = Type::make_list(elem_type);
 }
 
 void TypeChecker::visit_object(const ObjectExpr& expr) {
-    TypePtr val_type = nullptr;
-    for (const auto& entry : expr.entries()) {
-        if (entry.second) {
-            TypePtr t = infer_expression(*entry.second);
-            if (!val_type) {
-                val_type = t;
-            } else if (!val_type->equals(t)) {
+    TypePtr val_type = Type::make_any();
+    if (!expr.entries().empty()) {
+        val_type = infer_expression(*expr.entries()[0].second);
+        for (size_t i = 1; i < expr.entries().size(); ++i) {
+            TypePtr next_t = infer_expression(*expr.entries()[i].second);
+            if (!val_type->is_assignable_from(next_t)) {
                 val_type = Type::make_any();
+                break;
             }
         }
     }
-    last_inferred_type_ = Type::make_map(Type::make_string(), val_type ? val_type : Type::make_any());
+    last_inferred_type_ = Type::make_map(Type::make_string(), val_type);
 }
 
 void TypeChecker::visit_pipe(const PipeExpr& expr) {
-    infer_expression(expr.left());
+    TypePtr left = infer_expression(expr.left());
+    (void)left;
     last_inferred_type_ = infer_expression(expr.right());
 }
 
 void TypeChecker::visit_assign(const AssignExpr& expr) {
     TypePtr val_type = infer_expression(expr.value());
 
-    if (expr.is_index_assign()) {
-        last_inferred_type_ = val_type;
-        return;
-    }
-
-    TypePtr var_type = current_env_->lookup(expr.name());
+    auto var_type = current_env_->lookup(expr.name());
     if (var_type) {
         if (!var_type->is_assignable_from(val_type)) {
             diagnostics_.error("TypeError: cannot assign value of type '" + val_type->to_string() +
                                "' to variable '" + expr.name() + "' of type '" + var_type->to_string() + "'",
-                               expr.span(), "check value type or adjust variable declaration");
+                               expr.span(), "check value type or adjust variable declaration", "NV1003");
         }
     } else {
-        // Top-level / bare assignment type inference
         current_env_->define(expr.name(), val_type, true);
     }
 
@@ -387,11 +387,10 @@ void TypeChecker::visit_let_stmt(const LetStmt& stmt) {
         if (init_type && !annotated_type->is_assignable_from(init_type)) {
             diagnostics_.error("TypeError: type mismatch in variable '" + stmt.name() + "': expected '" +
                                annotated_type->to_string() + "', found '" + init_type->to_string() + "'",
-                               stmt.span(), "ensure the initializer value matches the annotated type");
+                               stmt.span(), "ensure the initializer value matches the annotated type", "NV1003");
         }
         current_env_->define(stmt.name(), annotated_type, stmt.is_mut());
     } else {
-        // Automatic type inference: 'let age = 15' -> int
         TypePtr inferred = init_type ? init_type : Type::make_any();
         current_env_->define(stmt.name(), inferred, stmt.is_mut());
     }
@@ -424,17 +423,11 @@ void TypeChecker::visit_while_stmt(const WhileStmt& stmt) {
 
 void TypeChecker::visit_for_in_stmt(const ForInStmt& stmt) {
     TypePtr iter_type = infer_expression(stmt.iterable());
-    TypePtr elem_type = Type::make_any();
-    if (iter_type->is_list()) {
-        elem_type = iter_type->element_type();
-    } else if (iter_type->is_map()) {
-        elem_type = iter_type->key_type();
-    } else if (iter_type->is_string()) {
-        elem_type = Type::make_string();
-    }
+    TypePtr elem_type = iter_type->is_list() ? iter_type->element_type() : Type::make_any();
 
     auto loop_env = TypeEnvironment::create(current_env_);
     loop_env->define(stmt.variable_name(), elem_type, true);
+
     auto prev_env = current_env_;
     current_env_ = loop_env;
     check_statement(stmt.body());
@@ -451,7 +444,7 @@ void TypeChecker::visit_return_stmt(const ReturnStmt& stmt) {
         if (!current_function_return_type_->is_assignable_from(ret_type)) {
             diagnostics_.error("TypeError: function expected return type '" + current_function_return_type_->to_string() +
                                "', returned '" + ret_type->to_string() + "'", stmt.span(),
-                               "ensure returned expression matches declared function return type");
+                               "ensure returned expression matches declared function return type", "NV1003");
         }
     }
 }
@@ -492,7 +485,8 @@ void TypeChecker::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
         TypePtr body_type = infer_expression(*stmt.expr_body());
         if (!return_type->is_void() && !return_type->is_assignable_from(body_type)) {
             diagnostics_.error("TypeError: function expected return type '" + return_type->to_string() +
-                               "', returned '" + body_type->to_string() + "'", stmt.span());
+                               "', returned '" + body_type->to_string() + "'", stmt.span(),
+                               "ensure returned expression matches declared function return type", "NV1003");
         }
     } else if (stmt.body()) {
         for (const auto& s : stmt.body()->statements()) {

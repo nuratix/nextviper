@@ -78,7 +78,9 @@ void print_help() {
 std::string read_file(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        std::cerr << "error[NV114]:\n    could not open file '" << path << "'\n\n";
+        std::cerr << "error[NV2002]:\n    could not open file '" << path << "'\n\n"
+                  << "    Learn more:\n"
+                  << "    https://nextviper.nuratix.com/docs/errors/file-not-found\n\n";
         return "";
     }
     std::stringstream buffer;

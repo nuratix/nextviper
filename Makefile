@@ -11,6 +11,7 @@ BUILD_DIR = build
 # Core library source files (excluding main.cpp and lsp_main.cpp)
 CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/diagnostic.cpp \
+            $(SRC_DIR)/error_registry.cpp \
             $(SRC_DIR)/lexer.cpp \
             $(SRC_DIR)/ast.cpp \
             $(SRC_DIR)/parser.cpp \
@@ -71,7 +72,8 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_vm.cpp \
             $(TEST_DIR)/test_diagnostics.cpp \
             $(TEST_DIR)/test_fuzz.cpp \
-            $(TEST_DIR)/test_lsp.cpp
+            $(TEST_DIR)/test_lsp.cpp \
+            $(TEST_DIR)/test_error_system.cpp
 
 TEST_OBJS = $(patsubst $(TEST_DIR)/%.cpp, $(BUILD_DIR)/tests/%.o, $(TEST_SRCS))
 
@@ -114,6 +116,8 @@ test: directories $(TEST_TARGET) $(TARGET) $(LSP_TARGET)
 	@./$(TEST_TARGET)
 	@echo "\n\033[1;34m=== Running CLI Integration Tests ===\033[0m"
 	@bash $(TEST_DIR)/test_cli.sh
+	@echo "\n\033[1;34m=== Running Error System Integration Tests ===\033[0m"
+	@bash $(TEST_DIR)/test_error_codes.sh
 
 examples: $(TARGET)
 	@echo "\n\033[1;34m=== Running Hello World Example ===\033[0m"

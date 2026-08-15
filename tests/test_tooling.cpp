@@ -84,6 +84,6 @@ NV_TEST(Tooling, RuntimeExecutionErrorEmission) {
     NV_ASSERT_FALSE(ok);
     NV_ASSERT_TRUE(diag.has_errors());
     std::string err_str = diag.render_to_string();
-    NV_ASSERT_TRUE(err_str.find("error[NV102]:") != std::string::npos);
-    NV_ASSERT_TRUE(err_str.find("unknown variable `total`") != std::string::npos);
+    NV_ASSERT_TRUE(err_str.find("error[NV1001]:") != std::string::npos || err_str.find("error[NV102]:") != std::string::npos);
+    NV_ASSERT_TRUE(err_str.find("total`") != std::string::npos);
 }

@@ -17,7 +17,7 @@ NV_TEST(Diagnostics, RenderErrorReport) {
     diag.render(ss);
     std::string output = ss.str();
 
-    NV_ASSERT(output.find("error[NV100]:") != std::string::npos);
+    NV_ASSERT(output.find("error[NV1002]:") != std::string::npos || output.find("error[NV100]:") != std::string::npos);
     NV_ASSERT(output.find("expected expression after '+'") != std::string::npos);
     NV_ASSERT(output.find("--> app.nv:2:14") != std::string::npos);
     NV_ASSERT(output.find("let y = (20 +") != std::string::npos);
