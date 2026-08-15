@@ -102,6 +102,11 @@ struct ProjectManifest {
     std::string description;
     std::vector<std::string> authors;
     std::string license = "MIT";
+    std::string repository;
+    std::string homepage;
+    std::string documentation;
+    std::string category = "general";
+    std::vector<std::string> keywords;
     std::string main_file = "src/main.nv";
 
     std::map<std::string, DependencySpec> dependencies;

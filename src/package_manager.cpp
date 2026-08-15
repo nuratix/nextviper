@@ -463,6 +463,11 @@ std::optional<ProjectManifest> ProjectManifest::parse_toml(const std::string& co
             }
             else if (key == "description") manifest.description = strip_quotes(raw_val);
             else if (key == "license") manifest.license = strip_quotes(raw_val);
+            else if (key == "repository") manifest.repository = strip_quotes(raw_val);
+            else if (key == "homepage") manifest.homepage = strip_quotes(raw_val);
+            else if (key == "documentation") manifest.documentation = strip_quotes(raw_val);
+            else if (key == "category") manifest.category = strip_quotes(raw_val);
+            else if (key == "keywords") manifest.keywords = parse_string_array(raw_val);
             else if (key == "main") manifest.main_file = strip_quotes(raw_val);
             else if (key == "authors") manifest.authors = parse_string_array(raw_val);
         } else if (current_section == "dependencies" || current_section == "dev-dependencies") {
@@ -526,7 +531,20 @@ std::string ProjectManifest::to_toml_string() const {
        << "version = \"" << version.to_string() << "\"\n";
     if (!description.empty()) ss << "description = \"" << description << "\"\n";
     if (!license.empty()) ss << "license = \"" << license << "\"\n";
+    if (!repository.empty()) ss << "repository = \"" << repository << "\"\n";
+    if (!homepage.empty()) ss << "homepage = \"" << homepage << "\"\n";
+    if (!documentation.empty()) ss << "documentation = \"" << documentation << "\"\n";
+    if (!category.empty()) ss << "category = \"" << category << "\"\n";
     if (!main_file.empty()) ss << "main = \"" << main_file << "\"\n";
+
+    if (!keywords.empty()) {
+        ss << "keywords = [";
+        for (size_t i = 0; i < keywords.size(); ++i) {
+            ss << "\"" << keywords[i] << "\"";
+            if (i + 1 < keywords.size()) ss << ", ";
+        }
+        ss << "]\n";
+    }
 
     if (!authors.empty()) {
         ss << "authors = [";
@@ -1099,20 +1117,103 @@ int PackageManager::cmd_publish(bool dry_run) {
     std::string err;
     auto manifest_opt = ProjectManifest::load_from_file(manifest_path(), err);
     if (!manifest_opt) {
-        std::cerr << "error: no nextviper.toml found\n";
+        std::cerr << "error: no nextviper.toml found in current directory\n";
         return 1;
     }
 
-    const auto& m = *manifest_opt;
-    if (m.name.empty() || m.license.empty() || m.description.empty()) {
-        std::cerr << "error: manifest incomplete for publishing. Ensure 'name', 'license', and 'description' are set.\n";
-        return 1;
+    auto m = *manifest_opt;
+    bool updated_manifest = false;
+
+    // Interactive prompt for License if missing
+    if (m.license.empty()) {
+        std::cout << "\033[1;33m? Package License (e.g. MIT, Apache-2.0, BSD-3-Clause) [default: MIT]: \033[0m";
+        std::string input;
+        if (std::getline(std::cin, input)) {
+            input = trim(input);
+            m.license = input.empty() ? "MIT" : input;
+            updated_manifest = true;
+        } else {
+            m.license = "MIT";
+        }
+    }
+
+    // Interactive prompt for Description if missing
+    if (m.description.empty()) {
+        std::cout << "\033[1;33m? Package Summary / Description: \033[0m";
+        std::string input;
+        if (std::getline(std::cin, input)) {
+            input = trim(input);
+            m.description = input.empty() ? (m.name + " package for NextViper") : input;
+            updated_manifest = true;
+        } else {
+            m.description = m.name + " package";
+        }
+    }
+
+    // Interactive prompt for Repository URL if missing
+    if (m.repository.empty()) {
+        std::cout << "\033[1;33m? Repository URL (e.g. https://github.com/user/pkg) [optional]: \033[0m";
+        std::string input;
+        if (std::getline(std::cin, input)) {
+            input = trim(input);
+            if (!input.empty()) {
+                m.repository = input;
+                updated_manifest = true;
+            }
+        }
+    }
+
+    // Interactive prompt for Homepage URL if missing
+    if (m.homepage.empty()) {
+        std::cout << "\033[1;33m? Homepage URL [optional]: \033[0m";
+        std::string input;
+        if (std::getline(std::cin, input)) {
+            input = trim(input);
+            if (!input.empty()) {
+                m.homepage = input;
+                updated_manifest = true;
+            }
+        }
+    }
+
+    // Interactive prompt for Documentation URL if missing
+    if (m.documentation.empty()) {
+        std::cout << "\033[1;33m? Documentation URL [optional]: \033[0m";
+        std::string input;
+        if (std::getline(std::cin, input)) {
+            input = trim(input);
+            if (!input.empty()) {
+                m.documentation = input;
+                updated_manifest = true;
+            }
+        }
+    }
+
+    // Interactive prompt for Category if missing
+    if (m.category.empty() || m.category == "general") {
+        std::cout << "\033[1;33m? Category (general/ai/data/numerical/networking/crypto) [default: general]: \033[0m";
+        std::string input;
+        if (std::getline(std::cin, input)) {
+            input = trim(input);
+            if (!input.empty()) {
+                m.category = input;
+                updated_manifest = true;
+            }
+        }
+    }
+
+    if (updated_manifest) {
+        std::string save_err;
+        m.save_to_file(manifest_path(), save_err);
+        std::cout << "\033[1;32m✓ Saved manifest configuration to nextviper.toml\033[0m\n";
     }
 
     std::string tree_hash = PackageIntegrity::compute_tree_hash(project_root_);
     std::cout << "\033[1;34m[Packaging]\033[0m " << m.name << " v" << m.version.to_string() << "\n"
               << "  Tree SHA-256: " << tree_hash << "\n"
-              << "  License:      " << m.license << "\n";
+              << "  License:      " << m.license << "\n"
+              << "  Repository:   " << (m.repository.empty() ? "(none)" : m.repository) << "\n"
+              << "  Homepage:     " << (m.homepage.empty() ? "(none)" : m.homepage) << "\n";
 
     if (dry_run) {
         std::cout << "\033[1;32m✓ Package validation passed (dry-run mode).\033[0m Ready for publication.\n";
