@@ -1,0 +1,16 @@
+[project]
+name = "devtools_demo"
+version = "1.0.0"
+description = "Real demo project demonstrating NextViper developer tooling, LSP, and tests"
+authors = ["NextViper Developer <dev@nextviper.org>"]
+license = "MIT"
+main = "src/main.nv"
+
+[dependencies]
+math_utils = { path = "../math_ops" }
+
+[scripts]
+start = "nextviper run src/main.nv"
+test = "nextviper test"
+check = "nextviper check"
+fmt = "nextviper fmt"

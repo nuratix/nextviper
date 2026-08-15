@@ -1,0 +1,42 @@
+// examples/devtools-demo/src/main.nv
+// Real NextViper application demonstrating Developer Tooling, LSP, and Standard Library
+
+import std.io
+import std.fs
+import std.math
+import std.time
+
+export fn compute_fibonacci(n):
+    if n <= 1:
+        return n
+    let a = 0
+    let b = 1
+    let i = 2
+    while i <= n:
+        let c = a + b
+        a = b
+        b = c
+        i = i + 1
+    return b
+
+export fn process_metrics(samples):
+    let total = 0
+    for s in samples:
+        total = total + s
+    let count = len(samples)
+    let mean = total / count
+    return {"total": total, "count": count, "mean": mean}
+
+fn main():
+    io.print("=== NextViper Developer Tooling Demo ===")
+    
+    let fib10 = compute_fibonacci(10)
+    io.print("Fibonacci(10) = " + str(fib10))
+    
+    let metrics = process_metrics([10, 20, 30, 40, 50])
+    io.print("Mean metric = " + str(metrics["mean"]))
+    
+    let root = math.sqrt(256.0)
+    io.print("Square root of 256.0 = " + str(root))
+
+main()

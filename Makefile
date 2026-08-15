@@ -8,7 +8,7 @@ TEST_DIR = tests
 BIN_DIR = bin
 BUILD_DIR = build
 
-# Core library source files (excluding main.cpp)
+# Core library source files (excluding main.cpp and lsp_main.cpp)
 CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/diagnostic.cpp \
             $(SRC_DIR)/lexer.cpp \
@@ -40,12 +40,16 @@ CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/vm.cpp \
             $(SRC_DIR)/repl.cpp \
             $(SRC_DIR)/package_manager.cpp \
-            $(SRC_DIR)/data_subsystem.cpp
+            $(SRC_DIR)/data_subsystem.cpp \
+            $(SRC_DIR)/lsp.cpp
 
 CORE_OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(CORE_SRCS))
 
 MAIN_SRC = $(SRC_DIR)/main.cpp
 MAIN_OBJ = $(BUILD_DIR)/main.o
+
+LSP_MAIN_SRC = $(SRC_DIR)/lsp_main.cpp
+LSP_MAIN_OBJ = $(BUILD_DIR)/lsp_main.o
 
 TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_lexer.cpp \
@@ -66,16 +70,18 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_tooling.cpp \
             $(TEST_DIR)/test_vm.cpp \
             $(TEST_DIR)/test_diagnostics.cpp \
-            $(TEST_DIR)/test_fuzz.cpp
+            $(TEST_DIR)/test_fuzz.cpp \
+            $(TEST_DIR)/test_lsp.cpp
 
 TEST_OBJS = $(patsubst $(TEST_DIR)/%.cpp, $(BUILD_DIR)/tests/%.o, $(TEST_SRCS))
 
 TARGET = $(BIN_DIR)/nextviper
+LSP_TARGET = $(BIN_DIR)/nextviper-lsp
 TEST_TARGET = $(BIN_DIR)/test_runner
 
 .PHONY: all clean test examples directories
 
-all: directories $(TARGET)
+all: directories $(TARGET) $(LSP_TARGET)
 
 directories:
 	@mkdir -p $(BIN_DIR) $(BUILD_DIR) $(BUILD_DIR)/tests
@@ -93,12 +99,17 @@ $(TARGET): $(CORE_OBJS) $(MAIN_OBJ)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "\033[1;32m[Built]\033[0m $(TARGET)"
 
+$(LSP_TARGET): $(CORE_OBJS) $(LSP_MAIN_OBJ)
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "\033[1;32m[Built]\033[0m $(LSP_TARGET)"
+
 $(TEST_TARGET): $(CORE_OBJS) $(TEST_OBJS)
 	@mkdir -p $(BIN_DIR)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "\033[1;32m[Built]\033[0m $(TEST_TARGET)"
 
-test: directories $(TEST_TARGET) $(TARGET)
+test: directories $(TEST_TARGET) $(TARGET) $(LSP_TARGET)
 	@echo "\n\033[1;34m=== Running Unit Tests ===\033[0m"
 	@./$(TEST_TARGET)
 	@echo "\n\033[1;34m=== Running CLI Integration Tests ===\033[0m"
@@ -121,4 +132,3 @@ clean:
 	@echo "\033[1;33m[Cleaned]\033[0m Build artifacts removed"
 
 -include $(wildcard $(BUILD_DIR)/*.d) $(wildcard $(BUILD_DIR)/tests/*.d)
-

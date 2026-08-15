@@ -531,6 +531,9 @@ void TypeChecker::visit_import_stmt(const ImportStmt& stmt) {
             }
         }
         current_env_->define(bind_name, Type::make_map(Type::make_string(), Type::make_any()), false);
+        if (bind_name.starts_with("std.") && bind_name.size() > 4) {
+            current_env_->define(bind_name.substr(4), Type::make_map(Type::make_string(), Type::make_any()), false);
+        }
     }
 }
 

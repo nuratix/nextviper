@@ -2,6 +2,7 @@
 set -e
 
 BIN="./bin/nextviper"
+LSP_BIN="./bin/nextviper-lsp"
 
 if [ ! -f "$BIN" ]; then
     echo "Binary $BIN not found! Compile first."
@@ -104,8 +105,28 @@ if [[ "$PKG_OUT" != *"NextViper Package Manager"* ]]; then
 fi
 echo "  ✓ PASS: package command succeeded"
 
-# Test 11: Error handling with non-zero exit code
-echo "11. Checking error exit codes"
+# Test 11: Info command
+echo "11. Checking info command"
+INFO_OUT=$($BIN info)
+if [[ "$INFO_OUT" != *"NextViper Toolchain"* ]]; then
+    echo "FAIL: info output incorrect"
+    exit 1
+fi
+echo "  ✓ PASS: info command succeeded"
+
+# Test 12: LSP Binary --version
+echo "12. Checking nextviper-lsp binary"
+if [ -f "$LSP_BIN" ]; then
+    LSP_OUT=$($LSP_BIN --version)
+    if [[ "$LSP_OUT" != *"nextviper-lsp"* ]]; then
+        echo "FAIL: lsp binary failed"
+        exit 1
+    fi
+    echo "  ✓ PASS: nextviper-lsp binary verified"
+fi
+
+# Test 13: Error handling with non-zero exit code
+echo "13. Checking error exit codes"
 set +e
 $BIN run non_existent_file.nv > /dev/null 2>&1
 EXIT_CODE=$?

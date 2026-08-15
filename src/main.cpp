@@ -11,6 +11,7 @@
 #include "nextviper/ir.hpp"
 #include "nextviper/native_compiler.hpp"
 #include "nextviper/package_manager.hpp"
+#include "nextviper/lsp.hpp"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -18,6 +19,8 @@
 #include <vector>
 #include <chrono>
 #include <filesystem>
+#include <thread>
+#include <iomanip>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -34,13 +37,15 @@ void print_help() {
               << "\033[1mUSAGE:\033[0m\n"
               << "  nextviper <COMMAND> [OPTIONS] [FILES...]\n\n"
               << "\033[1mCORE COMMANDS:\033[0m\n"
-              << "  \033[1;36mrun\033[0m <file.nv> [args...]      Execute a NextViper program file\n"
+              << "  \033[1;36mrun\033[0m <file.nv> [--watch]      Execute a NextViper program file (optional watch mode)\n"
               << "  \033[1;36mfmt\033[0m [options] <files...>     Format NextViper source code deterministically\n"
               << "  \033[1;36mbuild\033[0m <file.nv> [-o out]     Compile program to bytecode (.nvc) or native binary\n"
               << "  \033[1;36mcompile\033[0m <file.nv> [-o out]   Compile program directly to native machine code\n"
-              << "  \033[1;36mtest\033[0m [path]                  Run NextViper automated test suite\n"
-              << "  \033[1;36mcheck\033[0m <files...>             Validate syntax and types statically without executing\n"
-              << "  \033[1;36mrepl\033[0m                         Start the interactive NextViper shell\n"
+              << "  \033[1;36mtest\033[0m [path]                  Run automated NextViper test suite\n"
+              << "  \033[1;36mcheck\033[0m [files...]             Validate syntax and types statically without executing\n"
+              << "  \033[1;36mrepl\033[0m                         Start interactive NextViper shell\n"
+              << "  \033[1;36mlsp\033[0m                          Start standard Language Server Protocol daemon\n"
+              << "  \033[1;36minfo\033[0m                         Display project, dependencies, and compiler info\n"
               << "  \033[1;36meval\033[0m <code>, -e                Evaluate an inline NextViper code string\n\n"
               << "\033[1mPACKAGE MANAGER COMMANDS:\033[0m\n"
               << "  \033[1;36minit\033[0m [name]                  Initialize a new NextViper project (nextviper.toml)\n"
@@ -64,8 +69,10 @@ void print_help() {
               << "\033[1mEXAMPLES:\033[0m\n"
               << "  nextviper init my_app\n"
               << "  nextviper add math_utils --path ../math_utils\n"
-              << "  nextviper install\n"
-              << "  nextviper run src/main.nv\n";
+              << "  nextviper check\n"
+              << "  nextviper test\n"
+              << "  nextviper run src/main.nv\n"
+              << "  nextviper run src/main.nv --watch\n";
 }
 
 std::string read_file(const std::string& path) {
@@ -118,6 +125,38 @@ int run_file(const std::string& path, bool use_tree_walk = false) {
     return 0;
 }
 
+int watch_and_run_file(const std::string& path) {
+    if (!fs::exists(path)) {
+        std::cerr << "error: file '" << path << "' does not exist\n";
+        return 1;
+    }
+
+    std::cout << "\033[1;36m[watch]\033[0m Starting NextViper watch mode on " << path << " (Ctrl+C to stop)...\n";
+    auto last_time = fs::last_write_time(path);
+
+    // Initial run
+    run_file(path);
+
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        try {
+            if (fs::exists(path)) {
+                auto current_time = fs::last_write_time(path);
+                if (current_time != last_time) {
+                    last_time = current_time;
+                    std::cout << "\n\033[1;33m[watch]\033[0m Change detected in " << path << ". Re-running...\n";
+                    std::cout << "----------------------------------------------------\n";
+                    run_file(path);
+                    std::cout << "----------------------------------------------------\n";
+                }
+            }
+        } catch (...) {
+            // Ignore filesystem race conditions
+        }
+    }
+    return 0;
+}
+
 int fmt_command(int argc, char* argv[]) {
     bool check_only = false;
     bool show_diff = false;
@@ -148,6 +187,23 @@ int fmt_command(int argc, char* argv[]) {
         std::string formatted = Formatter::format_source(buffer.str());
         std::cout << formatted;
         return 0;
+    }
+
+    if (target_files.empty()) {
+        if (fs::exists("src")) {
+            for (const auto& entry : fs::recursive_directory_iterator("src")) {
+                if (entry.is_regular_file() && entry.path().extension() == ".nv") {
+                    target_files.push_back(entry.path().string());
+                }
+            }
+        }
+        if (fs::exists("tests")) {
+            for (const auto& entry : fs::recursive_directory_iterator("tests")) {
+                if (entry.is_regular_file() && entry.path().extension() == ".nv") {
+                    target_files.push_back(entry.path().string());
+                }
+            }
+        }
     }
 
     if (target_files.empty()) {
@@ -206,7 +262,22 @@ int check_command(int argc, char* argv[]) {
     }
 
     if (files.empty()) {
-        std::cerr << "error: no files specified to check\n"
+        // Auto-discover files in project
+        if (fs::exists("src/main.nv")) {
+            files.push_back("src/main.nv");
+        } else if (fs::exists("main.nv")) {
+            files.push_back("main.nv");
+        } else if (fs::exists("src")) {
+            for (const auto& entry : fs::recursive_directory_iterator("src")) {
+                if (entry.is_regular_file() && entry.path().extension() == ".nv") {
+                    files.push_back(entry.path().string());
+                }
+            }
+        }
+    }
+
+    if (files.empty()) {
+        std::cerr << "error: no NextViper files found to check\n"
                   << "usage: nextviper check [options] <files...>\n";
         return 1;
     }
@@ -411,9 +482,9 @@ int compile_file(const std::string& path, const std::string& out_path, bool emit
 }
 
 int test_command(int argc, char* argv[]) {
-    // If specific file or test path is provided
     std::string target_path = (argc >= 3) ? argv[2] : "";
 
+    // If a specific file is given
     if (!target_path.empty() && fs::is_regular_file(target_path)) {
         std::cout << "\033[1;36m=== Running NextViper Test: " << target_path << " ===\033[0m\n";
         auto start = std::chrono::high_resolution_clock::now();
@@ -430,9 +501,84 @@ int test_command(int argc, char* argv[]) {
         }
     }
 
-    // Default: Run C++ test runner engine
+    // Discover .nv test files in tests/ or specified directory
+    std::string test_dir = target_path.empty() ? "tests" : target_path;
+    std::vector<std::string> nv_test_files;
+
+    if (fs::exists(test_dir) && fs::is_directory(test_dir)) {
+        for (const auto& entry : fs::recursive_directory_iterator(test_dir)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".nv") {
+                nv_test_files.push_back(entry.path().string());
+            }
+        }
+    }
+
+    if (!nv_test_files.empty()) {
+        std::cout << "\033[1;36m====================================================\033[0m\n";
+        std::cout << "  NextViper Test Runner (" << nv_test_files.size() << " test file(s))\n";
+        std::cout << "\033[1;36m====================================================\033[0m\n\n";
+
+        int passed = 0;
+        int failed = 0;
+        double total_ms = 0;
+
+        for (const auto& test_file : nv_test_files) {
+            auto start = std::chrono::high_resolution_clock::now();
+            int res = run_file(test_file);
+            auto end = std::chrono::high_resolution_clock::now();
+            double ms = std::chrono::duration<double, std::milli>(end - start).count();
+            total_ms += ms;
+
+            if (res == 0) {
+                std::cout << "  \033[1;32m✓ PASS:\033[0m " << test_file << " (" << std::fixed << std::setprecision(2) << ms << " ms)\n";
+                passed++;
+            } else {
+                std::cout << "  \033[1;31m✗ FAIL:\033[0m " << test_file << " (" << std::fixed << std::setprecision(2) << ms << " ms)\n";
+                failed++;
+            }
+        }
+
+        std::cout << "\n----------------------------------------------------\n";
+        std::cout << "Tests Summary: " << (passed + failed) << " total | "
+                  << "\033[1;32m" << passed << " passed\033[0m | "
+                  << (failed > 0 ? "\033[1;31m" : "") << failed << " failed\033[0m ("
+                  << std::fixed << std::setprecision(2) << total_ms << " ms)\n";
+        std::cout << "====================================================\n";
+        return failed == 0 ? 0 : 1;
+    }
+
+    // Default to C++ compiler test runner
     int res = system("bin/test_runner");
     return WEXITSTATUS(res);
+}
+
+int info_command() {
+    std::cout << "\033[1;32mNextViper Toolchain & Project Environment\033[0m\n\n";
+    std::cout << "  • Compiler Version:  v" << VERSION_STRING << " (" << RELEASE_CODENAME << ")\n";
+    std::cout << "  • Standard Library:  std.io, std.fs, std.math, std.net, std.json, std.time, std.crypto, std.process\n";
+    std::cout << "  • Subsystems:        Data (DataFrames), Tensor (Autograd), AI (Neural Nets), GPU (Vulkan SPIR-V)\n";
+    std::cout << "  • Target Platform:   Linux x86_64 / POSIX (C++20)\n\n";
+
+    if (fs::exists("nextviper.toml")) {
+        std::string err;
+        auto manifest_opt = ProjectManifest::load_from_file("nextviper.toml", err);
+        if (manifest_opt) {
+            std::cout << "\033[1mProject Workspace Details:\033[0m\n";
+            std::cout << "  • Name:              " << manifest_opt->name << "\n";
+            std::cout << "  • Version:           " << manifest_opt->version.to_string() << "\n";
+            std::cout << "  • Description:       " << manifest_opt->description << "\n";
+            std::cout << "  • License:           " << manifest_opt->license << "\n";
+            std::cout << "  • Main Entry:        " << manifest_opt->main_file << "\n";
+            std::cout << "  • Dependencies:      " << manifest_opt->dependencies.size() << " declared\n";
+            for (const auto& [dep, info] : manifest_opt->dependencies) {
+                std::cout << "    └── " << dep << " (" << info.version_req.to_string() << ")\n";
+            }
+            std::cout << "  • Lockfile:          " << (fs::exists("nextviper.lock") ? "Locked (valid)" : "Not generated (run nextviper install)") << "\n";
+        }
+    } else {
+        std::cout << "  • Project:           No nextviper.toml in current directory.\n";
+    }
+    return 0;
 }
 
 int bench_file(const std::string& path) {
@@ -684,6 +830,16 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    if (first_arg == "lsp") {
+        nextviper::LanguageServer server(std::cin, std::cout);
+        server.run();
+        return 0;
+    }
+
+    if (first_arg == "info") {
+        return nextviper::info_command();
+    }
+
     if (first_arg == "init") {
         nextviper::PackageManager pm;
         std::string name = (argc >= 3) ? argv[2] : "";
@@ -810,8 +966,30 @@ int main(int argc, char* argv[]) {
             std::cerr << "error: missing file path to run\n";
             return 1;
         }
-        bool use_tree = (argc >= 4 && std::string(argv[3]) == "--tree");
-        return nextviper::run_file(argv[2], use_tree);
+        bool watch = false;
+        bool use_tree = false;
+        std::string target_file = "";
+
+        for (int i = 2; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--watch" || arg == "-w") {
+                watch = true;
+            } else if (arg == "--tree") {
+                use_tree = true;
+            } else if (target_file.empty() && !arg.starts_with("-")) {
+                target_file = arg;
+            }
+        }
+
+        if (target_file.empty()) {
+            std::cerr << "error: missing file path to run\n";
+            return 1;
+        }
+
+        if (watch) {
+            return nextviper::watch_and_run_file(target_file);
+        }
+        return nextviper::run_file(target_file, use_tree);
     }
 
     if (first_arg == "bench") {

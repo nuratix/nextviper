@@ -1124,14 +1124,20 @@ int PackageManager::cmd_publish(bool dry_run) {
     auto m = *manifest_opt;
     bool updated_manifest = false;
 
+    bool is_interactive = !dry_run && isatty(fileno(stdin));
+
     // Interactive prompt for License if missing
     if (m.license.empty()) {
-        std::cout << "\033[1;33m? Package License (e.g. MIT, Apache-2.0, BSD-3-Clause) [default: MIT]: \033[0m";
-        std::string input;
-        if (std::getline(std::cin, input)) {
-            input = trim(input);
-            m.license = input.empty() ? "MIT" : input;
-            updated_manifest = true;
+        if (is_interactive) {
+            std::cout << "\033[1;33m? Package License (e.g. MIT, Apache-2.0, BSD-3-Clause) [default: MIT]: \033[0m";
+            std::string input;
+            if (std::getline(std::cin, input)) {
+                input = trim(input);
+                m.license = input.empty() ? "MIT" : input;
+                updated_manifest = true;
+            } else {
+                m.license = "MIT";
+            }
         } else {
             m.license = "MIT";
         }
@@ -1139,19 +1145,23 @@ int PackageManager::cmd_publish(bool dry_run) {
 
     // Interactive prompt for Description if missing
     if (m.description.empty()) {
-        std::cout << "\033[1;33m? Package Summary / Description: \033[0m";
-        std::string input;
-        if (std::getline(std::cin, input)) {
-            input = trim(input);
-            m.description = input.empty() ? (m.name + " package for NextViper") : input;
-            updated_manifest = true;
+        if (is_interactive) {
+            std::cout << "\033[1;33m? Package Summary / Description: \033[0m";
+            std::string input;
+            if (std::getline(std::cin, input)) {
+                input = trim(input);
+                m.description = input.empty() ? (m.name + " package for NextViper") : input;
+                updated_manifest = true;
+            } else {
+                m.description = m.name + " package";
+            }
         } else {
             m.description = m.name + " package";
         }
     }
 
     // Interactive prompt for Repository URL if missing
-    if (m.repository.empty()) {
+    if (m.repository.empty() && is_interactive) {
         std::cout << "\033[1;33m? Repository URL (e.g. https://github.com/user/pkg) [optional]: \033[0m";
         std::string input;
         if (std::getline(std::cin, input)) {
@@ -1164,7 +1174,7 @@ int PackageManager::cmd_publish(bool dry_run) {
     }
 
     // Interactive prompt for Homepage URL if missing
-    if (m.homepage.empty()) {
+    if (m.homepage.empty() && is_interactive) {
         std::cout << "\033[1;33m? Homepage URL [optional]: \033[0m";
         std::string input;
         if (std::getline(std::cin, input)) {
@@ -1177,7 +1187,7 @@ int PackageManager::cmd_publish(bool dry_run) {
     }
 
     // Interactive prompt for Documentation URL if missing
-    if (m.documentation.empty()) {
+    if (m.documentation.empty() && is_interactive) {
         std::cout << "\033[1;33m? Documentation URL [optional]: \033[0m";
         std::string input;
         if (std::getline(std::cin, input)) {
@@ -1190,7 +1200,7 @@ int PackageManager::cmd_publish(bool dry_run) {
     }
 
     // Interactive prompt for Category if missing
-    if (m.category.empty() || m.category == "general") {
+    if ((m.category.empty() || m.category == "general") && is_interactive) {
         std::cout << "\033[1;33m? Category (general/ai/data/numerical/networking/crypto) [default: general]: \033[0m";
         std::string input;
         if (std::getline(std::cin, input)) {
