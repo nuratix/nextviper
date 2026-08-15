@@ -1,28 +1,44 @@
+<p align="center">
+  <a href="https://nextviper.nuratix.com">
+    <img src="https://nextviper.nuratix.com/logo-black.png" alt="NextViper Logo" width="180" height="auto" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://nuratix.com">
+    <img src="https://www.nuratix.com/nuratix-logo-light.png" alt="By Nuratix LLC" width="140" height="auto" />
+  </a>
+</p>
+
 # NextViper Programming Language (v1.0.0 Apex)
 
 <p align="center">
   <strong>A modern, easy-to-learn, lightning-fast general-purpose programming language.</strong><br>
-  <em>Engineered for AI, high-performance data processing, automation, and systems development.</em>
+  <em>Engineered by Nuratix LLC for AI, high-performance data processing, automation, and systems development.</em>
 </p>
 
 <p align="center">
+  <a href="https://nextviper.nuratix.com"><b>Website</b></a> •
+  <a href="https://nextviper.nuratix.com/download"><b>Downloads</b></a> •
+  <a href="https://nextviper.nuratix.com/learn"><b>6-Day Master Course</b></a> •
   <a href="docs/TUTORIAL_30_MINUTES.md"><b>Learn in 30 Minutes</b></a> •
   <a href="docs/LANGUAGE_SPECIFICATION_1.0.md"><b>Language Spec</b></a> •
   <a href="docs/STANDARD_LIBRARY_API.md"><b>Standard Library API</b></a> •
   <a href="docs/CROSS_PLATFORM_BUILD.md"><b>Build Guide</b></a> •
   <a href="PERFORMANCE.md"><b>Benchmarks</b></a> •
-  <a href="docs/SECURITY.md"><b>Security Audit</b></a>
+  <a href="LICENSE"><b>Apache-2.0 License</b></a>
 </p>
 
 ---
 
 ## ⚡ Overview
 
-**NextViper** is a production-grade 1.0 programming language engineered for developer ergonomics, absolute reliability, and raw performance. Inspired by the clean readability of modern languages without being a clone, NextViper offers:
+**NextViper** is a production-grade 1.0 programming language engineered for developer ergonomics, absolute reliability, and raw performance, developed and maintained by **Nuratix LLC** ([https://nuratix.com](https://nuratix.com)).
 
 - **Clean, Expressive Syntax**: Python-like clean block scoping `:` and `{}` blocks, arrow expressions (`=>`), explicit mutability (`let mut`), and native pipeline chaining (`|>`).
 - **High-Performance Architecture**: Dual-engine runtime featuring a high-speed tree-walk interpreter, register-based VM, and a native AOT compiler with constant folding and dead-code elimination.
 - **First-Class AI & Data Science Standard Library**: Native high-performance N-dimensional tensors (`tensor.tensor`, `tensor.matmul`), tabular DataFrames (`data.from_csv`, `data.DataFrame`), and neural building blocks (`ai.Linear`, `ai.SGD`, `ai.Adam`).
+- **Hardware Acceleration**: Built-in Khronos Vulkan compute backend executing parallel matrix operations on GPU hardware.
 - **Professional Tooling Built-in**: Zero-dependency CLI with deterministic code formatting (`fmt`), package management (`package`), test runner (`test`), static type checking (`check`), and an interactive REPL (`repl`).
 - **Rock-Solid Security**: Memory-safe execution, recursion bounds, CPU timeout protections, isolated file paths, and zero arbitrary code execution during package resolution.
 
@@ -30,7 +46,12 @@
 
 ## 🚀 Quick Start
 
-### 1. Build NextViper
+### 1. Automated Installation
+```bash
+curl -fsSL https://nextviper.nuratix.com/install.sh | sh
+```
+
+### 2. Build NextViper from Source
 
 NextViper builds out of the box with any C++20 compiler (`g++` 10+, `clang++` 12+, Apple Clang 13+, or MSVC 2019+):
 
@@ -47,7 +68,7 @@ The unified CLI binary is generated at `bin/nextviper`.
 
 ---
 
-### 2. Run Hello World & Tutorials
+### 3. Run Hello World & Tutorials
 
 ```bash
 # Run Hello World
@@ -60,7 +81,7 @@ The unified CLI binary is generated at `bin/nextviper`.
 
 ---
 
-### 3. Run Test Suite
+### 4. Run Test Suite
 
 ```bash
 make test
@@ -171,8 +192,6 @@ let output = model.forward(A)
 
 ## 🛠️ CLI Reference
 
-NextViper comes equipped with professional developer tooling:
-
 ```
 Usage: nextviper <command> [arguments...] [options]
 
@@ -189,21 +208,6 @@ Commands:
   tokens <file.nv>         Output lexical token stream
   version, -v              Print version information
   help, -h                 Display command help
-```
-
-### Aesthetic Diagnostics
-NextViper features Rust-style error reports with colored underlines and actionable hints:
-
-```
-error[NV102]:
-    unknown variable `total`
-
-    --> main.nv:12:5
-
-    12 | print(total)
-       |       ^^^^^
-
-    help: define `total` before using it
 ```
 
 ---
@@ -223,25 +227,17 @@ nextviper/
 │   ├── hello_world.nv            # Minimal example
 │   ├── data_pipeline.nv          # Pipeline operator showcase
 │   └── tutorials/                # Structured tutorial scripts
-│       ├── 01_basics.nv
-│       ├── 02_collections.nv
-│       ├── 03_loops_and_control.nv
-│       ├── 04_functions_and_closures.nv
-│       ├── 05_modules_and_imports.nv
-│       └── 06_ai_and_data.nv
 ├── benchmarks/                   # Performance benchmarking suite
-│   └── benchmark_suite.nv        # Comprehensive runtime benchmarks
 ├── include/nextviper/            # C++ Header declarations
 ├── src/                          # C++ Implementation source files
 ├── tests/                        # Unit, integration, and fuzz test suites
-├── PERFORMANCE.md                # Benchmark analysis & methodology
 ├── Makefile                      # Standard build system
 ├── CMakeLists.txt                # CMake build configuration
-└── LICENSE                       # MIT License
+└── LICENSE                       # Apache-2.0 License
 ```
 
 ---
 
 ## 📜 License
 
-NextViper is open-source software released under the [MIT License](LICENSE).
+NextViper is open-source software maintained by **Nuratix LLC** and released under the [Apache-2.0 License](LICENSE).
