@@ -25,15 +25,15 @@ curl -fsSL https://nextviper.nuratix.com/install.sh | NEXTVIPER_INSTALL_DIR=/opt
 
 ---
 
-## 2. GitHub Releases (Pre-Compiled Tarballs)
+## 2. Direct Release Downloads (Pre-Compiled Tarballs)
 
-You can manually download pre-built release archives from [github.com/nuratix/nextviper/releases](https://github.com/nuratix/nextviper/releases):
+You can download pre-built release archives directly from the official [NextViper Download Hub](https://nextviper.nuratix.com/download):
 
 1. Download the archive for your architecture:
-   - **Linux x86_64**: `nextviper-v1.0.0-linux-x86_64.tar.gz`
-   - **Linux ARM64**: `nextviper-v1.0.0-linux-arm64.tar.gz`
-   - **macOS Apple Silicon**: `nextviper-v1.0.0-darwin-arm64.tar.gz`
-   - **macOS Intel**: `nextviper-v1.0.0-darwin-x86_64.tar.gz`
+   - **Linux x86_64**: [`nextviper-v1.0.0-linux-x86_64.tar.gz`](https://nextviper.nuratix.com/downloads/nextviper-v1.0.0-linux-x86_64.tar.gz)
+   - **Linux ARM64**: [`nextviper-v1.0.0-linux-arm64.tar.gz`](https://nextviper.nuratix.com/downloads/nextviper-v1.0.0-linux-arm64.tar.gz)
+   - **macOS Apple Silicon**: [`nextviper-v1.0.0-darwin-arm64.tar.gz`](https://nextviper.nuratix.com/downloads/nextviper-v1.0.0-darwin-arm64.tar.gz)
+   - **macOS Intel**: [`nextviper-v1.0.0-darwin-x86_64.tar.gz`](https://nextviper.nuratix.com/downloads/nextviper-v1.0.0-darwin-x86_64.tar.gz)
 2. Verify checksum:
    ```bash
    sha256sum --check --ignore-missing SHA256SUMS
