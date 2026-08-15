@@ -14,24 +14,30 @@ struct AutogradNode;
 
 enum class Device {
     CPU,
+    GPU,
     CUDA,
     MPS,
+    AUTO,
     CUSTOM
 };
 
 inline std::string device_to_string(Device dev) {
     switch (dev) {
         case Device::CPU: return "cpu";
+        case Device::GPU: return "gpu";
         case Device::CUDA: return "cuda";
         case Device::MPS: return "mps";
+        case Device::AUTO: return "auto";
         case Device::CUSTOM: return "custom";
     }
-    return "unknown";
+    return "cpu";
 }
 
 inline Device string_to_device(const std::string& str) {
-    if (str == "cuda" || str == "gpu") return Device::CUDA;
+    if (str == "gpu") return Device::GPU;
+    if (str == "cuda") return Device::CUDA;
     if (str == "mps") return Device::MPS;
+    if (str == "auto") return Device::AUTO;
     if (str == "custom") return Device::CUSTOM;
     return Device::CPU;
 }

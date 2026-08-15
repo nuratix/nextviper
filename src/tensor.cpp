@@ -1,6 +1,7 @@
 #include "nextviper/tensor.hpp"
 #include "nextviper/autograd.hpp"
 #include "nextviper/interpreter.hpp"
+#include "nextviper/gpu_backend.hpp"
 #include <cmath>
 #include <random>
 #include <sstream>
@@ -71,6 +72,13 @@ Tensor::Tensor()
 
 Tensor::Tensor(std::vector<int64_t> shape, DType dtype, Device device)
     : shape_(std::move(shape)), dtype_(dtype), device_(device), is_contiguous_(true) {
+    if (device_ == Device::AUTO) {
+        device_ = GPUTensorBackend::is_gpu_available() ? Device::GPU : Device::CPU;
+    }
+    if (device_ == Device::GPU && !GPUTensorBackend::is_gpu_available()) {
+        throw std::runtime_error("GPU unavailable: No compatible GPU/Vulkan compute device found. Use device: 'auto' or device: 'cpu'.");
+    }
+
     constexpr int64_t MAX_TENSOR_NUMEL = 100'000'000;
     numel_ = 1;
     for (int64_t dim : shape_) {
@@ -82,12 +90,25 @@ Tensor::Tensor(std::vector<int64_t> shape, DType dtype, Device device)
     }
     compute_strides();
     size_t bytes = numel_ * dtype_size(dtype_);
-    data_ = CPUTensorBackend::instance().allocate(bytes);
-    CPUTensorBackend::instance().fill(data_.get(), numel_, 0.0, dtype_);
+
+    if (device_ == Device::GPU) {
+        data_ = GPUTensorBackend::instance().allocate(bytes);
+        GPUTensorBackend::instance().fill(data_.get(), numel_, 0.0, dtype_);
+    } else {
+        data_ = CPUTensorBackend::instance().allocate(bytes);
+        CPUTensorBackend::instance().fill(data_.get(), numel_, 0.0, dtype_);
+    }
 }
 
 Tensor::Tensor(std::vector<int64_t> shape, const std::vector<double>& values, DType dtype, Device device)
     : shape_(std::move(shape)), dtype_(dtype), device_(device), is_contiguous_(true) {
+    if (device_ == Device::AUTO) {
+        device_ = GPUTensorBackend::is_gpu_available() ? Device::GPU : Device::CPU;
+    }
+    if (device_ == Device::GPU && !GPUTensorBackend::is_gpu_available()) {
+        throw std::runtime_error("GPU unavailable: No compatible GPU/Vulkan compute device found. Use device: 'auto' or device: 'cpu'.");
+    }
+
     constexpr int64_t MAX_TENSOR_NUMEL = 100'000'000;
     numel_ = 1;
     for (int64_t dim : shape_) {
@@ -99,7 +120,13 @@ Tensor::Tensor(std::vector<int64_t> shape, const std::vector<double>& values, DT
     }
     compute_strides();
     size_t bytes = numel_ * dtype_size(dtype_);
-    data_ = CPUTensorBackend::instance().allocate(bytes);
+
+    if (device_ == Device::GPU) {
+        data_ = GPUTensorBackend::instance().allocate(bytes);
+    } else {
+        data_ = CPUTensorBackend::instance().allocate(bytes);
+    }
+
     for (int64_t i = 0; i < numel_; ++i) {
         double val = (i < static_cast<int64_t>(values.size())) ? values[i] : 0.0;
         set_flat(i, val);
@@ -116,13 +143,21 @@ Tensor Tensor::zeros(const std::vector<int64_t>& shape, DType dtype, Device devi
 
 Tensor Tensor::ones(const std::vector<int64_t>& shape, DType dtype, Device device) {
     Tensor t(shape, dtype, device);
-    CPUTensorBackend::instance().fill(t.data_.get(), t.numel_, 1.0, dtype);
+    if (t.device_ == Device::GPU) {
+        GPUTensorBackend::instance().fill(t.data_.get(), t.numel_, 1.0, dtype);
+    } else {
+        CPUTensorBackend::instance().fill(t.data_.get(), t.numel_, 1.0, dtype);
+    }
     return t;
 }
 
 Tensor Tensor::full(const std::vector<int64_t>& shape, double val, DType dtype, Device device) {
     Tensor t(shape, dtype, device);
-    CPUTensorBackend::instance().fill(t.data_.get(), t.numel_, val, dtype);
+    if (t.device_ == Device::GPU) {
+        GPUTensorBackend::instance().fill(t.data_.get(), t.numel_, val, dtype);
+    } else {
+        CPUTensorBackend::instance().fill(t.data_.get(), t.numel_, val, dtype);
+    }
     return t;
 }
 
@@ -149,20 +184,40 @@ Tensor Tensor::uniform(const std::vector<int64_t>& shape, double low, double hig
 }
 
 double Tensor::get_flat(size_t index) const {
-    if (index >= static_cast<size_t>(numel_)) return 0.0;
-    if (dtype_ == DType::FLOAT32) return static_cast<const float*>(data_.get())[index];
-    if (dtype_ == DType::FLOAT64) return static_cast<const double*>(data_.get())[index];
-    if (dtype_ == DType::INT32) return static_cast<const int32_t*>(data_.get())[index];
-    if (dtype_ == DType::INT64) return static_cast<const int64_t*>(data_.get())[index];
+    if (index >= static_cast<size_t>(numel_) || !data_) return 0.0;
+    const void* ptr = data_.get();
+    if (device_ == Device::GPU) {
+        const auto* buf = static_cast<const GPUBuffer*>(data_.get());
+        if (buf && buf->mapped_data) {
+            ptr = buf->mapped_data;
+        } else {
+            return 0.0;
+        }
+    }
+
+    if (dtype_ == DType::FLOAT32) return static_cast<const float*>(ptr)[index];
+    if (dtype_ == DType::FLOAT64) return static_cast<const double*>(ptr)[index];
+    if (dtype_ == DType::INT32) return static_cast<const int32_t*>(ptr)[index];
+    if (dtype_ == DType::INT64) return static_cast<const int64_t*>(ptr)[index];
     return 0.0;
 }
 
 void Tensor::set_flat(size_t index, double val) {
-    if (index >= static_cast<size_t>(numel_)) return;
-    if (dtype_ == DType::FLOAT32) static_cast<float*>(data_.get())[index] = static_cast<float>(val);
-    else if (dtype_ == DType::FLOAT64) static_cast<double*>(data_.get())[index] = val;
-    else if (dtype_ == DType::INT32) static_cast<int32_t*>(data_.get())[index] = static_cast<int32_t>(val);
-    else if (dtype_ == DType::INT64) static_cast<int64_t*>(data_.get())[index] = static_cast<int64_t>(val);
+    if (index >= static_cast<size_t>(numel_) || !data_) return;
+    void* ptr = data_.get();
+    if (device_ == Device::GPU) {
+        auto* buf = static_cast<GPUBuffer*>(data_.get());
+        if (buf && buf->mapped_data) {
+            ptr = buf->mapped_data;
+        } else {
+            return;
+        }
+    }
+
+    if (dtype_ == DType::FLOAT32) static_cast<float*>(ptr)[index] = static_cast<float>(val);
+    else if (dtype_ == DType::FLOAT64) static_cast<double*>(ptr)[index] = val;
+    else if (dtype_ == DType::INT32) static_cast<int32_t*>(ptr)[index] = static_cast<int32_t>(val);
+    else if (dtype_ == DType::INT64) static_cast<int64_t*>(ptr)[index] = static_cast<int64_t>(val);
 }
 
 size_t Tensor::compute_offset(const std::vector<int64_t>& indices) const {
@@ -194,16 +249,43 @@ double Tensor::item() const {
     return get_flat(0);
 }
 
-Tensor Tensor::to(Device dev) const {
-    if (dev == device_) return *this;
-    Tensor res(shape_, dtype_, dev);
-    CPUTensorBackend::instance().copy(res.data_.get(), data_.get(), numel_ * dtype_size(dtype_));
+Tensor Tensor::to(Device target_dev) const {
+    if (target_dev == Device::AUTO) {
+        target_dev = GPUTensorBackend::is_gpu_available() ? Device::GPU : Device::CPU;
+    }
+    if (target_dev == Device::GPU && !GPUTensorBackend::is_gpu_available()) {
+        throw std::runtime_error("GPU unavailable: No compatible GPU or Vulkan compute device found on this system. Check available devices with tensor.device_count() or use device: 'auto'.");
+    }
+    if (target_dev == device_) {
+        return *this;
+    }
+
+    Tensor res(shape_, dtype_, target_dev);
+    size_t bytes = numel_ * dtype_size(dtype_);
+
+    if (device_ == Device::CPU && target_dev == Device::GPU) {
+        GPUTensorBackend::instance().copy_host_to_device(res.data_.get(), data_.get(), bytes);
+    } else if (device_ == Device::GPU && target_dev == Device::CPU) {
+        GPUTensorBackend::instance().copy_device_to_host(res.data_.get(), data_.get(), bytes);
+    } else if (device_ == Device::GPU && target_dev == Device::GPU) {
+        GPUTensorBackend::instance().copy_device_to_device(res.data_.get(), data_.get(), bytes);
+    } else {
+        CPUTensorBackend::instance().copy(res.data_.get(), data_.get(), bytes);
+    }
+
+    res.set_requires_grad(requires_grad());
+    res.set_is_leaf(is_leaf());
     return res;
 }
 
 Tensor Tensor::clone() const {
     Tensor res(shape_, dtype_, device_);
-    CPUTensorBackend::instance().copy(res.data_.get(), data_.get(), numel_ * dtype_size(dtype_));
+    size_t bytes = numel_ * dtype_size(dtype_);
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().copy_device_to_device(res.data_.get(), data_.get(), bytes);
+    } else {
+        CPUTensorBackend::instance().copy(res.data_.get(), data_.get(), bytes);
+    }
     res.set_requires_grad(requires_grad());
     res.set_is_leaf(is_leaf());
     return res;
@@ -254,9 +336,13 @@ Tensor Tensor::T() const {
     int64_t rows = shape_[0];
     int64_t cols = shape_[1];
     Tensor res({cols, rows}, dtype_, device_);
-    for (int64_t r = 0; r < rows; ++r) {
-        for (int64_t c = 0; c < cols; ++c) {
-            res.set({c, r}, get({r, c}));
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().transpose(res.data(), data(), rows, cols, dtype_);
+    } else {
+        for (int64_t r = 0; r < rows; ++r) {
+            for (int64_t c = 0; c < cols; ++c) {
+                res.set({c, r}, get({r, c}));
+            }
         }
     }
     if (AutogradContext::is_grad_enabled() && requires_grad()) {
@@ -276,7 +362,16 @@ Tensor Tensor::flatten() const {
 // Mathematical operations with Autograd integration
 
 template<typename Op>
-static Tensor binary_broadcast_op(const Tensor& a, const Tensor& b, Op op) {
+static Tensor binary_broadcast_op(const Tensor& a, const Tensor& b, Op op, uint32_t gpu_op_type = 999) {
+    if (a.device() == Device::GPU && b.device() == Device::GPU && a.shape() == b.shape() && gpu_op_type != 999) {
+        Tensor res(a.shape(), a.dtype(), Device::GPU);
+        if (gpu_op_type == 0) GPUTensorBackend::instance().add(res.data(), a.data(), b.data(), a.numel(), a.dtype());
+        else if (gpu_op_type == 1) GPUTensorBackend::instance().sub(res.data(), a.data(), b.data(), a.numel(), a.dtype());
+        else if (gpu_op_type == 2) GPUTensorBackend::instance().mul(res.data(), a.data(), b.data(), a.numel(), a.dtype());
+        else if (gpu_op_type == 3) GPUTensorBackend::instance().div(res.data(), a.data(), b.data(), a.numel(), a.dtype());
+        return res;
+    }
+
     if (a.shape() == b.shape()) {
         Tensor res(a.shape(), a.dtype(), a.device());
         for (int64_t i = 0; i < a.numel(); ++i) {
@@ -342,7 +437,7 @@ static Tensor binary_broadcast_op(const Tensor& a, const Tensor& b, Op op) {
 }
 
 Tensor Tensor::add(const Tensor& other) const {
-    Tensor res = binary_broadcast_op(*this, other, [](double u, double v) { return u + v; });
+    Tensor res = binary_broadcast_op(*this, other, [](double u, double v) { return u + v; }, 0u);
     if (AutogradContext::is_grad_enabled() && (requires_grad() || other.requires_grad())) {
         res.set_requires_grad(true);
         res.set_is_leaf(false);
@@ -354,7 +449,7 @@ Tensor Tensor::add(const Tensor& other) const {
 }
 
 Tensor Tensor::sub(const Tensor& other) const {
-    Tensor res = binary_broadcast_op(*this, other, [](double u, double v) { return u - v; });
+    Tensor res = binary_broadcast_op(*this, other, [](double u, double v) { return u - v; }, 1u);
     if (AutogradContext::is_grad_enabled() && (requires_grad() || other.requires_grad())) {
         res.set_requires_grad(true);
         res.set_is_leaf(false);
@@ -366,7 +461,7 @@ Tensor Tensor::sub(const Tensor& other) const {
 }
 
 Tensor Tensor::mul(const Tensor& other) const {
-    Tensor res = binary_broadcast_op(*this, other, [](double u, double v) { return u * v; });
+    Tensor res = binary_broadcast_op(*this, other, [](double u, double v) { return u * v; }, 2u);
     if (AutogradContext::is_grad_enabled() && (requires_grad() || other.requires_grad())) {
         res.set_requires_grad(true);
         res.set_is_leaf(false);
@@ -378,7 +473,7 @@ Tensor Tensor::mul(const Tensor& other) const {
 }
 
 Tensor Tensor::div(const Tensor& other) const {
-    Tensor res = binary_broadcast_op(*this, other, [](double u, double v) { return v == 0.0 ? 0.0 : (u / v); });
+    Tensor res = binary_broadcast_op(*this, other, [](double u, double v) { return v == 0.0 ? 0.0 : (u / v); }, 3u);
     if (AutogradContext::is_grad_enabled() && (requires_grad() || other.requires_grad())) {
         res.set_requires_grad(true);
         res.set_is_leaf(false);
@@ -391,7 +486,11 @@ Tensor Tensor::div(const Tensor& other) const {
 
 Tensor Tensor::scalar_add(double scalar) const {
     Tensor res(shape_, dtype_, device_);
-    for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, get_flat(i) + scalar);
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().scalar_add(res.data(), data(), scalar, numel_, dtype_);
+    } else {
+        for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, get_flat(i) + scalar);
+    }
     if (AutogradContext::is_grad_enabled() && requires_grad()) {
         res.set_requires_grad(true);
         res.set_is_leaf(false);
@@ -404,7 +503,11 @@ Tensor Tensor::scalar_add(double scalar) const {
 
 Tensor Tensor::scalar_mul(double scalar) const {
     Tensor res(shape_, dtype_, device_);
-    for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, get_flat(i) * scalar);
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().scalar_mul(res.data(), data(), scalar, numel_, dtype_);
+    } else {
+        for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, get_flat(i) * scalar);
+    }
     if (AutogradContext::is_grad_enabled() && requires_grad()) {
         res.set_requires_grad(true);
         res.set_is_leaf(false);
@@ -434,7 +537,11 @@ Tensor Tensor::pow(double exponent) const {
 
 Tensor Tensor::exp() const {
     Tensor res(shape_, dtype_, device_);
-    for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, std::exp(get_flat(i)));
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().exp_act(res.data(), data(), numel_, dtype_);
+    } else {
+        for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, std::exp(get_flat(i)));
+    }
     if (AutogradContext::is_grad_enabled() && requires_grad()) {
         res.set_requires_grad(true);
         res.set_is_leaf(false);
@@ -447,7 +554,11 @@ Tensor Tensor::exp() const {
 
 Tensor Tensor::log(double eps) const {
     Tensor res(shape_, dtype_, device_);
-    for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, std::log(std::max(eps, get_flat(i))));
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().log_act(res.data(), data(), numel_, dtype_);
+    } else {
+        for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, std::log(std::max(eps, get_flat(i))));
+    }
     if (AutogradContext::is_grad_enabled() && requires_grad()) {
         res.set_requires_grad(true);
         res.set_is_leaf(false);
@@ -460,7 +571,11 @@ Tensor Tensor::log(double eps) const {
 
 Tensor Tensor::abs() const {
     Tensor res(shape_, dtype_, device_);
-    for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, std::abs(get_flat(i)));
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().abs_act(res.data(), data(), numel_, dtype_);
+    } else {
+        for (int64_t i = 0; i < numel_; ++i) res.set_flat(i, std::abs(get_flat(i)));
+    }
     return res;
 }
 
@@ -485,11 +600,15 @@ Tensor Tensor::matmul(const Tensor& other) const {
         }
 
         res = Tensor({M, N}, dtype_, device_);
-        for (int64_t i = 0; i < M; ++i) {
-            for (int64_t k = 0; k < K; ++k) {
-                double a_ik = get({i, k});
-                for (int64_t j = 0; j < N; ++j) {
-                    res.set({i, j}, res.get({i, j}) + a_ik * other.get({k, j}));
+        if (device_ == Device::GPU && other.device() == Device::GPU) {
+            GPUTensorBackend::instance().matmul(res.data(), data(), other.data(), M, K, N, dtype_);
+        } else {
+            for (int64_t i = 0; i < M; ++i) {
+                for (int64_t k = 0; k < K; ++k) {
+                    double a_ik = get({i, k});
+                    for (int64_t j = 0; j < N; ++j) {
+                        res.set({i, j}, res.get({i, j}) + a_ik * other.get({k, j}));
+                    }
                 }
             }
         }
@@ -519,10 +638,15 @@ Tensor Tensor::matmul(const Tensor& other) const {
 Tensor Tensor::sum(int64_t dim, bool keepdims) const {
     Tensor res;
     if (dim == -1) {
-        double s = 0.0;
-        for (int64_t i = 0; i < numel_; ++i) s += get_flat(i);
         std::vector<int64_t> out_shape = keepdims ? std::vector<int64_t>(ndim(), 1) : std::vector<int64_t>{1};
-        res = Tensor(out_shape, {s}, dtype_, device_);
+        res = Tensor(out_shape, dtype_, device_);
+        if (device_ == Device::GPU) {
+            GPUTensorBackend::instance().sum(res.data(), data(), numel_, dtype_);
+        } else {
+            double s = 0.0;
+            for (int64_t i = 0; i < numel_; ++i) s += get_flat(i);
+            res.set_flat(0, s);
+        }
     } else {
         if (dim < 0) dim += ndim();
         if (dim == 0 && ndim() == 2) {
@@ -572,10 +696,16 @@ Tensor Tensor::mean(int64_t dim, bool keepdims) const {
 Tensor Tensor::max(int64_t dim, bool keepdims) const {
     if (dim == -1) {
         if (numel_ == 0) return Tensor::zeros({1}, dtype_, device_);
-        double m = get_flat(0);
-        for (int64_t i = 1; i < numel_; ++i) m = std::max(m, get_flat(i));
         std::vector<int64_t> out_shape = keepdims ? std::vector<int64_t>(ndim(), 1) : std::vector<int64_t>{1};
-        return Tensor(out_shape, {m}, dtype_, device_);
+        Tensor res(out_shape, dtype_, device_);
+        if (device_ == Device::GPU) {
+            GPUTensorBackend::instance().max_val(res.data(), data(), numel_, dtype_);
+        } else {
+            double m = get_flat(0);
+            for (int64_t i = 1; i < numel_; ++i) m = std::max(m, get_flat(i));
+            res.set_flat(0, m);
+        }
+        return res;
     }
     throw std::invalid_argument("Unsupported max dimension reduction");
 }
@@ -583,10 +713,16 @@ Tensor Tensor::max(int64_t dim, bool keepdims) const {
 Tensor Tensor::min(int64_t dim, bool keepdims) const {
     if (dim == -1) {
         if (numel_ == 0) return Tensor::zeros({1}, dtype_, device_);
-        double m = get_flat(0);
-        for (int64_t i = 1; i < numel_; ++i) m = std::min(m, get_flat(i));
         std::vector<int64_t> out_shape = keepdims ? std::vector<int64_t>(ndim(), 1) : std::vector<int64_t>{1};
-        return Tensor(out_shape, {m}, dtype_, device_);
+        Tensor res(out_shape, dtype_, device_);
+        if (device_ == Device::GPU) {
+            GPUTensorBackend::instance().min_val(res.data(), data(), numel_, dtype_);
+        } else {
+            double m = get_flat(0);
+            for (int64_t i = 1; i < numel_; ++i) m = std::min(m, get_flat(i));
+            res.set_flat(0, m);
+        }
+        return res;
     }
     throw std::invalid_argument("Unsupported min dimension reduction");
 }
@@ -627,8 +763,12 @@ Tensor Tensor::argmax(int64_t dim) const {
 // Activations
 Tensor Tensor::relu() const {
     Tensor res(shape_, dtype_, device_);
-    for (int64_t i = 0; i < numel_; ++i) {
-        res.set_flat(i, std::max(0.0, get_flat(i)));
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().relu(res.data(), data(), numel_, dtype_);
+    } else {
+        for (int64_t i = 0; i < numel_; ++i) {
+            res.set_flat(i, std::max(0.0, get_flat(i)));
+        }
     }
     if (AutogradContext::is_grad_enabled() && requires_grad()) {
         res.set_requires_grad(true);
@@ -642,9 +782,13 @@ Tensor Tensor::relu() const {
 
 Tensor Tensor::sigmoid() const {
     Tensor res(shape_, dtype_, device_);
-    for (int64_t i = 0; i < numel_; ++i) {
-        double v = get_flat(i);
-        res.set_flat(i, 1.0 / (1.0 + std::exp(-v)));
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().sigmoid(res.data(), data(), numel_, dtype_);
+    } else {
+        for (int64_t i = 0; i < numel_; ++i) {
+            double v = get_flat(i);
+            res.set_flat(i, 1.0 / (1.0 + std::exp(-v)));
+        }
     }
     if (AutogradContext::is_grad_enabled() && requires_grad()) {
         res.set_requires_grad(true);
@@ -658,8 +802,12 @@ Tensor Tensor::sigmoid() const {
 
 Tensor Tensor::tanh() const {
     Tensor res(shape_, dtype_, device_);
-    for (int64_t i = 0; i < numel_; ++i) {
-        res.set_flat(i, std::tanh(get_flat(i)));
+    if (device_ == Device::GPU) {
+        GPUTensorBackend::instance().tanh_act(res.data(), data(), numel_, dtype_);
+    } else {
+        for (int64_t i = 0; i < numel_; ++i) {
+            res.set_flat(i, std::tanh(get_flat(i)));
+        }
     }
     if (AutogradContext::is_grad_enabled() && requires_grad()) {
         res.set_requires_grad(true);
@@ -756,14 +904,41 @@ std::string Tensor::to_string() const {
     return ss.str();
 }
 
+static std::mutex g_tensor_registry_mutex;
+static std::map<int64_t, std::shared_ptr<Tensor>> g_tensor_registry;
+static int64_t g_next_tensor_id = 1;
+
+static std::shared_ptr<Tensor> get_tensor_from_value(const Value& val) {
+    if (!val.is_object()) return nullptr;
+    auto obj = val.as_object();
+    auto it = obj->find("__tensor_id__");
+    if (it != obj->end() && it->second.is_int()) {
+        std::lock_guard<std::mutex> lock(g_tensor_registry_mutex);
+        auto reg_it = g_tensor_registry.find(it->second.as_int());
+        if (reg_it != g_tensor_registry.end()) return reg_it->second;
+    }
+    return nullptr;
+}
+
 Value Tensor::to_value() const {
     auto self_tensor = std::make_shared<Tensor>(*this);
     std::map<std::string, Value> methods;
 
+    int64_t tid;
+    {
+        std::lock_guard<std::mutex> lock(g_tensor_registry_mutex);
+        tid = g_next_tensor_id++;
+        g_tensor_registry[tid] = self_tensor;
+    }
+    methods["__tensor_id__"] = Value::make_int(tid);
+
     methods["$type"] = Value::make_string("Tensor");
     methods["ndim"] = Value::make_int(static_cast<int64_t>(ndim()));
     methods["numel"] = Value::make_int(numel());
-    methods["device"] = Value::make_string(device_to_string(device()));
+    methods["device"] = Value::make_native_fn("device", 0, [self_tensor](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_string(device_to_string(self_tensor->device()));
+    });
+    methods["device_name"] = Value::make_string(device_to_string(device()));
     methods["dtype"] = Value::make_string(dtype_to_string(dtype()));
     methods["requires_grad"] = Value::make_bool(requires_grad());
 
@@ -785,7 +960,11 @@ Value Tensor::to_value() const {
 
     methods["backward"] = Value::make_native_fn("backward", -1, [self_tensor](const std::vector<Value>& args, SourceSpan) -> Value {
         if (!args.empty() && args[0].is_object()) {
-            // Optional custom grad_output
+            auto other_t = get_tensor_from_value(args[0]);
+            if (other_t) {
+                self_tensor->backward(*other_t);
+                return Value::make_nil();
+            }
             auto obj = args[0].as_object();
             auto to_list = obj->find("to_list");
             if (to_list != obj->end()) {
@@ -852,6 +1031,10 @@ Value Tensor::to_value() const {
 
     methods["matmul"] = Value::make_native_fn("matmul", 1, [self_tensor](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (!args[0].is_object()) throw RuntimeError("matmul requires a Tensor", span);
+        auto other_t = get_tensor_from_value(args[0]);
+        if (other_t) {
+            return self_tensor->matmul(*other_t).to_value();
+        }
         auto other_obj = args[0].as_object();
         auto to_list = other_obj->find("to_list");
         if (to_list == other_obj->end()) throw RuntimeError("Expected Tensor for matmul", span);
@@ -866,6 +1049,11 @@ Value Tensor::to_value() const {
 
     methods["add"] = Value::make_native_fn("add", 1, [self_tensor](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (args[0].is_number()) return self_tensor->scalar_add(args[0].as_float()).to_value();
+        if (!args[0].is_object()) throw RuntimeError("Expected Tensor or number for add", span);
+        auto other_t = get_tensor_from_value(args[0]);
+        if (other_t) {
+            return self_tensor->add(*other_t).to_value();
+        }
         auto other_obj = args[0].as_object();
         auto to_list = other_obj->find("to_list");
         if (to_list == other_obj->end()) throw RuntimeError("Expected Tensor", span);
@@ -879,6 +1067,11 @@ Value Tensor::to_value() const {
 
     methods["sub"] = Value::make_native_fn("sub", 1, [self_tensor](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (args[0].is_number()) return self_tensor->scalar_add(-args[0].as_float()).to_value();
+        if (!args[0].is_object()) throw RuntimeError("Expected Tensor or number for sub", span);
+        auto other_t = get_tensor_from_value(args[0]);
+        if (other_t) {
+            return self_tensor->sub(*other_t).to_value();
+        }
         auto other_obj = args[0].as_object();
         auto to_list = other_obj->find("to_list");
         if (to_list == other_obj->end()) throw RuntimeError("Expected Tensor", span);
@@ -892,6 +1085,11 @@ Value Tensor::to_value() const {
 
     methods["mul"] = Value::make_native_fn("mul", 1, [self_tensor](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (args[0].is_number()) return self_tensor->scalar_mul(args[0].as_float()).to_value();
+        if (!args[0].is_object()) throw RuntimeError("Expected Tensor or number for mul", span);
+        auto other_t = get_tensor_from_value(args[0]);
+        if (other_t) {
+            return self_tensor->mul(*other_t).to_value();
+        }
         auto other_obj = args[0].as_object();
         auto to_list = other_obj->find("to_list");
         if (to_list == other_obj->end()) throw RuntimeError("Expected Tensor", span);
@@ -905,6 +1103,11 @@ Value Tensor::to_value() const {
 
     methods["div"] = Value::make_native_fn("div", 1, [self_tensor](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (args[0].is_number()) return self_tensor->scalar_mul(1.0 / args[0].as_float()).to_value();
+        if (!args[0].is_object()) throw RuntimeError("Expected Tensor or number for div", span);
+        auto other_t = get_tensor_from_value(args[0]);
+        if (other_t) {
+            return self_tensor->div(*other_t).to_value();
+        }
         auto other_obj = args[0].as_object();
         auto to_list = other_obj->find("to_list");
         if (to_list == other_obj->end()) throw RuntimeError("Expected Tensor", span);
@@ -948,11 +1151,31 @@ Value Tensor::to_value() const {
         return self_tensor->argmax(dim).to_value();
     });
 
-    methods["to_list"] = Value::make_native_fn("to_list", 0, [self_tensor](const std::vector<Value>&, SourceSpan) -> Value {
-        auto vec = self_tensor->to_vector();
-        std::vector<Value> res;
-        for (double v : vec) res.push_back(Value::make_float(v));
-        return Value::make_array(std::move(res));
+    methods["abs"] = Value::make_native_fn("abs", 0, [self_tensor](const std::vector<Value>&, SourceSpan) -> Value {
+        return self_tensor->abs().to_value();
+    });
+
+    methods["exp"] = Value::make_native_fn("exp", 0, [self_tensor](const std::vector<Value>&, SourceSpan) -> Value {
+        return self_tensor->exp().to_value();
+    });
+
+    methods["log"] = Value::make_native_fn("log", -1, [self_tensor](const std::vector<Value>& args, SourceSpan) -> Value {
+        double base = args.empty() ? std::exp(1.0) : args[0].as_float();
+        return self_tensor->log(base).to_value();
+    });
+
+    methods["neg"] = Value::make_native_fn("neg", 0, [self_tensor](const std::vector<Value>&, SourceSpan) -> Value {
+        return self_tensor->scalar_mul(-1.0).to_value();
+    });
+
+    methods["max"] = Value::make_native_fn("max", -1, [self_tensor](const std::vector<Value>& args, SourceSpan) -> Value {
+        int64_t dim = args.empty() ? -1 : args[0].as_int();
+        return self_tensor->max(dim).to_value();
+    });
+
+    methods["min"] = Value::make_native_fn("min", -1, [self_tensor](const std::vector<Value>& args, SourceSpan) -> Value {
+        int64_t dim = args.empty() ? -1 : args[0].as_int();
+        return self_tensor->min(dim).to_value();
     });
 
     methods["to"] = Value::make_native_fn("to", 1, [self_tensor](const std::vector<Value>& args, SourceSpan) -> Value {

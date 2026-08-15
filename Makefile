@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -Iinclude -pthread -MMD -MP
-LDFLAGS = 
+LDFLAGS = -lvulkan
 
 SRC_DIR = src
 INC_DIR = include
@@ -21,6 +21,8 @@ CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/interpreter.cpp \
             $(SRC_DIR)/module.cpp \
             $(SRC_DIR)/tensor.cpp \
+            $(SRC_DIR)/gpu_backend.cpp \
+            $(SRC_DIR)/gpu_kernels.cpp \
             $(SRC_DIR)/dataset.cpp \
             $(SRC_DIR)/ai_model.cpp \
             $(SRC_DIR)/autograd.cpp \
@@ -56,6 +58,7 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_ai_data.cpp \
             $(TEST_DIR)/test_data_subsystem.cpp \
             $(TEST_DIR)/test_ai_subsystem.cpp \
+            $(TEST_DIR)/test_gpu_subsystem.cpp \
             $(TEST_DIR)/test_native_compiler.cpp \
             $(TEST_DIR)/test_stdlib.cpp \
             $(TEST_DIR)/test_package_manager.cpp \

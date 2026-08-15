@@ -1,0 +1,72 @@
+#version 450
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) buffer ParamData {
+    float param[];
+};
+
+layout(std430, binding = 1) readonly buffer GradData {
+    float grad[];
+};
+
+layout(std430, binding = 2) buffer Moment1Data {
+    float m[];
+};
+
+layout(std430, binding = 3) buffer Moment2Data {
+    float v[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint count;
+    uint opt_type; // 0: sgd, 1: momentum, 2: adam, 3: adamw
+    float lr;
+    float beta1;
+    float beta2;
+    float eps;
+    float weight_decay;
+    float step_count;
+} opt;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= opt.count) return;
+
+    float p = param[idx];
+    float g = grad[idx];
+
+    if (opt.opt_type == 0u) { // SGD
+        if (opt.weight_decay > 0.0) {
+            g += opt.weight_decay * p;
+        }
+        p -= opt.lr * g;
+    } else if (opt.opt_type == 1u) { // Momentum
+        if (opt.weight_decay > 0.0) {
+            g += opt.weight_decay * p;
+        }
+        float buf = opt.beta1 * m[idx] + g;
+        m[idx] = buf;
+        p -= opt.lr * buf;
+    } else if (opt.opt_type == 2u || opt.opt_type == 3u) { // Adam / AdamW
+        if (opt.opt_type == 2u && opt.weight_decay > 0.0) {
+            g += opt.weight_decay * p;
+        }
+        float m_t = opt.beta1 * m[idx] + (1.0 - opt.beta1) * g;
+        float v_t = opt.beta2 * v[idx] + (1.0 - opt.beta2) * (g * g);
+        m[idx] = m_t;
+        v[idx] = v_t;
+
+        float bias_corr1 = 1.0 - pow(opt.beta1, opt.step_count);
+        float bias_corr2 = 1.0 - pow(opt.beta2, opt.step_count);
+
+        float m_hat = m_t / max(1e-12, bias_corr1);
+        float v_hat = v_t / max(1e-12, bias_corr2);
+
+        if (opt.opt_type == 3u && opt.weight_decay > 0.0) {
+            p -= opt.lr * opt.weight_decay * p;
+        }
+        p -= opt.lr * m_hat / (sqrt(v_hat) + opt.eps);
+    }
+
+    param[idx] = p;
+}

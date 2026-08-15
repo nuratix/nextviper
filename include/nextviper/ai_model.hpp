@@ -43,6 +43,9 @@ public:
     void train(bool mode = true) override;
     void eval() override;
     void zero_grad() override;
+    void to(Device dev) override;
+
+    Device device() const { return device_; }
 
     const std::vector<std::shared_ptr<Module>>& layers() const { return layers_; }
 
@@ -70,6 +73,7 @@ public:
     Value to_value() override;
 
 private:
+    Device device_ = Device::CPU;
     std::vector<std::shared_ptr<Module>> layers_;
     std::shared_ptr<Optimizer> optimizer_;
     std::shared_ptr<Loss> loss_fn_;

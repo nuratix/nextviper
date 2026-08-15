@@ -1,0 +1,50 @@
+#version 450
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) readonly buffer InputA {
+    float a[];
+};
+
+layout(std430, binding = 1) writeonly buffer OutputC {
+    float c[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint count;
+    uint op_type; // 0: sum, 1: min, 2: max
+} params;
+
+shared float sdata[256];
+
+void main() {
+    uint tid = gl_LocalInvocationID.x;
+    uint gid = gl_GlobalInvocationID.x;
+
+    float my_val = 0.0;
+    if (params.op_type == 0u) my_val = 0.0;
+    else if (params.op_type == 1u) my_val = 1e30;
+    else if (params.op_type == 2u) my_val = -1e30;
+
+    if (gid < params.count) {
+        my_val = a[gid];
+    }
+    sdata[tid] = my_val;
+    barrier();
+
+    for (uint s = 128u; s > 0u; s >>= 1u) {
+        if (tid < s) {
+            if (params.op_type == 0u) {
+                sdata[tid] += sdata[tid + s];
+            } else if (params.op_type == 1u) {
+                sdata[tid] = min(sdata[tid], sdata[tid + s]);
+            } else if (params.op_type == 2u) {
+                sdata[tid] = max(sdata[tid], sdata[tid + s]);
+            }
+        }
+        barrier();
+    }
+
+    if (tid == 0u) {
+        c[gl_WorkGroupID.x] = sdata[0];
+    }
+}

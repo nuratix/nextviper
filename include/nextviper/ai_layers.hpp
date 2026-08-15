@@ -21,6 +21,7 @@ public:
 
     std::shared_ptr<Tensor> grad() const { return data_.grad(); }
     void zero_grad() { data_.zero_grad(); }
+    void to(Device dev) { data_ = data_.to(dev); }
 
 private:
     std::string name_;
@@ -43,6 +44,12 @@ public:
     virtual void train(bool mode = true) { training_ = mode; }
     virtual void eval() { train(false); }
     bool is_training() const { return training_; }
+
+    virtual void to(Device dev) {
+        for (auto& p : parameters()) {
+            if (p) p->to(dev);
+        }
+    }
 
     virtual void zero_grad();
 

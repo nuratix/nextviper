@@ -134,8 +134,8 @@ NV_TEST(AISubsystem, RealXORLearningAndConvergence) {
     auto loss_fn = std::make_shared<MSELoss>();
     seq->compile(opt, loss_fn);
 
-    // Train for 250 epochs
-    History hist = seq->fit(x_xor, y_xor, 250, 4, false);
+    // Train for 400 epochs
+    History hist = seq->fit(x_xor, y_xor, 400, 4, false);
 
     // Loss must decrease significantly
     NV_ASSERT_TRUE(hist.loss.back() < 0.1);

@@ -1,0 +1,47 @@
+// NextViper GPU Acceleration Benchmark
+
+import tensor
+import time
+
+print("==================================================")
+print("       NextViper Hardware Acceleration Benchmark  ")
+print("==================================================")
+print("GPU Available :", tensor.is_gpu_available())
+print("Device Count  :", tensor.device_count())
+print("Device Name   :", tensor.device_name())
+print("Default Target:", tensor.default_device())
+print("==================================================")
+
+let sizes = [128, 256, 512]
+
+for size in sizes {
+    print("\n--- Matrix Multiplication GEMM [" + str(size) + "x" + str(size) + "] ---")
+    
+    // 1. CPU GEMM
+    let a_cpu = tensor.randn([size, size])
+    let b_cpu = tensor.randn([size, size])
+    
+    let t0 = time.now()
+    let c_cpu = a_cpu.matmul(b_cpu)
+    let cpu_elapsed = time.elapsed_ms(t0)
+    print("CPU Time:", cpu_elapsed, "ms")
+
+    // 2. GPU GEMM
+    if tensor.is_gpu_available() {
+        let a_gpu = a_cpu.to("gpu")
+        let b_gpu = b_cpu.to("gpu")
+        
+        let t1 = time.now()
+        let c_gpu = a_gpu.matmul(b_gpu)
+        let gpu_elapsed = time.elapsed_ms(t1)
+        print("GPU Time:", gpu_elapsed, "ms")
+        
+        // Verify numerical equivalence
+        let diff = c_gpu.to("cpu").sub(c_cpu).abs().max().item()
+        print("Numerical Diff (CPU vs GPU max error):", diff)
+    }
+}
+
+print("\n==================================================")
+print("Benchmark completed successfully!")
+print("==================================================")

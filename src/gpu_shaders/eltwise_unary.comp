@@ -1,0 +1,47 @@
+#version 450
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) readonly buffer InputA {
+    float a[];
+};
+
+layout(std430, binding = 1) writeonly buffer OutputC {
+    float c[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint count;
+    uint op_type; // 0: relu, 1: sigmoid, 2: tanh, 3: exp, 4: log, 5: neg, 6: scalar_add, 7: scalar_mul, 8: abs
+    float scalar;
+    float param;
+} params;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= params.count) return;
+
+    float v = a[idx];
+    float res = 0.0;
+
+    if (params.op_type == 0u) {
+        res = max(0.0, v);
+    } else if (params.op_type == 1u) {
+        res = 1.0 / (1.0 + exp(-v));
+    } else if (params.op_type == 2u) {
+        res = tanh(v);
+    } else if (params.op_type == 3u) {
+        res = exp(v);
+    } else if (params.op_type == 4u) {
+        res = log(max(1e-12, v));
+    } else if (params.op_type == 5u) {
+        res = -v;
+    } else if (params.op_type == 6u) {
+        res = v + params.scalar;
+    } else if (params.op_type == 7u) {
+        res = v * params.scalar;
+    } else if (params.op_type == 8u) {
+        res = abs(v);
+    }
+
+    c[idx] = res;
+}

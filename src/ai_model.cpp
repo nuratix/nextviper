@@ -2,6 +2,7 @@
 #include "nextviper/ai_serialization.hpp"
 #include "nextviper/autograd.hpp"
 #include "nextviper/interpreter.hpp"
+#include "nextviper/gpu_backend.hpp"
 #include <fstream>
 #include <sstream>
 #include <cmath>
@@ -19,6 +20,8 @@ namespace nextviper {
 
 Value History::to_value() const {
     std::map<std::string, Value> obj;
+    obj["$type"] = Value::make_string("History");
+
     std::vector<Value> loss_arr;
     for (double l : loss) loss_arr.push_back(Value::make_float(l));
     obj["loss"] = Value::make_array(std::move(loss_arr));
@@ -93,6 +96,22 @@ void Sequential::eval() {
 void Sequential::zero_grad() {
     for (auto& layer : layers_) {
         layer->zero_grad();
+    }
+}
+
+void Sequential::to(Device dev) {
+    if (dev == Device::AUTO) {
+        dev = GPUTensorBackend::is_gpu_available() ? Device::GPU : Device::CPU;
+    }
+    if (dev == Device::GPU && !GPUTensorBackend::is_gpu_available()) {
+        throw std::runtime_error("GPU unavailable: No compatible GPU or Vulkan compute device found for model execution");
+    }
+    device_ = dev;
+    for (auto& layer : layers_) {
+        if (layer) layer->to(dev);
+    }
+    if (optimizer_) {
+        optimizer_->set_parameters(trainable_parameters());
     }
 }
 
@@ -321,6 +340,16 @@ Value Sequential::to_value() {
         size_t batch_size = (args.size() >= 4 && args[3].is_int()) ? static_cast<size_t>(args[3].as_int()) : 32;
         History h = self_model->fit(x, y, epochs, batch_size);
         return h.to_value();
+    });
+
+    obj["to"] = Value::make_native_fn("to", 1, [self_model](const std::vector<Value>& args, SourceSpan) -> Value {
+        Device d = string_to_device(args[0].as_string());
+        self_model->to(d);
+        return self_model->to_value();
+    });
+
+    obj["device"] = Value::make_native_fn("device", 0, [self_model](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_string(device_to_string(self_model->device()));
     });
 
     obj["save"] = Value::make_native_fn("save", 1, [self_model](const std::vector<Value>& args, SourceSpan) -> Value {

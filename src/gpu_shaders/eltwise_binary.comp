@@ -1,0 +1,40 @@
+#version 450
+layout(local_size_x = 256) in;
+
+layout(std430, binding = 0) readonly buffer InputA {
+    float a[];
+};
+
+layout(std430, binding = 1) readonly buffer InputB {
+    float b[];
+};
+
+layout(std430, binding = 2) writeonly buffer OutputC {
+    float c[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint count;
+    uint op_type; // 0: add, 1: sub, 2: mul, 3: div
+} params;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= params.count) return;
+
+    float va = a[idx];
+    float vb = b[idx];
+    float res = 0.0;
+
+    if (params.op_type == 0u) {
+        res = va + vb;
+    } else if (params.op_type == 1u) {
+        res = va - vb;
+    } else if (params.op_type == 2u) {
+        res = va * vb;
+    } else if (params.op_type == 3u) {
+        res = (vb == 0.0) ? 0.0 : (va / vb);
+    }
+
+    c[idx] = res;
+}

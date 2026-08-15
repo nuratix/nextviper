@@ -1,0 +1,72 @@
+// NextViper GPU Neural Network Example
+// Demonstrates hardware-accelerated deep learning using NextViper
+
+import tensor
+import ai
+import time
+
+print("==================================================")
+print("     NextViper GPU Neural Network Pipeline        ")
+print("==================================================")
+
+let is_gpu = tensor.is_gpu_available()
+print("GPU Available :", is_gpu)
+if is_gpu {
+    print("Device Name   :", tensor.device_name())
+}
+print("==================================================")
+
+// 1. Generate Synthetic Training Data on GPU
+let num_samples = 100
+let in_features = 8
+let num_classes = 1
+
+print("\n1. Allocating tensors on target device...")
+let mut target_dev = "cpu"
+if is_gpu {
+    target_dev = "gpu"
+}
+
+let x_train = tensor.randn([num_samples, in_features], 0.0, 1.0, target_dev)
+let y_train = tensor.zeros([num_samples, num_classes], target_dev)
+
+print("   X shape:", x_train.shape, "on", x_train.device())
+print("   Y shape:", y_train.shape, "on", y_train.device())
+
+// 2. Build Deep Neural Network Architecture
+print("\n2. Constructing Neural Network...")
+let mut model = ai.Sequential([
+    ai.Dense(in_features, 16, "relu"),
+    ai.Dense(16, num_classes, "sigmoid")
+])
+
+// Transfer model weights to GPU
+if is_gpu {
+    model = model.to("gpu")
+}
+print("   Model active on:", model.device())
+
+// 3. Compile Model
+print("\n3. Compiling with Adam Optimizer and MSE...")
+let optimizer = ai.Adam(0.01)
+let loss_fn = ai.MSE()
+model.compile(optimizer, loss_fn)
+
+// 4. Train Model
+print("\n4. Executing Training Loop...")
+let t0 = time.now()
+let history = model.fit(x_train, y_train, 10, 16, false)
+let elapsed = time.elapsed_ms(t0)
+print("   Training finished in:", elapsed, "ms")
+
+// 5. Inference
+print("\n5. Running Hardware-Accelerated Inference...")
+let test_batch = tensor.randn([4, in_features], 0.0, 1.0, target_dev)
+let predictions = model.predict(test_batch)
+
+print("   Inference output shape:", predictions.shape)
+print("   Sample predictions:", predictions.to_list())
+
+print("\n==================================================")
+print("GPU Pipeline Executed Successfully!")
+print("==================================================")

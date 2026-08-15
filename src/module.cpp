@@ -1793,6 +1793,13 @@ Value ModuleManager::create_time_module() {
         return Value::make_float(std::max(0.0, current - start_time));
     });
 
+    exports["elapsed_ms"] = Value::make_native_fn("elapsed_ms", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        double start_time = args[0].as_float();
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        double current = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
+        return Value::make_float(std::max(0.0, (current - start_time) * 1000.0));
+    });
+
     exports["format"] = Value::make_native_fn("format", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         time_t t = args.empty() ? std::time(nullptr) : static_cast<time_t>(args[0].as_float());
         std::string fmt = args.size() >= 2 ? args[1].as_string() : "%Y-%m-%d %H:%M:%S";

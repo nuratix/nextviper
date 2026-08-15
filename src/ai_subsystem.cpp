@@ -1,5 +1,6 @@
 #include "nextviper/ai_subsystem.hpp"
 #include "nextviper/interpreter.hpp"
+#include "nextviper/gpu_backend.hpp"
 #include <map>
 #include <atomic>
 #include <mutex>
@@ -27,6 +28,19 @@ static Value wrap_module(std::shared_ptr<Module> mod) {
     obj["__module_id__"] = Value::make_int(id);
     obj["name"] = Value::make_string(mod->name());
     obj["params_count"] = Value::make_int(static_cast<int64_t>(mod->count_parameters()));
+
+    obj["to"] = Value::make_native_fn("to", 1, [mod](const std::vector<Value>& args, SourceSpan) -> Value {
+        Device d = string_to_device(args[0].as_string());
+        mod->to(d);
+        return wrap_module(mod);
+    });
+
+    obj["device"] = Value::make_native_fn("device", 0, [mod](const std::vector<Value>&, SourceSpan) -> Value {
+        if (auto seq = std::dynamic_pointer_cast<Sequential>(mod)) {
+            return Value::make_string(device_to_string(seq->device()));
+        }
+        return Value::make_string("cpu");
+    });
 
     obj["forward"] = Value::make_native_fn("forward", 1, [mod](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (!args[0].is_object()) throw RuntimeError("forward requires a Tensor", span);
@@ -401,12 +415,25 @@ Value create_ai_subsystem_module() {
         return Tensor::uniform(shape, low, high).to_value();
     });
 
+    exports["is_gpu_available"] = Value::make_native_fn("is_gpu_available", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_bool(GPUTensorBackend::is_gpu_available());
+    });
+
     exports["device_count"] = Value::make_native_fn("device_count", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
-        return Value::make_int(1);
+        return Value::make_int(GPUTensorBackend::is_gpu_available() ? GPUTensorBackend::instance().device_count() : 1);
     });
 
     exports["device_name"] = Value::make_native_fn("device_name", -1, [](const std::vector<Value>&, SourceSpan) -> Value {
-        return Value::make_string("CPU (NextViper High-Performance Vectorized Backend)");
+        return Value::make_string(GPUTensorBackend::is_gpu_available() ? GPUTensorBackend::get_gpu_name() : "CPU (Host Vectorized Backend)");
+    });
+
+    exports["default_device"] = Value::make_native_fn("default_device", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_string(device_to_string(GPUTensorBackend::get_default_device()));
+    });
+
+    exports["set_default_device"] = Value::make_native_fn("set_default_device", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        GPUTensorBackend::set_default_device(string_to_device(args[0].as_string()));
+        return Value::make_nil();
     });
 
     return Value::make_object(std::move(exports));
@@ -415,8 +442,30 @@ Value create_ai_subsystem_module() {
 Value create_tensor_subsystem_module() {
     std::map<std::string, Value> exports;
 
+    exports["is_gpu_available"] = Value::make_native_fn("is_gpu_available", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_bool(GPUTensorBackend::is_gpu_available());
+    });
+
+    exports["device_count"] = Value::make_native_fn("device_count", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_int(GPUTensorBackend::is_gpu_available() ? GPUTensorBackend::instance().device_count() : 1);
+    });
+
+    exports["device_name"] = Value::make_native_fn("device_name", -1, [](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_string(GPUTensorBackend::is_gpu_available() ? GPUTensorBackend::get_gpu_name() : "CPU (Host Vectorized Backend)");
+    });
+
+    exports["default_device"] = Value::make_native_fn("default_device", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+        return Value::make_string(device_to_string(GPUTensorBackend::get_default_device()));
+    });
+
+    exports["set_default_device"] = Value::make_native_fn("set_default_device", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        GPUTensorBackend::set_default_device(string_to_device(args[0].as_string()));
+        return Value::make_nil();
+    });
+
     exports["create"] = Value::make_native_fn("create", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (args.empty()) throw RuntimeError("tensor.create requires arguments", span);
+        Device dev = GPUTensorBackend::get_default_device();
         if (args.size() == 1 && args[0].is_array()) {
             const auto& arr = *args[0].as_array();
             if (!arr.empty() && arr[0].is_array()) {
@@ -428,11 +477,11 @@ Value create_tensor_subsystem_module() {
                         for (const auto& el : *r.as_array()) vals.push_back(el.as_float());
                     }
                 }
-                return Tensor({rows, cols}, vals).to_value();
+                return Tensor({rows, cols}, vals, DType::FLOAT32, dev).to_value();
             } else {
                 std::vector<double> vals;
                 for (const auto& el : arr) vals.push_back(el.as_float());
-                return Tensor({static_cast<int64_t>(vals.size())}, vals).to_value();
+                return Tensor({static_cast<int64_t>(vals.size())}, vals, DType::FLOAT32, dev).to_value();
             }
         }
         if (args.size() >= 2 && args[0].is_array() && args[1].is_array()) {
@@ -440,19 +489,31 @@ Value create_tensor_subsystem_module() {
             for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
             std::vector<double> vals;
             for (const auto& v : *args[1].as_array()) vals.push_back(v.as_float());
-            return Tensor(shape, vals).to_value();
+            if (args.size() >= 3 && args[2].is_string()) dev = string_to_device(args[2].as_string());
+            return Tensor(shape, vals, DType::FLOAT32, dev).to_value();
         }
         throw RuntimeError("tensor.create invalid arguments", span);
     });
     exports["tensor"] = exports["create"];
 
-    exports["from"] = Value::make_native_fn("from", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+    exports["from"] = Value::make_native_fn("from", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.empty()) throw RuntimeError("tensor.from requires arguments", span);
+        Device dev = args.size() >= 2 && args[1].is_string() ? string_to_device(args[1].as_string()) : GPUTensorBackend::get_default_device();
+
         if (args[0].is_object()) {
-            // Check if it has to_tensor method (e.g. DataFrame, DataArray, Dataset)
             auto obj = args[0].as_object();
             auto to_t = obj->find("to_tensor");
             if (to_t != obj->end()) {
-                return to_t->second.as_native_fn()->func({}, span);
+                Value res = to_t->second.as_native_fn()->func({}, span);
+                if (dev != Device::CPU) {
+                    // Check if we can move device
+                    auto res_obj = res.as_object();
+                    auto to_fn = res_obj->find("to");
+                    if (to_fn != res_obj->end()) {
+                        return to_fn->second.as_native_fn()->func({Value::make_string(device_to_string(dev))}, span);
+                    }
+                }
+                return res;
             }
             auto to_list = obj->find("to_list");
             if (to_list != obj->end()) {
@@ -461,7 +522,7 @@ Value create_tensor_subsystem_module() {
                 for (const auto& v : *arr_val.as_array()) vals.push_back(v.as_float());
                 std::vector<int64_t> o_shape;
                 for (const auto& s : *(*obj)["shape"].as_array()) o_shape.push_back(s.as_int());
-                return Tensor(o_shape, vals).to_value();
+                return Tensor(o_shape, vals, DType::FLOAT32, dev).to_value();
             }
         }
         if (args[0].is_array()) {
@@ -475,65 +536,62 @@ Value create_tensor_subsystem_module() {
                         for (const auto& el : *r.as_array()) vals.push_back(el.as_float());
                     }
                 }
-                return Tensor({rows, cols}, vals).to_value();
+                return Tensor({rows, cols}, vals, DType::FLOAT32, dev).to_value();
             }
             std::vector<double> vals;
             for (const auto& el : arr) vals.push_back(el.as_float());
-            return Tensor({static_cast<int64_t>(vals.size())}, vals).to_value();
+            return Tensor({static_cast<int64_t>(vals.size())}, vals, DType::FLOAT32, dev).to_value();
         }
         throw RuntimeError("tensor.from expects array or tabular dataset", span);
     });
 
-    exports["zeros"] = Value::make_native_fn("zeros", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+    exports["zeros"] = Value::make_native_fn("zeros", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         std::vector<int64_t> shape;
         if (args[0].is_array()) for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
         else shape.push_back(args[0].as_int());
-        return Tensor::zeros(shape).to_value();
+        Device dev = (args.size() >= 2 && args[1].is_string()) ? string_to_device(args[1].as_string()) : GPUTensorBackend::get_default_device();
+        return Tensor::zeros(shape, DType::FLOAT32, dev).to_value();
     });
 
-    exports["ones"] = Value::make_native_fn("ones", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+    exports["ones"] = Value::make_native_fn("ones", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         std::vector<int64_t> shape;
         if (args[0].is_array()) for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
         else shape.push_back(args[0].as_int());
-        return Tensor::ones(shape).to_value();
+        Device dev = (args.size() >= 2 && args[1].is_string()) ? string_to_device(args[1].as_string()) : GPUTensorBackend::get_default_device();
+        return Tensor::ones(shape, DType::FLOAT32, dev).to_value();
     });
 
     exports["randn"] = Value::make_native_fn("randn", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         std::vector<int64_t> shape;
         if (args[0].is_array()) for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
         else shape.push_back(args[0].as_int());
-        double mean = args.size() >= 2 ? args[1].as_float() : 0.0;
-        double stddev = args.size() >= 3 ? args[2].as_float() : 1.0;
-        return Tensor::randn(shape, mean, stddev).to_value();
+        double mean = args.size() >= 2 && args[1].is_number() ? args[1].as_float() : 0.0;
+        double stddev = args.size() >= 3 && args[2].is_number() ? args[2].as_float() : 1.0;
+        Device dev = (args.size() >= 4 && args[3].is_string()) ? string_to_device(args[3].as_string()) : GPUTensorBackend::get_default_device();
+        return Tensor::randn(shape, mean, stddev, dev).to_value();
     });
+
+    exports["random"] = exports["randn"];
 
     exports["uniform"] = Value::make_native_fn("uniform", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         std::vector<int64_t> shape;
         if (args[0].is_array()) for (const auto& s : *args[0].as_array()) shape.push_back(s.as_int());
         else shape.push_back(args[0].as_int());
-        double low = args.size() >= 2 ? args[1].as_float() : 0.0;
-        double high = args.size() >= 3 ? args[2].as_float() : 1.0;
-        return Tensor::uniform(shape, low, high).to_value();
+        double low = args.size() >= 2 && args[1].is_number() ? args[1].as_float() : 0.0;
+        double high = args.size() >= 3 && args[2].is_number() ? args[2].as_float() : 1.0;
+        Device dev = (args.size() >= 4 && args[3].is_string()) ? string_to_device(args[3].as_string()) : GPUTensorBackend::get_default_device();
+        return Tensor::uniform(shape, low, high, dev).to_value();
     });
 
     exports["matmul"] = Value::make_native_fn("matmul", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         try {
-            auto extract_tensor = [](const Value& val, SourceSpan s) -> Tensor {
-                if (!val.is_object()) throw RuntimeError("Expected Tensor object", s);
-                auto obj = val.as_object();
-                auto to_list = obj->find("to_list");
-                auto shape_it = obj->find("shape");
-                if (to_list == obj->end() || shape_it == obj->end()) throw RuntimeError("Invalid Tensor value", s);
-                Value arr_val = to_list->second.as_native_fn()->func({}, s);
-                std::vector<double> vals;
-                for (const auto& v : *arr_val.as_array()) vals.push_back(v.as_float());
-                std::vector<int64_t> shape;
-                for (const auto& el : *shape_it->second.as_array()) shape.push_back(el.as_int());
-                return Tensor(shape, vals);
-            };
-            Tensor a = extract_tensor(args[0], span);
-            Tensor b = extract_tensor(args[1], span);
-            return a.matmul(b).to_value();
+            if (!args[0].is_object()) throw RuntimeError("matmul requires a Tensor", span);
+            auto a_obj = args[0].as_object();
+            auto matmul_fn = a_obj->find("matmul");
+            if (matmul_fn != a_obj->end()) {
+                return matmul_fn->second.as_native_fn()->func({args[1]}, span);
+            }
+            throw RuntimeError("Invalid Tensor object for matmul", span);
         } catch (const std::exception& e) {
             throw RuntimeError(std::string("matmul error: ") + e.what(), span);
         }
