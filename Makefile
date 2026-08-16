@@ -42,7 +42,8 @@ CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/repl.cpp \
             $(SRC_DIR)/package_manager.cpp \
             $(SRC_DIR)/data_subsystem.cpp \
-            $(SRC_DIR)/lsp.cpp
+            $(SRC_DIR)/lsp.cpp \
+            $(SRC_DIR)/linter.cpp
 
 CORE_OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(CORE_SRCS))
 
@@ -73,7 +74,8 @@ TEST_SRCS = $(TEST_DIR)/test_runner.cpp \
             $(TEST_DIR)/test_diagnostics.cpp \
             $(TEST_DIR)/test_fuzz.cpp \
             $(TEST_DIR)/test_lsp.cpp \
-            $(TEST_DIR)/test_error_system.cpp
+            $(TEST_DIR)/test_error_system.cpp \
+            $(TEST_DIR)/test_linter.cpp
 
 TEST_OBJS = $(patsubst $(TEST_DIR)/%.cpp, $(BUILD_DIR)/tests/%.o, $(TEST_SRCS))
 

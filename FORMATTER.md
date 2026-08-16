@@ -1,39 +1,43 @@
-# NextViper Code Formatter Specification
+# NextViper Official Code Formatter
 
-The NextViper Formatter (`nextviper fmt`) ensures consistent, idiomatic, and deterministic source code style across the entire ecosystem.
+NextViper includes an official, AST-driven source code formatter: `nextviper fmt`.
 
 ---
 
-## 1. Core Guarantees
+## 1. Principles
 
-1. **Idempotency**: Running `nextviper fmt` repeatedly produces identical results:
-   $$\text{fmt}(\text{fmt}(S)) \equiv \text{fmt}(S)$$
-2. **AST & Token Safety**: Formatting never alters the semantic execution or AST structure of code.
-3. **Comment Preservation**: Line comments (`//`) and docstrings are strictly preserved in their relative position.
-4. **CI Compatibility**: `nextviper fmt --check` returns non-zero exit codes when files deviate from formatted style.
+1. **Idempotence:** Formatting an already formatted file produces identical bytes (`fmt(fmt(src)) == fmt(src)`).
+2. **AST & Comment Preservation:** Formats code structure while preserving all comments, docstrings, and string escape sequences.
+3. **Deterministic Spacing:** 4-space indentation, consistent operator padding, standard function header layout, and blank line normalization.
 
 ---
 
 ## 2. Formatting Rules
 
-- **Indentation**: 4 spaces per nesting level. Tabs are automatically converted to spaces.
-- **Binary Operators**: Single spaces around binary operators (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`, `|>`, `->`, `=>`, `=`).
-- **Ranges**: Compact formatting without spaces around `..` and `..=`.
-- **Delimiter Spacing**: Comma followed by a single space (`, `). Colons on type annotations formatted as `: `.
-- **Trailing Whitespace**: Automatically stripped on all lines.
-- **File End**: Files always terminate with a single newline (`\n`).
+- **Indentation:** 4 spaces per block level.
+- **Operator Spacing:** Single space around binary operators (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, `&&`, `||`, `|>`).
+- **Function Declarations:** `fn name(param1: type, param2: type) -> return_type:`
+- **Collections:** Space after comma in lists `[1, 2, 3]` and dictionaries `{"key": "value"}`.
+- **Imports:** Grouped and aligned at the top of the file.
 
 ---
 
-## 3. Usage Examples
+## 3. Usage & Modes
 
+### Write in-place (default)
 ```bash
-# In-place formatting of all files in project
-nextviper fmt src/ tests/
+nextviper fmt
+nextviper fmt src/main.nv
+```
 
-# Check formatting in CI pipeline
+### Check mode (CI validation)
+Validates formatting without writing changes. Returns non-zero exit code if unformatted files are found.
+```bash
 nextviper fmt --check
+```
 
-# Format code via stdin
-cat unformatted.nv | nextviper fmt --stdin
+### Diff mode
+Prints a unified diff showing exactly what changes would be made:
+```bash
+nextviper fmt --diff src/main.nv
 ```

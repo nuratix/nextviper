@@ -1,35 +1,27 @@
 {
-  "name": "nextviper",
-  "displayName": "NextViper",
-  "description": "Official Language Support & LSP Tooling for the NextViper Programming Language",
+  "name": "nextviper-vscode",
+  "displayName": "NextViper Language Support",
+  "description": "Official VS Code language support, syntax highlighting, and LSP integration for NextViper",
   "version": "1.0.0",
   "publisher": "nuratix",
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
-    "Programming Languages",
-    "Linters",
-    "Formatters",
-    "Snippets"
+    "Programming Languages"
   ],
-  "keywords": [
-    "nextviper",
-    "tensor",
-    "ai",
-    "gpu",
-    "systems"
-  ],
-  "activationEvents": [
-    "onLanguage:nextviper"
-  ],
-  "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "nextviper",
-        "aliases": ["NextViper", "nextviper", "nv"],
-        "extensions": [".nv"],
+        "aliases": [
+          "NextViper",
+          "nextviper",
+          "nv"
+        ],
+        "extensions": [
+          ".nv"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -39,46 +31,6 @@
         "scopeName": "source.nextviper",
         "path": "./syntaxes/nextviper.tmLanguage.json"
       }
-    ],
-    "commands": [
-      {
-        "command": "nextviper.restartServer",
-        "title": "NextViper: Restart Language Server"
-      },
-      {
-        "command": "nextviper.runCurrentFile",
-        "title": "NextViper: Run Current File"
-      },
-      {
-        "command": "nextviper.checkProject",
-        "title": "NextViper: Check Project Syntax & Types"
-      }
-    ],
-    "configuration": {
-      "type": "object",
-      "title": "NextViper Configuration",
-      "properties": {
-        "nextviper.lspPath": {
-          "type": "string",
-          "default": "nextviper-lsp",
-          "description": "Path to the nextviper-lsp or nextviper binary executable."
-        },
-        "nextviper.formatOnSave": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable automated formatting on save using nextviper fmt."
-        }
-      }
-    }
-  },
-  "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -w -p ./"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.0",
-    "@types/vscode": "^1.75.0",
-    "typescript": "^5.3.3",
-    "vscode-languageclient": "^9.0.1"
+    ]
   }
 }

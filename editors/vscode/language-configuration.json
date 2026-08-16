@@ -23,13 +23,7 @@
     ["'", "'"]
   ],
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*(fn|if|elif|else|for|while|match|struct|type)\\b.*:\\s*$",
-    "decreaseIndentPattern": "^\\s*(elif|else)\\b.*:\\s*$"
-  },
-  "folding": {
-    "markers": {
-      "start": "^\\s*//\\s*#?region\\b",
-      "end": "^\\s*//\\s*#?endregion\\b"
-    }
+    "increaseIndentPattern": "^\\s*(fn|if|else|while|for|match|struct|class|enum|try|catch).*:\\s*$",
+    "decreaseIndentPattern": "^\\s*(else|catch|finally)\\b.*:"
   }
 }

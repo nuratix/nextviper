@@ -60,6 +60,7 @@ public:
     void help(const std::string& message, SourceSpan span = {});
 
     bool has_errors() const { return error_count_ > 0; }
+    bool has_warnings() const { return warning_count_ > 0; }
     size_t error_count() const { return error_count_; }
     size_t warning_count() const { return warning_count_; }
 

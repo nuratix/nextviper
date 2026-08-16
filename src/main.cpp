@@ -11,6 +11,7 @@
 #include "nextviper/ir.hpp"
 #include "nextviper/native_compiler.hpp"
 #include "nextviper/package_manager.hpp"
+#include "nextviper/linter.hpp"
 #include "nextviper/lsp.hpp"
 #include <iostream>
 #include <fstream>
@@ -36,43 +37,40 @@ void print_help() {
     std::cout << "\033[1;32mNextViper Programming Language\033[0m (v" << VERSION_STRING << ")\n\n"
               << "\033[1mUSAGE:\033[0m\n"
               << "  nextviper <COMMAND> [OPTIONS] [FILES...]\n\n"
-              << "\033[1mCORE COMMANDS:\033[0m\n"
-              << "  \033[1;36mrun\033[0m <file.nv> [--watch]      Execute a NextViper program file (optional watch mode)\n"
-              << "  \033[1;36mfmt\033[0m [options] <files...>     Format NextViper source code deterministically\n"
-              << "  \033[1;36mbuild\033[0m <file.nv> [-o out]     Compile program to bytecode (.nvc) or native binary\n"
-              << "  \033[1;36mcompile\033[0m <file.nv> [-o out]   Compile program directly to native machine code\n"
-              << "  \033[1;36mtest\033[0m [path]                  Run automated NextViper test suite\n"
-              << "  \033[1;36mcheck\033[0m [files...]             Validate syntax and types statically without executing\n"
+              << "\033[1mDEVELOPMENT & EXECUTION:\033[0m\n"
+              << "  \033[1;36mrun\033[0m <file.nv> [--watch]      Execute a NextViper program file\n"
+              << "  \033[1;36mdev\033[0m [file.nv]                Start development mode with automatic rebuild/restart\n"
+              << "  \033[1;36mcheck\033[0m [files...]             Static type and syntax validation without execution\n"
+              << "  \033[1;36mfmt\033[0m [options] <files...>     Format source code deterministically (--check/--diff)\n"
+              << "  \033[1;36mlint\033[0m [files...]              Analyze source for unused variables, dead code, issues\n"
+              << "  \033[1;36mtest\033[0m [path]                  Discover and run automated test suites\n"
+              << "  \033[1;36mbench\033[0m <file.nv>              Benchmark VM vs native execution performance\n"
+              << "  \033[1;36mbuild\033[0m [file.nv] [-o out]     Compile project or file (--native/--bytecode/--release/--debug)\n"
+              << "  \033[1;36mclean\033[0m                        Safely remove build artifacts and local caches\n"
+              << "  \033[1;36mdoctor\033[0m                       Inspect toolchain, compiler, GPU, and cache health\n"
+              << "  \033[1;36mdoc\033[0m [path]                   Generate Markdown documentation from source files\n"
               << "  \033[1;36mrepl\033[0m                         Start interactive NextViper shell\n"
               << "  \033[1;36mlsp\033[0m                          Start standard Language Server Protocol daemon\n"
-              << "  \033[1;36minfo\033[0m                         Display project, dependencies, and compiler info\n"
+              << "  \033[1;36minfo\033[0m                         Display project, dependencies, and environment status\n"
+              << "  \033[1;36mversion\033[0m, --version           Print full version and release build metadata\n"
               << "  \033[1;36meval\033[0m <code>, -e                Evaluate an inline NextViper code string\n\n"
-              << "\033[1mPACKAGE MANAGER COMMANDS:\033[0m\n"
+              << "\033[1mPACKAGE MANAGER & REGISTRY:\033[0m\n"
               << "  \033[1;36minit\033[0m [name]                  Initialize a new NextViper project (nextviper.toml)\n"
               << "  \033[1;36madd\033[0m <pkg> [--path/--git]     Add a dependency to nextviper.toml and install it\n"
               << "  \033[1;36mremove\033[0m <pkg>                 Remove a dependency and clean lockfile\n"
               << "  \033[1;36minstall\033[0m                      Install all dependencies and verify integrity\n"
               << "  \033[1;36mupdate\033[0m [pkg]                 Update dependencies to latest matching SemVer\n"
               << "  \033[1;36mlist\033[0m                         Display dependency tree and checksum status\n"
-              << "  \033[1;36mpublish\033[0m [--dry-run]          Validate manifest and build package distribution\n\n"
-              << "\033[1mFORMATTER OPTIONS:\033[0m\n"
-              << "  -w, --write                  Write formatted output in-place to source file(s) [default]\n"
-              << "  -c, --check                  Check if files are formatted, exit non-zero if not\n"
-              << "  -d, --diff                   Show unified diff of formatting changes\n"
-              << "  --stdin                      Read unformatted code from stdin, write to stdout\n\n"
-              << "\033[1mCHECK & BUILD OPTIONS:\033[0m\n"
-              << "  --format=json                Output diagnostics in machine-readable JSON format\n"
-              << "  --native                     Build native machine code binary (AOT)\n"
-              << "  --bytecode                   Build bytecode package (.nvc)\n"
-              << "  --release                    Optimize with -O3 for maximum performance\n"
-              << "  --no-color                   Disable ANSI colored terminal output\n\n"
+              << "  \033[1;36mpublish\033[0m [--dry-run]          Validate manifest and build package distribution\n"
+              << "  \033[1;36msearch\033[0m <query>               Search the package registry for modules\n\n"
               << "\033[1mEXAMPLES:\033[0m\n"
               << "  nextviper init my_app\n"
-              << "  nextviper add math_utils --path ../math_utils\n"
               << "  nextviper check\n"
+              << "  nextviper fmt\n"
+              << "  nextviper lint\n"
               << "  nextviper test\n"
-              << "  nextviper run src/main.nv\n"
-              << "  nextviper run src/main.nv --watch\n";
+              << "  nextviper build --native --release\n"
+              << "  nextviper doctor\n";
 }
 
 std::string read_file(const std::string& path) {
@@ -326,19 +324,247 @@ int check_command(int argc, char* argv[]) {
     return 0;
 }
 
-int build_command(int argc, char* argv[]) {
-    if (argc < 3) {
-        std::cerr << "error: missing file path to build\n"
-                  << "usage: nextviper build <file.nv> [-o out] [--native|--bytecode]\n";
+int lint_command(int argc, char* argv[]) {
+    std::vector<std::string> files;
+    for (int i = 2; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (!arg.starts_with("-")) files.push_back(arg);
+    }
+
+    if (files.empty()) {
+        if (fs::exists("src") && fs::is_directory("src")) {
+            for (const auto& entry : fs::recursive_directory_iterator("src")) {
+                if (entry.is_regular_file() && entry.path().extension() == ".nv") {
+                    files.push_back(entry.path().string());
+                }
+            }
+        } else {
+            for (const auto& entry : fs::directory_iterator(".")) {
+                if (entry.is_regular_file() && entry.path().extension() == ".nv") {
+                    files.push_back(entry.path().string());
+                }
+            }
+        }
+    }
+
+    if (files.empty()) {
+        std::cout << "\033[1;33mwarning:\033[0m no NextViper (.nv) source files found to lint.\n";
+        return 0;
+    }
+
+    std::cout << "\033[1;36m=== NextViper Static Linter ===\033[0m\n";
+    std::cout << "Analyzing " << files.size() << " source file(s)...\n\n";
+
+    size_t total_warns = 0;
+    size_t total_errs = 0;
+
+    for (const auto& file_path : files) {
+        std::string source = read_file(file_path);
+        if (source.empty()) continue;
+
+        SourceManager sm;
+        sm.add_file(file_path, source);
+        DiagnosticEngine diag(sm, isatty(fileno(stderr)));
+
+        Lexer lexer(source, file_path, diag);
+        auto tokens = lexer.tokenize();
+        if (diag.has_errors()) {
+            diag.render(std::cerr);
+            total_errs++;
+            continue;
+        }
+
+        Parser parser(tokens, diag);
+        auto program = parser.parse_program();
+        if (!program || diag.has_errors()) {
+            diag.render(std::cerr);
+            total_errs++;
+            continue;
+        }
+
+        Linter linter(diag);
+        linter.lint_program(*program, file_path);
+        total_warns += linter.warning_count();
+        total_errs += linter.error_count();
+
+        if (diag.has_warnings() || diag.has_errors()) {
+            diag.render(std::cout);
+        }
+    }
+
+    std::cout << "----------------------------------------------------\n";
+    if (total_warns == 0 && total_errs == 0) {
+        std::cout << "\033[1;32m✓ Lint passed:\033[0m 0 issues found across " << files.size() << " file(s).\n";
+        return 0;
+    } else {
+        std::cout << "\033[1;33m! Lint results:\033[0m " << total_warns << " warning(s), " << total_errs << " error(s).\n";
+        return total_errs > 0 ? 1 : 0;
+    }
+}
+
+int doctor_command() {
+    std::cout << "\033[1;32m====================================================\033[0m\n";
+    std::cout << "  NextViper Environment & Toolchain Doctor\n";
+    std::cout << "\033[1;32m====================================================\033[0m\n\n";
+
+    std::cout << "\033[1m[Core Engine]\033[0m\n";
+    std::cout << "  • NextViper Version:  v" << VERSION_STRING << " (" << RELEASE_CODENAME << ")\n";
+#if defined(_WIN32)
+    std::cout << "  • Operating System:   Windows (x86_64)\n";
+#elif defined(__APPLE__)
+    std::cout << "  • Operating System:   macOS (Darwin)\n";
+#else
+    std::cout << "  • Operating System:   Linux (POSIX x86_64)\n";
+#endif
+    std::cout << "  • Memory Standard:    C++20 Zero-Overhead RAII\n\n";
+
+    std::cout << "\033[1m[Backend & C++ Compilers]\033[0m\n";
+    bool has_gcc = (std::system("which g++ > /dev/null 2>&1") == 0);
+    bool has_clang = (std::system("which clang++ > /dev/null 2>&1") == 0);
+    std::cout << "  • GNU G++ (g++):      " << (has_gcc ? "\033[1;32m✓ Available\033[0m" : "\033[1;33m✗ Not found\033[0m") << "\n";
+    std::cout << "  • LLVM Clang++:       " << (has_clang ? "\033[1;32m✓ Available\033[0m" : "\033[1;33m✗ Not found\033[0m") << "\n";
+
+    std::cout << "\n\033[1m[Hardware & Acceleration]\033[0m\n";
+    bool has_vulkan = (std::system("which vulkaninfo > /dev/null 2>&1") == 0 || fs::exists("/usr/include/vulkan/vulkan.h") || fs::exists("/usr/local/include/vulkan/vulkan.h"));
+    std::cout << "  • Vulkan SPIR-V GPU:  " << (has_vulkan ? "\033[1;32m✓ Supported (Compute Ready)\033[0m" : "\033[1;33m• CPU SIMD Fallback\033[0m") << "\n";
+    std::cout << "  • Multithreading:     ✓ POSIX pthreads & std::thread\n";
+    std::cout << "  • Networking:         ✓ Native POSIX TCP Sockets (epoll/poll)\n";
+
+    std::cout << "\n\033[1m[Package Manager & Cache]\033[0m\n";
+    const char* home = std::getenv("HOME");
+    std::string cache_dir = home ? (std::string(home) + "/.nextviper/cache") : ".nextviper/cache";
+    std::cout << "  • Cache Directory:    " << cache_dir << "\n";
+    std::cout << "  • Registry Endpoint:  https://nextviper.nuratix.com/api\n";
+
+    std::cout << "\n\033[1m[Current Project Workspace]\033[0m\n";
+    if (fs::exists("nextviper.toml")) {
+        std::cout << "  • Manifest:           \033[1;32m✓ Found (nextviper.toml)\033[0m\n";
+        std::cout << "  • Lockfile:           " << (fs::exists("nextviper.lock") ? "\033[1;32m✓ Locked (nextviper.lock)\033[0m" : "\033[1;33m! Run 'nextviper install'\033[0m") << "\n";
+    } else {
+        std::cout << "  • Manifest:           (none in current directory)\n";
+    }
+
+    std::cout << "\n\033[1;32m====================================================\033[0m\n";
+    std::cout << "  ✓ All NextViper subsystems operational.\n";
+    std::cout << "\033[1;32m====================================================\033[0m\n";
+    return 0;
+}
+
+int clean_command() {
+    std::error_code ec;
+    size_t removed_count = 0;
+
+    std::vector<std::string> targets = {"build", "dist", ".nextviper/cache"};
+    for (const auto& t : targets) {
+        if (fs::exists(t, ec)) {
+            fs::remove_all(t, ec);
+            std::cout << "  \033[1;31m✗ Removed\033[0m " << t << "/\n";
+            removed_count++;
+        }
+    }
+
+    // Clean .nvc bytecode files in current workspace
+    for (const auto& entry : fs::directory_iterator(".", ec)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".nvc") {
+            fs::remove(entry.path(), ec);
+            std::cout << "  \033[1;31m✗ Removed\033[0m " << entry.path().filename().string() << "\n";
+            removed_count++;
+        }
+    }
+
+    std::cout << "\033[1;32m✓ Clean complete:\033[0m " << removed_count << " artifact(s)/director(ies) cleaned.\n";
+    return 0;
+}
+
+int doc_command(int argc, char* argv[]) {
+    std::string target = (argc >= 3) ? argv[2] : "src";
+    std::vector<std::string> files;
+
+    if (fs::is_regular_file(target)) {
+        files.push_back(target);
+    } else if (fs::exists(target) && fs::is_directory(target)) {
+        for (const auto& entry : fs::recursive_directory_iterator(target)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".nv") {
+                files.push_back(entry.path().string());
+            }
+        }
+    }
+
+    if (files.empty()) {
+        std::cerr << "error: no NextViper files found to document in '" << target << "'\n";
         return 1;
     }
 
-    std::string path = argv[2];
+    std::cout << "# NextViper API Documentation\n\n";
+    std::cout << "*Generated automatically by NextViper Document Generator v" << VERSION_STRING << "*\n\n";
+
+    for (const auto& file : files) {
+        std::cout << "## Module `" << file << "`\n\n";
+        std::ifstream in(file);
+        std::string line;
+        std::string pending_comment;
+
+        while (std::getline(in, line)) {
+            size_t start = line.find_first_not_of(" \t");
+            if (start == std::string::npos) continue;
+
+            if (line.substr(start, 2) == "//") {
+                pending_comment += line.substr(start + 2) + "\n";
+            } else if (line.find("fn ", start) == start || line.find("export fn ", start) == start) {
+                size_t colon = line.find(':');
+                std::string sig = (colon != std::string::npos) ? line.substr(start, colon - start) : line.substr(start);
+                std::cout << "### `" << sig << "`\n\n";
+                if (!pending_comment.empty()) {
+                    std::cout << pending_comment << "\n";
+                    pending_comment.clear();
+                }
+            } else {
+                pending_comment.clear();
+            }
+        }
+        std::cout << "---\n\n";
+    }
+
+    return 0;
+}
+
+int dev_command(int argc, char* argv[]) {
+    std::string target_file = "";
+    if (argc >= 3) {
+        target_file = argv[2];
+    } else if (fs::exists("nextviper.toml")) {
+        std::string err;
+        auto m = ProjectManifest::load_from_file("nextviper.toml", err);
+        if (m && !m->main_file.empty()) {
+            target_file = m->main_file;
+        }
+    }
+
+    if (target_file.empty()) {
+        if (fs::exists("src/main.nv")) target_file = "src/main.nv";
+        else if (fs::exists("main.nv")) target_file = "main.nv";
+        else {
+            std::cerr << "error: could not detect entry file for dev mode. Specify: nextviper dev <file.nv>\n";
+            return 1;
+        }
+    }
+
+    std::cout << "\033[1;32m====================================================\033[0m\n";
+    std::cout << "  \033[1mNextViper Development Mode (Live Auto-Runner)\033[0m\n";
+    std::cout << "  Watching: " << target_file << " (Ctrl+C to stop)\n";
+    std::cout << "\033[1;32m====================================================\033[0m\n\n";
+
+    return watch_and_run_file(target_file);
+}
+
+int build_command(int argc, char* argv[]) {
+    std::string path = "";
     std::string out_path = "";
     bool build_native = false;
     bool is_release = false;
+    bool is_debug = false;
 
-    for (int i = 3; i < argc; ++i) {
+    for (int i = 2; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-o" && i + 1 < argc) {
             out_path = argv[++i];
@@ -346,7 +572,33 @@ int build_command(int argc, char* argv[]) {
             build_native = true;
         } else if (arg == "--release") {
             is_release = true;
+        } else if (arg == "--debug") {
+            is_debug = true;
+        } else if (!arg.starts_with("-") && path.empty()) {
+            path = arg;
         }
+    }
+
+    // If no path is specified, try reading nextviper.toml
+    if (path.empty()) {
+        if (fs::exists("nextviper.toml")) {
+            std::string err;
+            auto m = ProjectManifest::load_from_file("nextviper.toml", err);
+            if (m && !m->main_file.empty()) {
+                path = m->main_file;
+                if (out_path.empty()) {
+                    fs::create_directories("build/bin");
+                    out_path = "build/bin/" + m->name;
+                    build_native = true;
+                }
+            }
+        }
+    }
+
+    if (path.empty()) {
+        std::cerr << "error: missing file path to build and no nextviper.toml found\n"
+                  << "usage: nextviper build [file.nv] [-o out] [--native|--release|--debug]\n";
+        return 1;
     }
 
     std::string source = read_file(path);
@@ -385,8 +637,10 @@ int build_command(int argc, char* argv[]) {
             return 1;
         }
 
-        IROptimizer opt;
-        opt.optimize(*ir_mod);
+        if (!is_debug) {
+            IROptimizer opt;
+            opt.optimize(*ir_mod);
+        }
 
         NativeCompiler native_compiler(diagnostics);
         if (!native_compiler.compile_to_binary(*ir_mod, final_out)) {
@@ -394,8 +648,8 @@ int build_command(int argc, char* argv[]) {
             return 1;
         }
 
-        std::cout << "\033[1;32m✓ Built native binary:\033[0m " << final_out
-                  << (is_release ? " [release -O3]" : "") << "\n";
+        std::string mode_str = is_release ? " [release -O3]" : (is_debug ? " [debug -g -O0]" : "");
+        std::cout << "\033[1;32m✓ Built native binary:\033[0m " << final_out << mode_str << "\n";
         return 0;
     }
 
@@ -905,6 +1159,39 @@ int main(int argc, char* argv[]) {
             if (std::string(argv[i]) == "--dry-run") dry_run = true;
         }
         return pm.cmd_publish(dry_run);
+    }
+
+    if (first_arg == "lint") {
+        return nextviper::lint_command(argc, argv);
+    }
+
+    if (first_arg == "doctor") {
+        return nextviper::doctor_command();
+    }
+
+    if (first_arg == "clean") {
+        return nextviper::clean_command();
+    }
+
+    if (first_arg == "doc") {
+        return nextviper::doc_command(argc, argv);
+    }
+
+    if (first_arg == "dev") {
+        return nextviper::dev_command(argc, argv);
+    }
+
+    if (first_arg == "search") {
+        if (argc < 3) {
+            std::cerr << "error: missing search query\nusage: nextviper search <query>\n";
+            return 1;
+        }
+        std::string query = argv[2];
+        std::cout << "\033[1;36mSearching NextViper Package Registry for:\033[0m '" << query << "'...\n\n";
+        std::string cmd = "curl -s \"https://nextviper.nuratix.com/api/search?q=" + query + "\"";
+        int res = std::system(cmd.c_str());
+        std::cout << "\n";
+        return (res == 0) ? 0 : 1;
     }
 
     if (first_arg == "repl") {

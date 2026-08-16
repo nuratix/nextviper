@@ -1,4 +1,5 @@
 #include "nextviper/package_manager.hpp"
+#include "nextviper/formatter.hpp"
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -875,13 +876,53 @@ int PackageManager::cmd_init(const std::string& name) {
 
     fs::path main_src = project_root_ / "src" / "main.nv";
     if (!fs::exists(main_src, ec)) {
+        std::string raw = "// " + pkg_name + " application entrypoint\n"
+                          "import std.io\n\n"
+                          "export fn run():\n"
+                          "    io.print(\"Hello from " + pkg_name + "!\")\n\n"
+                          "run()\n";
+        std::string formatted = Formatter::format_source(raw);
         std::ofstream out(main_src);
         if (out.is_open()) {
-            out << "// " << pkg_name << " application entrypoint\n"
-                << "import std.io\n\n"
-                << "export fn run():\n"
-                << "    io.print(\"Hello from " << pkg_name << "!\")\n\n"
-                << "run()\n";
+            out << (formatted.empty() ? raw : formatted);
+        }
+    }
+
+    fs::path test_file = project_root_ / "tests" / "main_test.nv";
+    if (!fs::exists(test_file, ec)) {
+        std::string raw = "// Automated test suite for " + pkg_name + "\n"
+                          "import std.io\n\n"
+                          "fn test_basic_assertion():\n"
+                          "    let x = 10 + 20\n"
+                          "    if x != 30:\n"
+                          "        io.print(\"Assertion failed!\")\n\n"
+                          "test_basic_assertion()\n";
+        std::string formatted = Formatter::format_source(raw);
+        std::ofstream out(test_file);
+        if (out.is_open()) {
+            out << (formatted.empty() ? raw : formatted);
+        }
+    }
+
+    fs::path readme = project_root_ / "README.md";
+    if (!fs::exists(readme, ec)) {
+        std::ofstream out(readme);
+        if (out.is_open()) {
+            out << "# " << pkg_name << "\n\n"
+                << "A modern NextViper application.\n\n"
+                << "## Getting Started\n\n"
+                << "```bash\n"
+                << "# Check syntax and types\n"
+                << "nextviper check\n\n"
+                << "# Format codebase\n"
+                << "nextviper fmt\n\n"
+                << "# Run tests\n"
+                << "nextviper test\n\n"
+                << "# Build project\n"
+                << "nextviper build\n\n"
+                << "# Run application\n"
+                << "nextviper run src/main.nv\n"
+                << "```\n";
         }
     }
 
@@ -900,7 +941,8 @@ int PackageManager::cmd_init(const std::string& name) {
     std::cout << "\033[1;32m✓ Initialized\033[0m NextViper package \033[1m'" << pkg_name << "'\033[0m\n"
               << "  Created nextviper.toml\n"
               << "  Created src/main.nv\n"
-              << "  Created tests/\n"
+              << "  Created tests/main_test.nv\n"
+              << "  Created README.md\n"
               << "  Created .gitignore\n";
     return 0;
 }
