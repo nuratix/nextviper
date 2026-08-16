@@ -1,0 +1,46 @@
+{
+  "name": "nextviper",
+  "version": "1.0.0",
+  "description": "NextViper Programming Language — High-performance language for Data, Tensor, AI, and Vulkan GPU Compute",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "nextviper": "./bin/nextviper.js",
+    "nextviper-lsp": "./bin/nextviper-lsp.js"
+  },
+  "scripts": {
+    "test": "node bin/nextviper.js --version"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nuratix/nextviper.git"
+  },
+  "homepage": "https://nextviper.nuratix.com",
+  "bugs": {
+    "url": "https://github.com/nuratix/nextviper/issues"
+  },
+  "author": "Nuratix LLC <support@nuratix.com> (https://nuratix.com)",
+  "license": "Apache-2.0",
+  "keywords": [
+    "nextviper",
+    "programming-language",
+    "compiler",
+    "vulkan",
+    "tensor",
+    "ai",
+    "dataframes",
+    "autograd",
+    "nuratix",
+    "machine-learning"
+  ],
+  "files": [
+    "bin/",
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

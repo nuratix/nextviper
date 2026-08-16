@@ -1,27 +1,60 @@
-# npm / Node.js Distribution Evaluation
+# npm / Node.js Distribution Guide
 
-**Status**: NOT RECOMMENDED / REJECTED FOR CORE COMPILER  
-**Evaluation Target**: `npm install -g nextviper`
-
----
-
-## 1. Technical Evaluation
-
-NextViper was evaluated to determine whether `npm` is an appropriate distribution vector for the NextViper compiler, runtime, and language server.
-
-### 1.1 Architecture Analysis
-- NextViper is a native systems programming language written in standard C++20 with Vulkan GPU bindings.
-- Node.js / npm is a JavaScript runtime package ecosystem.
-
-### 1.2 Evaluation Findings
-1. **Unnecessary Dependency Chain**: Requiring developers to install Node.js and npm solely to install a native systems compiler contradicts NextViper's zero-dependency philosophy.
-2. **Post-Install Binary Download Risks**: Many npm CLI wrappers use `postinstall` lifecycle hooks to fetch external binary tarballs. This pattern frequently breaks in air-gapped CI environments, creates security attack vectors, and causes proxy failures.
-3. **Dedicated VS Code Extension**: For developer tooling within JavaScript/TypeScript environments (e.g. VS Code), the NextViper extension is distributed directly as a standard `.vsix` package through the VS Code Marketplace and Open VSX Registry.
+**Package**: [`nextviper`](https://www.npmjs.com/package/nextviper)  
+**Version**: `1.0.0`  
+**License**: Apache-2.0  
+**Maintainer**: Nuratix LLC ([https://nuratix.com](https://nuratix.com))
 
 ---
 
-## 2. Decision
+## 1. Quick Execution with `npx`
 
-NextViper will **NOT** be distributed via `npm install -g nextviper`.
+Run NextViper scripts, REPL, and tools without global manual compilation:
 
-Developers on Linux and macOS should use the official POSIX installer (`curl -fsSL https://nextviper.nuratix.com/install.sh | sh`) or official GitHub Releases tarballs.
+```bash
+# Execute NextViper script
+npx nextviper run main.nv
+
+# Static type & syntax check with JSON diagnostics
+npx nextviper check main.nv --format=json
+
+# Format code in-place
+npx nextviper fmt src/
+
+# Launch the interactive REPL
+npx nextviper repl
+
+# Initialize package workspace
+npx nextviper init my_service
+```
+
+---
+
+## 2. Global Installation
+
+```bash
+npm install -g nextviper
+```
+
+Verify installation:
+
+```bash
+nextviper --version
+nextviper info
+```
+
+---
+
+## 3. Programmatic Node.js API
+
+```typescript
+import { run, check, eval as evaluate, getBinaryPath } from "nextviper";
+
+// Run NextViper code inline
+const evalResult = evaluate('print("Hello from NextViper via npm!")');
+console.log(evalResult.stdout);
+
+// Static type validation
+const checkResult = check("src/main.nv");
+console.log(checkResult.diagnostics);
+```
