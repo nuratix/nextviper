@@ -1,0 +1,16 @@
+[package]
+name = "landingviper"
+version = "1.0.0"
+description = "High-Performance Dynamic Landing Page & Web Server built entirely in NextViper"
+authors = ["Nuratix LLC <support@nuratix.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/nuratix/landingviper"
+homepage = "https://nextviper.nuratix.com"
+edition = "2026"
+
+[dependencies]
+std = { version = "1.0.0" }
+
+[bin]
+name = "landingviper"
+path = "server.nv"

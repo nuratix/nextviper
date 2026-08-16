@@ -1,0 +1,9 @@
+// LandingViper Main Entrypoint
+import std.io
+import "./server.nv" as server
+
+fn main():
+    io.print("Initializing LandingViper web application...")
+    server.start_server(8080)
+
+main()

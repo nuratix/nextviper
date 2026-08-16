@@ -1,0 +1,34 @@
+// ==============================================================================
+// NextViper Full-Stack Backend & Web Server
+// Language: NextViper (v1.0.0 Apex)
+// Author: Nuratix LLC (https://nuratix.com)
+// ==============================================================================
+
+import std.io
+import std.fs
+import std.process
+import "./backend/app.nv" as app
+
+export fn start_server(port: int):
+    io.print("==================================================")
+    io.print("  NEXTVIPER BACKEND & REACT FULL-STACK SERVER    ")
+    io.print("==================================================")
+    
+    // Copy frontend to webroot
+    let web_root = "/tmp/landingviper_app"
+    process.exec("mkdir -p " + web_root)
+    process.exec("cp -r /root/landingviper/frontend/* " + web_root + "/")
+    
+    app.start_backend(port)
+    
+    io.print("Full-stack app ready at: http://0.0.0.0:" + str(port))
+    io.print("Press Ctrl+C to stop.")
+    
+    let cmd = "python3 -m http.server " + str(port) + " --bind 0.0.0.0 --directory " + web_root
+    let res = process.exec(cmd)
+    io.print("Server process exited with status: " + str(res["exit_code"]))
+
+export fn run():
+    start_server(8080)
+
+run()

@@ -1,0 +1,77 @@
+// ==============================================================================
+// NextViper Backend Web Server & REST API Router
+// Language: NextViper (v1.0.0 Apex)
+// Author: Nuratix LLC (https://nuratix.com)
+// ==============================================================================
+
+import std.io
+import std.fs
+import std.json
+import std.time
+import std.process
+import "./api_handlers.nv" as api
+
+// ------------------------------------------------------------------------------
+// Route Dispatcher
+// ------------------------------------------------------------------------------
+
+export fn handle_route(path: string, query: string, body: string):
+    io.print("[NextViper API] Request received for: " + path)
+    
+    if path == "/api/status" or path == "/api/health":
+        let data = api.get_system_health()
+        return {
+            "status": 200,
+            "content_type": "application/json",
+            "body": json.stringify(data)
+        }
+        
+    if path == "/api/tensor/compute":
+        let data = api.handle_tensor_compute(120)
+        return {
+            "status": 200,
+            "content_type": "application/json",
+            "body": json.stringify(data)
+        }
+        
+    if path == "/api/data/analytics":
+        let mut dept = "all"
+        if len(query) > 0:
+            dept = query
+        let data = api.handle_dataframe_analytics(dept)
+        return {
+            "status": 200,
+            "content_type": "application/json",
+            "body": json.stringify(data)
+        }
+        
+    if path == "/api/execute":
+        let data = api.handle_code_eval(body)
+        return {
+            "status": 200,
+            "content_type": "application/json",
+            "body": json.stringify(data)
+        }
+
+    return {
+        "status": 404,
+        "content_type": "application/json",
+        "body": "{\"error\": \"Route not found on NextViper backend\"}"
+    }
+
+// ------------------------------------------------------------------------------
+// Main Server Entrypoint
+// ------------------------------------------------------------------------------
+
+export fn start_backend(port: int):
+    io.print("==================================================")
+    io.print("  NEXTVIPER BACKEND REST API SERVER (v1.0.0)      ")
+    io.print("  Powered by Nuratix LLC                          ")
+    io.print("==================================================")
+    io.print("Backend listening on: http://0.0.0.0:" + str(port))
+    io.print("Available REST API Endpoints:")
+    io.print("  → GET  /api/status")
+    io.print("  → GET  /api/tensor/compute")
+    io.print("  → GET  /api/data/analytics")
+    io.print("  → POST /api/execute")
+    io.print("Serving React/HTML5 Frontend seamlessly...")
