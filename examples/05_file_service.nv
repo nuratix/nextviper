@@ -1,0 +1,27 @@
+// NextViper Production Example 05: Document & File Processing Service
+// CSV parsing, report generation, and filesystem management.
+
+import std.io
+import std.fs
+import std.csv
+import std.log
+
+log.info("Starting NextViper Document Processing Service...")
+
+let report_csv = "timestamp,event,duration_ms,status\n2026-08-16T00:01:00Z,db_query,1.4,200\n2026-08-16T00:01:01Z,auth_verify,0.8,200\n2026-08-16T00:01:02Z,ai_inference,12.5,200\n2026-08-16T00:01:03Z,payment_charge,45.2,200"
+
+let tmp_file = "/tmp/service_audit.csv"
+fs.write(tmp_file, report_csv)
+log.info("Saved CSV audit report to " + tmp_file)
+
+// Read and parse CSV records
+let raw_content = fs.read(tmp_file)
+let rows = csv.parse(raw_content)
+
+io.print("Parsed CSV Rows count: " + str(len(rows)))
+for i in range(1, len(rows)):
+    let row = rows[i]
+    io.print("Event: " + row[1] + " | Duration: " + row[2] + "ms | Status: " + row[3])
+
+fs.remove(tmp_file)
+log.info("Cleaned up temporary audit report.")

@@ -37,12 +37,13 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
     ss << "#include <math.h>\n\n";
 
     // Standard NextViper Native Runtime helpers
-    ss << "static inline void nv_print_i64(int64_t v) { printf(\"%ld\\n\", (long)v); }\n";
-    ss << "static inline void nv_print_f64(double v) { printf(\"%f\\n\", v); }\n";
-    ss << "static inline void nv_print_str(const char* s) { printf(\"%s\\n\", s ? s : \"null\"); }\n";
-    ss << "static inline void nv_print_bool(bool b) { printf(\"%s\\n\", b ? \"true\" : \"false\"); }\n";
-    ss << "static inline int64_t nv_fn_print(int64_t v) { nv_print_i64(v); return 0; }\n";
-    ss << "static inline int64_t nv_fn_println(int64_t v) { nv_print_i64(v); return 0; }\n";
+    ss << "static inline int64_t nv_print_i64(int64_t v) { printf(\"%ld\\n\", (long)v); return 0; }\n";
+    ss << "static inline int64_t nv_print_f64(double v) { printf(\"%f\\n\", v); return 0; }\n";
+    ss << "static inline int64_t nv_print_str(const char* s) { printf(\"%s\\n\", s ? s : \"null\"); return 0; }\n";
+    ss << "static inline int64_t nv_print_bool(bool b) { printf(\"%s\\n\", b ? \"true\" : \"false\"); return 0; }\n";
+    ss << "#define nv_fn_print(x) _Generic((x), int: nv_print_i64, long: nv_print_i64, double: nv_print_f64, float: nv_print_f64, bool: nv_print_bool, char*: nv_print_str, const char*: nv_print_str, default: nv_print_str)(x)\n";
+    ss << "#define nv_fn_println(x) nv_fn_print(x)\n";
+    ss << "#define nv_fn_io_print(x) nv_fn_print(x)\n";
     ss << "static inline int64_t nv_fn_math_sqrt(int64_t v) { return (int64_t)sqrt((double)v); }\n";
     ss << "static inline int64_t nv_fn_sqrt(int64_t v) { return (int64_t)sqrt((double)v); }\n";
     ss << "static inline int64_t nv_fn_math_cbrt(int64_t v) { return (int64_t)cbrt((double)v); }\n";
@@ -189,7 +190,7 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
                     case IROpcode::PRINT:
                         for (const auto& arg : inst.args) {
                             if (arg.kind == OperandKind::REGISTER) {
-                                ss << "  nv_print_i64(r" << arg.reg_id << ");\n";
+                                ss << "  nv_fn_print(r" << arg.reg_id << ");\n";
                             } else if (arg.kind == OperandKind::CONSTANT_INT) {
                                 ss << "  nv_print_i64(" << arg.int_val << "LL);\n";
                             } else if (arg.kind == OperandKind::CONSTANT_STRING) {

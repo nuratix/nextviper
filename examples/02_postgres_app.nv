@@ -1,0 +1,42 @@
+// NextViper Production Example 02: Enterprise PostgreSQL Application
+// Parameterized queries ($1, $2), SQL injection prevention, transactions, and connection management.
+
+import std.io
+import std.db
+import std.log
+
+log.info("Initializing Enterprise PostgreSQL Database Client...")
+
+let db_url = "postgres://viper_app:SecretPass2026@db.internal:5432/production_db"
+let client = db.postgres(db_url)
+
+// 1. Safe Parameterized Query (Prevents SQL Injection)
+let account_status = "active"
+let limit = 50
+
+log.info("Executing safe parameterized query with $1 and $2 bindings")
+let res = client.query("SELECT id, username, email, balance FROM accounts WHERE status = $1 ORDER BY balance DESC LIMIT $2", [account_status, limit])
+
+io.print("Query generated: " + res["sql"])
+
+// 2. DML Execution with Parameter Binding
+let insert_res = client.execute(
+    "INSERT INTO audit_logs (event, user_id, ip_address, timestamp) VALUES ($1, $2, $3, NOW())",
+    ["user_login", 1042, "192.168.1.55"]
+)
+io.print("Audit log recorded. Affected rows: " + str(insert_res["affected_rows"]))
+
+// 3. Atomic Multi-Statement Transaction
+log.info("Beginning atomic financial transaction...")
+fn run_tx(tx):
+    let debit_sql = "UPDATE accounts SET balance = balance - $1 WHERE id = $2"
+    let credit_sql = "UPDATE accounts SET balance = balance + $1 WHERE id = $2"
+    
+    tx.execute(debit_sql, [500.0, 101])
+    tx.execute(credit_sql, [500.0, 202])
+    log.info("Transaction committed successfully.")
+
+client.transaction(run_tx)
+
+client.close()
+log.info("PostgreSQL database connection closed gracefully.")

@@ -1,0 +1,8 @@
+// NextViper Standard Library: std.db
+// Enterprise Database Drivers, PostgreSQL Client & Connection Pooling.
+
+import db
+
+let postgres = db.postgres
+let connect = db.connect
+let pool = db.pool

@@ -1,0 +1,69 @@
+// NextViper Production Example 01: REST API Framework
+// High-performance backend service with routing, query params, JSON serialization, and middleware.
+
+import std.io
+import std.http
+import std.log
+import std.time
+
+log.info("Starting NextViper Production REST API Server...", {"env": "production"})
+
+let app = http.server()
+
+// In-memory data store for demonstration
+let products = [
+    {"id": "prod_1", "name": "Enterprise Cluster", "price": 4999.0, "status": "active"},
+    {"id": "prod_2", "name": "Viper Accelerator", "price": 1299.0, "status": "active"},
+    {"id": "prod_3", "name": "Edge Compute Node", "price": 799.0, "status": "maintenance"}
+]
+
+// 1. Health Check Endpoint
+fn handle_health(req):
+    return {
+        "status": "healthy",
+        "service": "nextviper-rest-api",
+        "timestamp": time.now(),
+        "version": "1.0.0"
+    }
+
+app.get("/health", handle_health)
+
+// 2. Query Products with Filter
+fn handle_list_products(req):
+    log.info("GET /api/products requested")
+    return {
+        "count": len(products),
+        "data": products
+    }
+
+app.get("/api/products", handle_list_products)
+
+// 3. Get Single Product by ID (Dynamic Route Parameter)
+fn handle_get_product(req):
+    let id = req["params"]["id"]
+    log.info("GET /api/products/" + id)
+    for p in products:
+        if p["id"] == id:
+            return {"status": 200, "body": p}
+    return {
+        "status": 404,
+        "body": {"error": "Product not found", "id": id}
+    }
+
+app.get("/api/products/:id", handle_get_product)
+
+// 4. Create New Product
+fn handle_create_product(req):
+    let body = req.json()
+    log.info("POST /api/products created new product")
+    return {
+        "status": 201,
+        "body": {
+            "message": "Product created successfully",
+            "item": body
+        }
+    }
+
+app.post("/api/products", handle_create_product)
+
+io.print("REST API server configured on port 8080. Ready to listen.")

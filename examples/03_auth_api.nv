@@ -1,0 +1,40 @@
+// NextViper Production Example 03: Authentication & Security Service
+// Password hashing with PBKDF2, HMAC validation, JWT issuance, and bearer token verification.
+
+import std.io
+import std.crypto
+import std.log
+import std.time
+
+log.info("Starting NextViper Authentication Service...")
+
+let JWT_SECRET = "production_super_secret_jwt_signing_key_2026"
+
+// 1. Password Hashing with Cryptographic Salt
+let user_password = "ViperEnterpriseSecurePassword!99"
+let password_hash = crypto.hash_password(user_password)
+log.info("Generated PBKDF2 Password Hash: " + password_hash)
+
+// 2. Password Verification
+let is_valid = crypto.verify_password(user_password, password_hash)
+let is_invalid = crypto.verify_password("WrongPasswordAttempt", password_hash)
+io.print("Authentication attempt with valid password: " + str(is_valid))
+io.print("Authentication attempt with invalid password: " + str(is_invalid))
+
+// 3. Issue JSON Web Token (JWT)
+let payload = {
+    "user_id": "usr_991823",
+    "role": "system_architect",
+    "email": "engineer@nuratix.com",
+    "exp": time.now() + 3600
+}
+
+let jwt_token = crypto.jwt_encode(payload, JWT_SECRET)
+log.info("Issued JWT Bearer Token: " + jwt_token)
+
+// 4. Verify & Decode Token
+let claims = crypto.jwt_decode(jwt_token, JWT_SECRET)
+if claims != nil:
+    io.print("Token verified successfully! Welcome user: " + str(claims["user_id"]) + " (" + claims["role"] + ")")
+else:
+    log.error("Token verification failed! Unauthorized request.")

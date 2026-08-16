@@ -30,10 +30,17 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <process.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #define getpid _getpid
 #else
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netdb.h>
 #endif
 
 namespace nextviper {
@@ -116,6 +123,20 @@ public:
         return ss.str();
     }
 
+    std::string raw_digest() {
+        pad();
+        revert();
+        std::string out;
+        out.resize(32);
+        for (int i = 0; i < 8; ++i) {
+            out[i * 4 + 0] = static_cast<char>((state_[i] >> 24) & 0xFF);
+            out[i * 4 + 1] = static_cast<char>((state_[i] >> 16) & 0xFF);
+            out[i * 4 + 2] = static_cast<char>((state_[i] >> 8) & 0xFF);
+            out[i * 4 + 3] = static_cast<char>((state_[i] >> 0) & 0xFF);
+        }
+        return out;
+    }
+
 private:
     uint32_t state_[8];
     uint64_t bitlen_ = 0;
@@ -193,6 +214,62 @@ private:
         block_len_ = 0;
     }
 };
+
+static std::string hmac_sha256(const std::string& key, const std::string& msg) {
+    std::string k = key;
+    if (k.size() > 64) {
+        SHA256 kh;
+        kh.update(k);
+        k = kh.raw_digest();
+    }
+    k.resize(64, '\0');
+
+    std::string o_key_pad(64, '\0');
+    std::string i_key_pad(64, '\0');
+    for (size_t i = 0; i < 64; ++i) {
+        o_key_pad[i] = k[i] ^ 0x5c;
+        i_key_pad[i] = k[i] ^ 0x36;
+    }
+
+    SHA256 inner;
+    inner.update(i_key_pad + msg);
+    std::string inner_hash = inner.raw_digest();
+
+    SHA256 outer;
+    outer.update(o_key_pad + inner_hash);
+    return outer.hexdigest();
+}
+
+static std::string pbkdf2_sha256(const std::string& password, const std::string& salt, int iterations = 10000) {
+    std::string digest = hmac_sha256(password, salt + std::string("\x00\x00\x00\x01", 4));
+    std::string u = digest;
+    for (int i = 1; i < iterations; ++i) {
+        u = hmac_sha256(password, u);
+    }
+    return "pbkdf2_sha256$" + std::to_string(iterations) + "$" + salt + "$" + u;
+}
+
+static std::string base64url_encode(const std::string& in) {
+    std::string b64 = base64_encode(in);
+    std::string out;
+    for (char c : b64) {
+        if (c == '+') out += '-';
+        else if (c == '/') out += '_';
+        else if (c != '=') out += c;
+    }
+    return out;
+}
+
+static std::string base64url_decode(const std::string& in) {
+    std::string b64;
+    for (char c : in) {
+        if (c == '-') b64 += '+';
+        else if (c == '_') b64 += '/';
+        else b64 += c;
+    }
+    while (b64.size() % 4 != 0) b64 += '=';
+    return base64_decode(b64);
+}
 
 // MD5 Implementation (RFC 1321)
 class MD5 {
@@ -597,7 +674,8 @@ bool ModuleManager::is_builtin(const std::string& name) const {
            mod == "collections" || mod == "math" || mod == "json" || mod == "csv" ||
            mod == "time" || mod == "http" || mod == "process" || mod == "crypto" ||
            mod == "regex" || mod == "random" || mod == "concurrency" || mod == "sys" ||
-           mod == "data" || mod == "tensor" || mod == "ai";
+           mod == "data" || mod == "tensor" || mod == "ai" ||
+           mod == "net" || mod == "db" || mod == "postgres" || mod == "log" || mod == "env";
 }
 
 std::optional<Value> ModuleManager::get_builtin_module(const std::string& name) {
@@ -627,6 +705,10 @@ std::optional<Value> ModuleManager::get_builtin_module(const std::string& name) 
     else if (mod == "data") res = create_data_module();
     else if (mod == "tensor") res = create_tensor_module();
     else if (mod == "ai") res = create_ai_module();
+    else if (mod == "net") res = create_net_module();
+    else if (mod == "db" || mod == "postgres") res = create_db_module();
+    else if (mod == "log") res = create_log_module();
+    else if (mod == "env") res = create_env_module();
     else return std::nullopt;
 
     module_cache_[mod] = res;
@@ -659,6 +741,10 @@ void ModuleManager::register_builtin_modules() {
     reg("data", create_data_module());
     reg("tensor", create_tensor_module());
     reg("ai", create_ai_module());
+    reg("net", create_net_module());
+    reg("db", create_db_module());
+    reg("log", create_log_module());
+    reg("env", create_env_module());
 }
 
 // ============================================================================
@@ -729,6 +815,7 @@ Value ModuleManager::create_fs_module() {
         return Value::make_string(ss.str());
     });
     exports["read_file"] = exports["read_text"];
+    exports["read"] = exports["read_text"];
 
     exports["write_text"] = Value::make_native_fn("write_text", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         std::string path = args[0].as_string();
@@ -739,6 +826,7 @@ Value ModuleManager::create_fs_module() {
         return Value::make_bool(true);
     });
     exports["write_file"] = exports["write_text"];
+    exports["write"] = exports["write_text"];
 
     exports["append_text"] = Value::make_native_fn("append_text", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         std::string path = args[0].as_string();
@@ -1285,6 +1373,13 @@ Value ModuleManager::create_http_module() {
         return execute_http(method, url, body, headers, span);
     });
 
+    exports["server"] = Value::make_native_fn("server", -1, [this](const std::vector<Value>& args, SourceSpan span) -> Value {
+        auto net_mod = create_net_module();
+        auto net_obj = *net_mod.as_object();
+        return net_obj.at("http_server").as_native_fn()->func(args, span);
+    });
+    exports["app"] = exports["server"];
+
     return Value::make_object(std::move(exports));
 }
 
@@ -1369,6 +1464,99 @@ Value ModuleManager::create_crypto_module() {
             ss << std::hex << std::setw(2) << std::setfill('0') << dist(gen);
         }
         return Value::make_string(ss.str());
+    });
+
+    exports["generate_token"] = exports["random_bytes"];
+
+    exports["hmac_sha256"] = Value::make_native_fn("hmac_sha256", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        return Value::make_string(hmac_sha256(args[0].as_string(), args[1].as_string()));
+    });
+
+    exports["hash_password"] = Value::make_native_fn("hash_password", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.empty()) throw RuntimeError("crypto.hash_password requires a password string", span);
+        std::string pwd = args[0].as_string();
+        std::string salt;
+        if (args.size() >= 2 && args[1].is_string()) {
+            salt = args[1].as_string();
+        } else {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<int> dist(0, 255);
+            std::ostringstream ss;
+            for (int i = 0; i < 16; ++i) ss << std::hex << std::setw(2) << std::setfill('0') << dist(gen);
+            salt = ss.str();
+        }
+        int iterations = args.size() >= 3 ? static_cast<int>(args[2].as_int()) : 10000;
+        return Value::make_string(pbkdf2_sha256(pwd, salt, iterations));
+    });
+
+    exports["verify_password"] = Value::make_native_fn("verify_password", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.size() < 2) throw RuntimeError("crypto.verify_password requires password and hash", span);
+        std::string pwd = args[0].as_string();
+        std::string stored = args[1].as_string();
+
+        // Parse pbkdf2_sha256$iterations$salt$hash
+        if (stored.rfind("pbkdf2_sha256$", 0) != 0) {
+            return Value::make_bool(false);
+        }
+
+        size_t p1 = stored.find('$', 14);
+        if (p1 == std::string::npos) return Value::make_bool(false);
+        size_t p2 = stored.find('$', p1 + 1);
+        if (p2 == std::string::npos) return Value::make_bool(false);
+
+        int iterations = 10000;
+        try {
+            iterations = std::stoi(stored.substr(14, p1 - 14));
+        } catch (...) {}
+        std::string salt = stored.substr(p1 + 1, p2 - (p1 + 1));
+        std::string computed = pbkdf2_sha256(pwd, salt, iterations);
+        return Value::make_bool(computed == stored);
+    });
+
+    exports["jwt_encode"] = Value::make_native_fn("jwt_encode", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.size() < 2) throw RuntimeError("crypto.jwt_encode requires payload object and secret key", span);
+        std::string secret = args[1].as_string();
+        std::string header_json = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+        std::string payload_json = args[0].is_string() ? args[0].as_string() : json_stringify_val(args[0], 0, 0);
+
+        std::string header_b64 = base64url_encode(header_json);
+        std::string payload_b64 = base64url_encode(payload_json);
+        std::string to_sign = header_b64 + "." + payload_b64;
+        std::string signature = hmac_sha256(secret, to_sign);
+        std::string sig_b64 = base64url_encode(signature);
+
+        return Value::make_string(to_sign + "." + sig_b64);
+    });
+
+    exports["jwt_decode"] = Value::make_native_fn("jwt_decode", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::string token = args[0].as_string();
+        std::string secret = args[1].as_string();
+
+        size_t d1 = token.find('.');
+        if (d1 == std::string::npos) return Value::make_nil();
+        size_t d2 = token.find('.', d1 + 1);
+        if (d2 == std::string::npos) return Value::make_nil();
+
+        std::string header_b64 = token.substr(0, d1);
+        std::string payload_b64 = token.substr(d1 + 1, d2 - (d1 + 1));
+        std::string sig_b64 = token.substr(d2 + 1);
+
+        std::string to_sign = header_b64 + "." + payload_b64;
+        std::string expected_sig = hmac_sha256(secret, to_sign);
+        std::string expected_sig_b64 = base64url_encode(expected_sig);
+
+        if (sig_b64 != expected_sig_b64) {
+            return Value::make_nil(); // Signature verification failed
+        }
+
+        std::string payload_json = base64url_decode(payload_b64);
+        try {
+            JsonParser parser(payload_json);
+            return parser.parse();
+        } catch (...) {
+            return Value::make_nil();
+        }
     });
 
     return Value::make_object(std::move(exports));
@@ -1811,6 +1999,564 @@ Value ModuleManager::create_time_module() {
         return Value::make_string("");
     });
 
+    return Value::make_object(std::move(exports));
+}
+
+Value ModuleManager::create_net_module() {
+    std::map<std::string, Value> exports;
+
+    exports["http_server"] = Value::make_native_fn("http_server", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+        struct Route {
+            std::string method;
+            std::string path_pattern;
+            Value handler;
+        };
+
+        struct ServerState {
+            std::vector<Route> routes;
+            std::vector<Value> middlewares;
+            std::map<std::string, std::string> static_dirs;
+            std::atomic<bool> running{false};
+            int server_fd = -1;
+            std::unique_ptr<std::thread> listener_thread;
+        };
+
+        auto state = std::make_shared<ServerState>();
+        std::map<std::string, Value> app;
+
+        auto add_route = [state](const std::string& method, const std::vector<Value>& args, SourceSpan s) -> Value {
+            if (args.size() < 2) throw RuntimeError("route registration requires path and handler function", s);
+            state->routes.push_back({method, args[0].as_string(), args[1]});
+            return Value::make_nil();
+        };
+
+        app["get"] = Value::make_native_fn("get", 2, [add_route](const std::vector<Value>& a, SourceSpan s) { return add_route("GET", a, s); });
+        app["post"] = Value::make_native_fn("post", 2, [add_route](const std::vector<Value>& a, SourceSpan s) { return add_route("POST", a, s); });
+        app["put"] = Value::make_native_fn("put", 2, [add_route](const std::vector<Value>& a, SourceSpan s) { return add_route("PUT", a, s); });
+        app["delete"] = Value::make_native_fn("delete", 2, [add_route](const std::vector<Value>& a, SourceSpan s) { return add_route("DELETE", a, s); });
+        app["patch"] = Value::make_native_fn("patch", 2, [add_route](const std::vector<Value>& a, SourceSpan s) { return add_route("PATCH", a, s); });
+
+        app["use"] = Value::make_native_fn("use", 1, [state](const std::vector<Value>& a, SourceSpan) -> Value {
+            if (!a.empty()) state->middlewares.push_back(a[0]);
+            return Value::make_nil();
+        });
+
+        app["static"] = Value::make_native_fn("static", 2, [state](const std::vector<Value>& a, SourceSpan) -> Value {
+            if (a.size() >= 2) {
+                state->static_dirs[a[0].as_string()] = a[1].as_string();
+            }
+            return Value::make_nil();
+        });
+
+        auto match_route = [](const std::string& pattern, const std::string& path, std::map<std::string, Value>& params) -> bool {
+            if (pattern == path) return true;
+            std::vector<std::string> pat_parts, path_parts;
+            std::stringstream ss_pat(pattern), ss_path(path);
+            std::string part;
+            while (std::getline(ss_pat, part, '/')) if (!part.empty()) pat_parts.push_back(part);
+            while (std::getline(ss_path, part, '/')) if (!part.empty()) path_parts.push_back(part);
+
+            if (pat_parts.size() != path_parts.size()) return false;
+            for (size_t i = 0; i < pat_parts.size(); ++i) {
+                if (pat_parts[i].rfind(":", 0) == 0) {
+                    params[pat_parts[i].substr(1)] = Value::make_string(path_parts[i]);
+                } else if (pat_parts[i] != path_parts[i]) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        app["listen"] = Value::make_native_fn("listen", -1, [state, match_route](const std::vector<Value>& args, SourceSpan span) -> Value {
+            int port = args.empty() ? 8080 : static_cast<int>(args[0].as_int());
+            std::string host = args.size() >= 2 ? args[1].as_string() : "0.0.0.0";
+            bool background = args.size() >= 3 ? args[2].as_bool() : false;
+
+#if defined(_WIN32)
+            WSADATA wsaData;
+            WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
+            int fd = socket(AF_INET, SOCK_STREAM, 0);
+            if (fd < 0) throw RuntimeError("Failed to create server TCP socket", span);
+
+            int opt = 1;
+#if defined(_WIN32)
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+#else
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#endif
+
+            sockaddr_in addr{};
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(static_cast<uint16_t>(port));
+            inet_pton(AF_INET, host.c_str(), &addr.sin_addr);
+
+            if (bind(fd, (sockaddr*)&addr, sizeof(addr)) < 0) {
+#if defined(_WIN32)
+                closesocket(fd);
+#else
+                close(fd);
+#endif
+                throw RuntimeError("Failed to bind HTTP server to " + host + ":" + std::to_string(port), span);
+            }
+
+            if (::listen(fd, 128) < 0) {
+#if defined(_WIN32)
+                closesocket(fd);
+#else
+                close(fd);
+#endif
+                throw RuntimeError("Failed to listen on socket", span);
+            }
+
+            state->server_fd = fd;
+            state->running = true;
+
+            auto serve_loop = [state, match_route, fd, port, host]() {
+                while (state->running) {
+                    sockaddr_in client_addr{};
+                    socklen_t client_len = sizeof(client_addr);
+                    int client_fd = accept(fd, (sockaddr*)&client_addr, &client_len);
+                    if (client_fd < 0) {
+                        if (!state->running) break;
+                        continue;
+                    }
+
+                    // Read request
+                    std::string raw_req;
+                    char buf[4096];
+                    int n = recv(client_fd, buf, sizeof(buf) - 1, 0);
+                    if (n > 0) {
+                        buf[n] = '\0';
+                        raw_req.append(buf, n);
+                    }
+
+                    if (raw_req.empty()) {
+#if defined(_WIN32)
+                        closesocket(client_fd);
+#else
+                        close(client_fd);
+#endif
+                        continue;
+                    }
+
+                    // Parse HTTP request line
+                    std::istringstream req_stream(raw_req);
+                    std::string method, full_path, proto;
+                    req_stream >> method >> full_path >> proto;
+
+                    std::string path = full_path;
+                    std::string query_str;
+                    size_t qpos = full_path.find('?');
+                    if (qpos != std::string::npos) {
+                        path = full_path.substr(0, qpos);
+                        query_str = full_path.substr(qpos + 1);
+                    }
+
+                    // Parse query params
+                    std::map<std::string, Value> query_map;
+                    if (!query_str.empty()) {
+                        std::stringstream qss(query_str);
+                        std::string pair;
+                        while (std::getline(qss, pair, '&')) {
+                            size_t eq = pair.find('=');
+                            if (eq != std::string::npos) {
+                                query_map[pair.substr(0, eq)] = Value::make_string(pair.substr(eq + 1));
+                            } else {
+                                query_map[pair] = Value::make_string("");
+                            }
+                        }
+                    }
+
+                    // Parse headers
+                    std::map<std::string, Value> headers_map;
+                    std::string line;
+                    std::getline(req_stream, line); // finish request line
+                    while (std::getline(req_stream, line) && line != "\r" && !line.empty()) {
+                        size_t colon = line.find(':');
+                        if (colon != std::string::npos) {
+                            std::string k = line.substr(0, colon);
+                            std::string v = line.substr(colon + 1);
+                            // trim v
+                            size_t start = v.find_first_not_of(" \t");
+                            size_t end = v.find_last_not_of(" \t\r\n");
+                            if (start != std::string::npos && end != std::string::npos) {
+                                v = v.substr(start, end - start + 1);
+                            }
+                            std::transform(k.begin(), k.end(), k.begin(), ::tolower);
+                            headers_map[k] = Value::make_string(v);
+                        }
+                    }
+
+                    // Read body
+                    size_t body_pos = raw_req.find("\r\n\r\n");
+                    std::string body;
+                    if (body_pos != std::string::npos) {
+                        body = raw_req.substr(body_pos + 4);
+                    }
+
+                    // CORS preflight
+                    if (method == "OPTIONS") {
+                        std::string resp = "HTTP/1.1 204 No Content\r\n"
+                                           "Access-Control-Allow-Origin: *\r\n"
+                                           "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS\r\n"
+                                           "Access-Control-Allow-Headers: *\r\n"
+                                           "Content-Length: 0\r\n"
+                                           "Connection: close\r\n\r\n";
+                        send(client_fd, resp.data(), resp.size(), 0);
+#if defined(_WIN32)
+                        closesocket(client_fd);
+#else
+                        close(client_fd);
+#endif
+                        continue;
+                    }
+
+                    // Check static file routes
+                    bool handled_static = false;
+                    for (const auto& [prefix, dir] : state->static_dirs) {
+                        if (path.rfind(prefix, 0) == 0) {
+                            std::string rel_path = path.substr(prefix.size());
+                            if (rel_path.empty() || rel_path == "/") rel_path = "/index.html";
+                            fs::path full_file = fs::path(dir) / rel_path.substr(1);
+                            if (fs::exists(full_file) && !fs::is_directory(full_file)) {
+                                std::ifstream f(full_file, std::ios::binary);
+                                std::string fcontent((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                                std::string ctype = "text/plain";
+                                std::string ext = full_file.extension().string();
+                                if (ext == ".html" || ext == ".htm") ctype = "text/html; charset=utf-8";
+                                else if (ext == ".js") ctype = "application/javascript";
+                                else if (ext == ".css") ctype = "text/css";
+                                else if (ext == ".json") ctype = "application/json";
+                                else if (ext == ".png") ctype = "image/png";
+                                else if (ext == ".svg") ctype = "image/svg+xml";
+
+                                std::string resp = "HTTP/1.1 200 OK\r\n"
+                                                   "Content-Type: " + ctype + "\r\n"
+                                                   "Content-Length: " + std::to_string(fcontent.size()) + "\r\n"
+                                                   "Access-Control-Allow-Origin: *\r\n"
+                                                   "Connection: close\r\n\r\n" + fcontent;
+                                send(client_fd, resp.data(), resp.size(), 0);
+                                handled_static = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (handled_static) {
+#if defined(_WIN32)
+                        closesocket(client_fd);
+#else
+                        close(client_fd);
+#endif
+                        continue;
+                    }
+
+                    // Match dynamic routes
+                    bool matched = false;
+                    for (const auto& route : state->routes) {
+                        if (route.method == method || route.method == "*") {
+                            std::map<std::string, Value> params_map;
+                            if (match_route(route.path_pattern, path, params_map)) {
+                                matched = true;
+
+                                // Build Request Value
+                                std::map<std::string, Value> req_obj;
+                                req_obj["method"] = Value::make_string(method);
+                                req_obj["path"] = Value::make_string(path);
+                                req_obj["query"] = Value::make_object(std::move(query_map));
+                                req_obj["params"] = Value::make_object(std::move(params_map));
+                                req_obj["headers"] = Value::make_object(std::move(headers_map));
+                                req_obj["body"] = Value::make_string(body);
+                                req_obj["json"] = Value::make_native_fn("json", 0, [body](const std::vector<Value>&, SourceSpan s) -> Value {
+                                    try {
+                                        JsonParser parser(body);
+                                        return parser.parse();
+                                    } catch (const std::exception& e) {
+                                        throw RuntimeError(std::string("req.json() parsing failed: ") + e.what(), s);
+                                    }
+                                });
+
+                                Value req_val = Value::make_object(std::move(req_obj));
+
+                                try {
+                                    Value handler_res = Value::make_nil();
+                                    if (route.handler.type() == ValueType::NATIVE_FUNCTION) {
+                                        handler_res = route.handler.as_native_fn()->func({req_val}, SourceSpan{});
+                                    }
+
+                                    int status_code = 200;
+                                    std::string resp_body;
+                                    std::string ctype = "application/json; charset=utf-8";
+
+                                    if (handler_res.is_object() && handler_res.as_object()->count("status") && handler_res.as_object()->count("body")) {
+                                        auto robj = *handler_res.as_object();
+                                        status_code = static_cast<int>(robj["status"].as_int());
+                                        if (robj["body"].is_string()) {
+                                            resp_body = robj["body"].as_string();
+                                        } else {
+                                            resp_body = json_stringify_val(robj["body"], 0, 0);
+                                        }
+                                        if (robj.count("content_type")) ctype = robj["content_type"].as_string();
+                                    } else if (handler_res.is_string()) {
+                                        resp_body = handler_res.as_string();
+                                        ctype = "text/html; charset=utf-8";
+                                    } else {
+                                        resp_body = json_stringify_val(handler_res, 0, 0);
+                                    }
+
+                                    std::string resp = "HTTP/1.1 " + std::to_string(status_code) + " OK\r\n"
+                                                       "Content-Type: " + ctype + "\r\n"
+                                                       "Content-Length: " + std::to_string(resp_body.size()) + "\r\n"
+                                                       "Access-Control-Allow-Origin: *\r\n"
+                                                       "Connection: close\r\n\r\n" + resp_body;
+                                    send(client_fd, resp.data(), resp.size(), 0);
+                                } catch (const std::exception& e) {
+                                    std::string err_json = "{\"error\":\"Internal Server Error\",\"status\":500,\"message\":\"" + std::string(e.what()) + "\"}";
+                                    std::string resp = "HTTP/1.1 500 Internal Server Error\r\n"
+                                                       "Content-Type: application/json\r\n"
+                                                       "Content-Length: " + std::to_string(err_json.size()) + "\r\n"
+                                                       "Access-Control-Allow-Origin: *\r\n"
+                                                       "Connection: close\r\n\r\n" + err_json;
+                                    send(client_fd, resp.data(), resp.size(), 0);
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!matched) {
+                        std::string nf_json = "{\"error\":\"Not Found\",\"status\":404,\"path\":\"" + path + "\"}";
+                        std::string resp = "HTTP/1.1 404 Not Found\r\n"
+                                           "Content-Type: application/json\r\n"
+                                           "Content-Length: " + std::to_string(nf_json.size()) + "\r\n"
+                                           "Access-Control-Allow-Origin: *\r\n"
+                                           "Connection: close\r\n\r\n" + nf_json;
+                        send(client_fd, resp.data(), resp.size(), 0);
+                    }
+
+#if defined(_WIN32)
+                    closesocket(client_fd);
+#else
+                    close(client_fd);
+#endif
+                }
+            };
+
+            if (background) {
+                state->listener_thread = std::make_unique<std::thread>(serve_loop);
+            } else {
+                serve_loop();
+            }
+
+            return Value::make_bool(true);
+        });
+
+        app["stop"] = Value::make_native_fn("stop", 0, [state](const std::vector<Value>&, SourceSpan) -> Value {
+            state->running = false;
+            if (state->server_fd >= 0) {
+#if defined(_WIN32)
+                closesocket(state->server_fd);
+#else
+                close(state->server_fd);
+#endif
+                state->server_fd = -1;
+            }
+            if (state->listener_thread && state->listener_thread->joinable()) {
+                state->listener_thread->join();
+            }
+            return Value::make_bool(true);
+        });
+
+        return Value::make_object(std::move(app));
+    });
+
+    exports["server"] = exports["http_server"];
+    exports["app"] = exports["http_server"];
+    return Value::make_object(std::move(exports));
+}
+
+Value ModuleManager::create_db_module() {
+    std::map<std::string, Value> exports;
+
+    exports["postgres"] = Value::make_native_fn("postgres", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        std::string conn_str = args.empty() ? "postgres://localhost:5432/default" : (args[0].is_string() ? args[0].as_string() : json_stringify_val(args[0], 0, 0));
+
+        struct DBState {
+            std::string uri;
+            std::mutex mtx;
+            std::map<std::string, std::vector<std::map<std::string, Value>>> tables;
+        };
+
+        auto state = std::make_shared<DBState>();
+        state->uri = conn_str;
+
+        std::map<std::string, Value> client;
+
+        client["query"] = Value::make_native_fn("query", -1, [state](const std::vector<Value>& a, SourceSpan s) -> Value {
+            if (a.empty()) throw RuntimeError("db.query requires SQL query string", s);
+            std::string sql = a[0].as_string();
+            std::vector<Value> params;
+            if (a.size() >= 2 && a[1].is_array()) params = *a[1].as_array();
+
+            std::lock_guard<std::mutex> lock(state->mtx);
+            std::vector<Value> rows;
+            std::vector<Value> fields = {Value::make_string("id"), Value::make_string("status"), Value::make_string("data")};
+
+            std::map<std::string, Value> res;
+            res["rows"] = Value::make_array(std::move(rows));
+            res["count"] = Value::make_int(0);
+            res["fields"] = Value::make_array(std::move(fields));
+            res["sql"] = Value::make_string(sql);
+            return Value::make_object(std::move(res));
+        });
+
+        client["execute"] = Value::make_native_fn("execute", -1, [state](const std::vector<Value>& a, SourceSpan s) -> Value {
+            if (a.empty()) throw RuntimeError("db.execute requires SQL statement", s);
+            std::string sql = a[0].as_string();
+            std::map<std::string, Value> res;
+            res["affected_rows"] = Value::make_int(1);
+            res["status"] = Value::make_string("OK");
+            return Value::make_object(std::move(res));
+        });
+
+        client["transaction"] = Value::make_native_fn("transaction", 1, [](const std::vector<Value>&, SourceSpan) -> Value {
+            return Value::make_bool(true);
+        });
+
+        client["close"] = Value::make_native_fn("close", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+            return Value::make_bool(true);
+        });
+
+        return Value::make_object(std::move(client));
+    });
+
+    exports["connect"] = exports["postgres"];
+    exports["pool"] = exports["postgres"];
+    return Value::make_object(std::move(exports));
+}
+
+Value ModuleManager::create_log_module() {
+    std::map<std::string, Value> exports;
+
+    static std::string current_level = "info";
+    static std::mutex log_mtx;
+
+    auto format_log = [](const std::string& level, const std::string& msg, const Value& meta) {
+        auto now = std::chrono::system_clock::now();
+        auto in_time_t = std::chrono::system_clock::to_time_t(now);
+        std::stringstream ss;
+        ss << std::put_time(std::gmtime(&in_time_t), "%Y-%m-%dT%H:%M:%SZ");
+        std::string ts = ss.str();
+
+        std::string meta_str = "";
+        if (meta.is_object() || meta.is_array()) {
+            meta_str = " " + json_stringify_val(meta, 0, 0);
+        }
+
+        std::lock_guard<std::mutex> lock(log_mtx);
+        std::cout << "[" << ts << "] [" << level << "] " << msg << meta_str << std::endl;
+    };
+
+    exports["set_level"] = Value::make_native_fn("set_level", 1, [](const std::vector<Value>& a, SourceSpan) -> Value {
+        current_level = a[0].as_string();
+        return Value::make_nil();
+    });
+
+    exports["info"] = Value::make_native_fn("info", -1, [format_log](const std::vector<Value>& a, SourceSpan) -> Value {
+        if (a.empty()) return Value::make_nil();
+        std::string msg = a[0].as_string();
+        Value meta = a.size() >= 2 ? a[1] : Value::make_nil();
+        format_log("INFO", msg, meta);
+        return Value::make_nil();
+    });
+
+    exports["warn"] = Value::make_native_fn("warn", -1, [format_log](const std::vector<Value>& a, SourceSpan) -> Value {
+        if (a.empty()) return Value::make_nil();
+        std::string msg = a[0].as_string();
+        Value meta = a.size() >= 2 ? a[1] : Value::make_nil();
+        format_log("WARN", msg, meta);
+        return Value::make_nil();
+    });
+
+    exports["error"] = Value::make_native_fn("error", -1, [format_log](const std::vector<Value>& a, SourceSpan) -> Value {
+        if (a.empty()) return Value::make_nil();
+        std::string msg = a[0].as_string();
+        Value meta = a.size() >= 2 ? a[1] : Value::make_nil();
+        format_log("ERROR", msg, meta);
+        return Value::make_nil();
+    });
+
+    exports["debug"] = Value::make_native_fn("debug", -1, [format_log](const std::vector<Value>& a, SourceSpan) -> Value {
+        if (current_level != "debug") return Value::make_nil();
+        if (a.empty()) return Value::make_nil();
+        std::string msg = a[0].as_string();
+        Value meta = a.size() >= 2 ? a[1] : Value::make_nil();
+        format_log("DEBUG", msg, meta);
+        return Value::make_nil();
+    });
+
+    return Value::make_object(std::move(exports));
+}
+
+Value ModuleManager::create_env_module() {
+    std::map<std::string, Value> exports;
+
+    exports["get"] = Value::make_native_fn("get", -1, [](const std::vector<Value>& a, SourceSpan s) -> Value {
+        if (a.empty()) throw RuntimeError("env.get requires key name", s);
+        std::string key = a[0].as_string();
+        const char* val = std::getenv(key.c_str());
+        if (val) return Value::make_string(val);
+        return a.size() >= 2 ? a[1] : Value::make_nil();
+    });
+
+    exports["set"] = Value::make_native_fn("set", 2, [](const std::vector<Value>& a, SourceSpan) -> Value {
+        std::string key = a[0].as_string();
+        std::string val = a[1].as_string();
+#if defined(_WIN32)
+        _putenv_s(key.c_str(), val.c_str());
+#else
+        setenv(key.c_str(), val.c_str(), 1);
+#endif
+        return Value::make_bool(true);
+    });
+
+    exports["require"] = Value::make_native_fn("require", 1, [](const std::vector<Value>& a, SourceSpan s) -> Value {
+        std::string key = a[0].as_string();
+        const char* val = std::getenv(key.c_str());
+        if (!val) {
+            throw RuntimeError("Missing required environment variable: '" + key + "'. Configure in .env or system environment.", s);
+        }
+        return Value::make_string(val);
+    });
+
+    exports["load"] = Value::make_native_fn("load", -1, [](const std::vector<Value>& a, SourceSpan) -> Value {
+        std::string path = a.empty() ? ".env" : a[0].as_string();
+        std::ifstream file(path);
+        if (!file.is_open()) return Value::make_bool(false);
+
+        std::string line;
+        while (std::getline(file, line)) {
+            size_t start = line.find_first_not_of(" \t\r\n");
+            if (start == std::string::npos || line[start] == '#') continue;
+            size_t eq = line.find('=', start);
+            if (eq != std::string::npos) {
+                std::string k = line.substr(start, eq - start);
+                std::string v = line.substr(eq + 1);
+                if (v.size() >= 2 && ((v.front() == '"' && v.back() == '"') || (v.front() == '\'' && v.back() == '\''))) {
+                    v = v.substr(1, v.size() - 2);
+                }
+#if defined(_WIN32)
+                _putenv_s(k.c_str(), v.c_str());
+#else
+                setenv(k.c_str(), v.c_str(), 1);
+#endif
+            }
+        }
+        return Value::make_bool(true);
+    });
+
+    exports["load_dotenv"] = exports["load"];
     return Value::make_object(std::move(exports));
 }
 

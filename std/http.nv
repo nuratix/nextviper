@@ -1,5 +1,5 @@
 // NextViper Standard Library: std.http
-// High-performance HTTP client.
+// High-performance HTTP Client and REST Web Server Framework.
 
 import http
 
@@ -8,3 +8,5 @@ let post = http.post
 let put = http.put
 let delete = http.delete
 let request = http.request
+let server = http.server
+let app = http.server

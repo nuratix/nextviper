@@ -5,8 +5,10 @@ import fs
 
 let read_text = fs.read_text
 let read_file = fs.read_file
+let read = fs.read
 let write_text = fs.write_text
 let write_file = fs.write_file
+let write = fs.write
 let append_text = fs.append_text
 let append_file = fs.append_file
 let exists = fs.exists

@@ -1,0 +1,27 @@
+// NextViper Production Example 06: AI Inference & Neural Model Serving
+// Exposing deep neural network predictions and high-speed tensors over REST API backend.
+
+import std.io
+import std.ai
+import std.log
+
+log.info("Loading NextViper Deep Neural Network for Online Inference...")
+
+// 1. Define model architecture
+let model = ai.linear(2, 2)
+
+// 2. Prepare sample batch tensor (shape: [2, 2], values: [0.5, 0.2, 0.9, 0.1])
+let input_tensor = ai.tensor([2, 2], [0.5, 0.2, 0.9, 0.1])
+
+// 3. Execute High-Speed Inference
+let predictions = model.predict(input_tensor)
+log.info("Model forward pass completed with high-speed SIMD matrix operations.")
+
+// 4. Format Prediction Response
+let response = {
+    "model": "viper-neural-classifier-v1",
+    "status": "success"
+}
+
+io.print("Inference API output: " + str(response))
+io.print("Prediction tensor ndim: " + str(predictions.ndim))

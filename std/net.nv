@@ -1,0 +1,8 @@
+// NextViper Standard Library: std.net
+// TCP sockets and networking services.
+
+import net
+
+let http_server = net.http_server
+let server = net.server
+let app = net.app

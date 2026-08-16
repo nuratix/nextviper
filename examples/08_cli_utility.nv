@@ -1,0 +1,37 @@
+// NextViper Production Example 08: Production Backend CLI & Migration Tool
+// Command-line options parsing, database migration status, and operational automation.
+
+import std.io
+import std.sys
+import std.env
+import std.log
+
+log.info("NextViper Operations CLI Tool v1.0.0", {"platform": sys.platform})
+
+let command = "status"
+let target_env = env.get("APP_ENV", "production")
+
+io.print("Operating in environment: " + target_env)
+io.print("Executing action: " + command)
+
+// Check operational subsystems
+let services = [
+    {"name": "Postgres Database Cluster", "healthy": true, "latency_ms": 1.2},
+    {"name": "Redis Cache Cluster", "healthy": true, "latency_ms": 0.4},
+    {"name": "AI Inference GPU Engine", "healthy": true, "latency_ms": 4.8},
+    {"name": "REST API Gateway", "healthy": true, "latency_ms": 0.9}
+]
+
+io.print("\n=== SYSTEM HEALTH STATUS ===")
+let all_healthy = true
+for svc in services:
+    let status_str = "OK"
+    if !svc["healthy"]:
+        status_str = "FAILED"
+        all_healthy = false
+    io.print("  [ " + status_str + " ] " + svc["name"] + " (latency: " + str(svc["latency_ms"]) + "ms)")
+
+if all_healthy:
+    log.info("All cluster subsystems are operational.")
+else:
+    log.error("One or more subsystems reported an outage!")

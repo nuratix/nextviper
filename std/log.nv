@@ -1,0 +1,10 @@
+// NextViper Standard Library: std.log
+// Production Structured Logging and Observability.
+
+import log
+
+let set_level = log.set_level
+let info = log.info
+let warn = log.warn
+let error = log.error
+let debug = log.debug

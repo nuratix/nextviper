@@ -1,0 +1,40 @@
+// NextViper Production Example 04: JSON Microservice & Schema Serialization
+// Complex nested JSON parsing, serialization, and schema validation.
+
+import std.io
+import std.json
+import std.log
+
+log.info("Starting NextViper JSON Serialization Benchmark & Microservice...")
+
+// 1. Complex nested payload
+let config_payload = {
+    "cluster_name": "us-east-viper-01",
+    "version": "1.0.0",
+    "nodes": [
+        {"id": 1, "ip": "10.0.1.10", "role": "leader", "cores": 64, "memory_gb": 256},
+        {"id": 2, "ip": "10.0.1.11", "role": "worker", "cores": 128, "memory_gb": 512},
+        {"id": 3, "ip": "10.0.1.12", "role": "worker", "cores": 128, "memory_gb": 512}
+    ],
+    "telemetry": {
+        "enabled": true,
+        "sample_rate": 0.05,
+        "metrics_port": 9090
+    }
+}
+
+// 2. Stringify JSON with formatted output
+let json_str = json.stringify(config_payload)
+io.print("Serialized JSON length: " + str(len(json_str)) + " bytes")
+
+// 3. Parse JSON back to NextViper Objects
+let parsed = json.parse(json_str)
+io.print("Parsed cluster: " + parsed["cluster_name"])
+io.print("Worker node count: " + str(len(parsed["nodes"])))
+
+let mut total_cores = 0
+for node in parsed["nodes"]:
+    total_cores = total_cores + node["cores"]
+
+io.print("Total cluster computing cores: " + str(total_cores))
+log.info("JSON microservice execution completed successfully.")

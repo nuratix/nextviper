@@ -57,6 +57,10 @@ private:
     Value create_concurrency_module();
     Value create_sys_module();
     Value create_data_module();
+    Value create_net_module();
+    Value create_db_module();
+    Value create_log_module();
+    Value create_env_module();
     Value create_ai_module();
     Value create_tensor_module();
 
