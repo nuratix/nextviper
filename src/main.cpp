@@ -1049,10 +1049,34 @@ int package_command(int argc, char* argv[]) {
     }
     if (sub == "publish") {
         bool dry_run = false;
+        std::string access = "";
+        std::string token = "";
+        std::string user = "";
+        std::string registry = "";
+
         for (int i = 3; i < argc; ++i) {
-            if (std::string(argv[i]) == "--dry-run") dry_run = true;
+            std::string arg = argv[i];
+            if (arg == "--dry-run") {
+                dry_run = true;
+            } else if (arg == "--access" && i + 1 < argc) {
+                access = argv[++i];
+            } else if (arg.rfind("--access=", 0) == 0) {
+                access = arg.substr(9);
+            } else if (arg == "--token" && i + 1 < argc) {
+                token = argv[++i];
+            } else if (arg.rfind("--token=", 0) == 0) {
+                token = arg.substr(8);
+            } else if (arg == "--user" && i + 1 < argc) {
+                user = argv[++i];
+            } else if (arg.rfind("--user=", 0) == 0) {
+                user = arg.substr(7);
+            } else if (arg == "--registry" && i + 1 < argc) {
+                registry = argv[++i];
+            } else if (arg.rfind("--registry=", 0) == 0) {
+                registry = arg.substr(11);
+            }
         }
-        return pm.cmd_publish(dry_run);
+        return pm.cmd_publish(dry_run, access, token, user, registry);
     }
 
     std::cerr << "Unknown package command: " << sub << "\n";
@@ -1155,10 +1179,34 @@ int main(int argc, char* argv[]) {
     if (first_arg == "publish") {
         nextviper::PackageManager pm;
         bool dry_run = false;
+        std::string access = "";
+        std::string token = "";
+        std::string user = "";
+        std::string registry = "";
+
         for (int i = 2; i < argc; ++i) {
-            if (std::string(argv[i]) == "--dry-run") dry_run = true;
+            std::string arg = argv[i];
+            if (arg == "--dry-run") {
+                dry_run = true;
+            } else if (arg == "--access" && i + 1 < argc) {
+                access = argv[++i];
+            } else if (arg.rfind("--access=", 0) == 0) {
+                access = arg.substr(9);
+            } else if (arg == "--token" && i + 1 < argc) {
+                token = argv[++i];
+            } else if (arg.rfind("--token=", 0) == 0) {
+                token = arg.substr(8);
+            } else if (arg == "--user" && i + 1 < argc) {
+                user = argv[++i];
+            } else if (arg.rfind("--user=", 0) == 0) {
+                user = arg.substr(7);
+            } else if (arg == "--registry" && i + 1 < argc) {
+                registry = argv[++i];
+            } else if (arg.rfind("--registry=", 0) == 0) {
+                registry = arg.substr(11);
+            }
         }
-        return pm.cmd_publish(dry_run);
+        return pm.cmd_publish(dry_run, access, token, user, registry);
     }
 
     if (first_arg == "lint") {

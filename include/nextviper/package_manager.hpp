@@ -196,7 +196,11 @@ public:
     int cmd_install();
     int cmd_update(const std::string& pkg_name = "");
     int cmd_list();
-    int cmd_publish(bool dry_run = true);
+    int cmd_publish(bool dry_run = false,
+                    const std::string& access = "",
+                    const std::string& token = "",
+                    const std::string& user = "",
+                    const std::string& registry_url = "");
 
     std::filesystem::path manifest_path() const { return project_root_ / "nextviper.toml"; }
     std::filesystem::path lockfile_path() const { return project_root_ / "nextviper.lock"; }

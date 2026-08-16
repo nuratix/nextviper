@@ -1155,17 +1155,57 @@ int PackageManager::cmd_list() {
     return 0;
 }
 
-int PackageManager::cmd_publish(bool dry_run) {
+static std::map<std::string, std::string> load_nextviperrc() {
+    std::map<std::string, std::string> config;
+    const char* home = std::getenv("HOME");
+    if (!home) return config;
+    fs::path rc_path = fs::path(home) / ".nextviperrc";
+    if (!fs::exists(rc_path)) return config;
+
+    std::ifstream ifs(rc_path);
+    std::string line;
+    while (std::getline(ifs, line)) {
+        line = trim(line);
+        if (line.empty() || line[0] == '#') continue;
+        auto eq = line.find('=');
+        if (eq != std::string::npos) {
+            std::string key = trim(line.substr(0, eq));
+            std::string val = trim(line.substr(eq + 1));
+            config[key] = val;
+        }
+    }
+    return config;
+}
+
+static void save_nextviperrc(const std::string& user, const std::string& token, const std::string& registry) {
+    const char* home = std::getenv("HOME");
+    if (!home) return;
+    fs::path rc_path = fs::path(home) / ".nextviperrc";
+    std::ofstream ofs(rc_path);
+    if (ofs.is_open()) {
+        ofs << "# NextViper Developer Credentials\n";
+        ofs << "user=" << user << "\n";
+        ofs << "token=" << token << "\n";
+        ofs << "registry=" << registry << "\n";
+        ofs.close();
+        chmod(rc_path.c_str(), 0600);
+    }
+}
+
+int PackageManager::cmd_publish(bool dry_run,
+                                const std::string& access_arg,
+                                const std::string& token_arg,
+                                const std::string& user_arg,
+                                const std::string& registry_arg) {
     std::string err;
     auto manifest_opt = ProjectManifest::load_from_file(manifest_path(), err);
     if (!manifest_opt) {
-        std::cerr << "error: no nextviper.toml found in current directory\n";
+        std::cerr << "\033[1;31merror:\033[0m no nextviper.toml found in current directory\n";
         return 1;
     }
 
     auto m = *manifest_opt;
     bool updated_manifest = false;
-
     bool is_interactive = !dry_run && isatty(fileno(stdin));
 
     // Interactive prompt for License if missing
@@ -1242,7 +1282,7 @@ int PackageManager::cmd_publish(bool dry_run) {
     }
 
     // Interactive prompt for Category if missing
-    if ((m.category.empty() || m.category == "general") && is_interactive) {
+    if (m.category.empty() && is_interactive) {
         std::cout << "\033[1;33m? Category (general/ai/data/numerical/networking/crypto) [default: general]: \033[0m";
         std::string input;
         if (std::getline(std::cin, input)) {
@@ -1261,7 +1301,7 @@ int PackageManager::cmd_publish(bool dry_run) {
     }
 
     std::string tree_hash = PackageIntegrity::compute_tree_hash(project_root_);
-    std::cout << "\033[1;34m[Packaging]\033[0m " << m.name << " v" << m.version.to_string() << "\n"
+    std::cout << "\n\033[1;34m[Packaging]\033[0m " << m.name << " v" << m.version.to_string() << "\n"
               << "  Tree SHA-256: " << tree_hash << "\n"
               << "  License:      " << m.license << "\n"
               << "  Repository:   " << (m.repository.empty() ? "(none)" : m.repository) << "\n"
@@ -1278,11 +1318,192 @@ int PackageManager::cmd_publish(bool dry_run) {
 
     std::string tar_cmd = "tar -czf \"" + dist_pkg.string() + "\" --exclude='.git' --exclude='.nextviper' --exclude='dist' --exclude='build' -C \"" + project_root_.string() + "\" .";
     int ret = system(tar_cmd.c_str());
-    if (ret == 0) {
-        std::cout << "\033[1;32m✓ Built package bundle:\033[0m " << dist_pkg.string() << "\n";
+    if (ret != 0) {
+        std::cerr << "\033[1;31merror:\033[0m failed to archive package bundle\n";
+        return 1;
+    }
+
+    std::cout << "\033[1;32m✓ Built package bundle:\033[0m " << dist_pkg.string() << "\n\n";
+
+    // ------------------------------------------------------------------------
+    // Credentials & Registry Resolution
+    // ------------------------------------------------------------------------
+    auto rc = load_nextviperrc();
+
+    std::string final_registry = registry_arg;
+    if (final_registry.empty()) {
+        const char* reg_env = std::getenv("NEXTVIPER_REGISTRY");
+        if (reg_env && std::string(reg_env).length() > 0) {
+            final_registry = reg_env;
+        } else if (rc.count("registry") && !rc["registry"].empty()) {
+            final_registry = rc["registry"];
+        } else {
+            final_registry = "https://nextviper.nuratix.com";
+        }
+    }
+    while (!final_registry.empty() && final_registry.back() == '/') {
+        final_registry.pop_back();
+    }
+
+    std::string final_token = token_arg;
+    if (final_token.empty()) {
+        const char* tok_env = std::getenv("NEXTVIPER_TOKEN");
+        if (!tok_env) tok_env = std::getenv("NEXTVIPER_ACCESS_KEY");
+        if (tok_env && std::string(tok_env).length() > 0) {
+            final_token = tok_env;
+        } else if (rc.count("token") && !rc["token"].empty()) {
+            final_token = rc["token"];
+        }
+    }
+
+    std::string final_user = user_arg;
+    if (final_user.empty()) {
+        const char* usr_env = std::getenv("NEXTVIPER_USER");
+        if (!usr_env) usr_env = std::getenv("NEXTVIPER_USERNAME");
+        if (usr_env && std::string(usr_env).length() > 0) {
+            final_user = usr_env;
+        } else if (rc.count("user") && !rc["user"].empty()) {
+            final_user = rc["user"];
+        }
+    }
+
+    std::string final_access = access_arg;
+    if (final_access.empty()) {
+        const char* acc_env = std::getenv("NEXTVIPER_ACCESS");
+        if (acc_env && std::string(acc_env).length() > 0) {
+            final_access = acc_env;
+        } else {
+            final_access = "public";
+        }
+    }
+
+    bool should_save_rc = false;
+
+    // Interactive Prompt for missing credentials
+    if ((final_user.empty() || final_token.empty()) && is_interactive) {
+        std::cout << "\033[1;36m====================================================\033[0m\n";
+        std::cout << "\033[1;36m NextViper Cloud Registry Authentication\033[0m\n";
+        std::cout << "\033[1;36m====================================================\033[0m\n";
+
+        if (final_user.empty()) {
+            std::cout << "\033[1;33m? Enter your NextViper Username: \033[0m";
+            std::string input;
+            if (std::getline(std::cin, input)) {
+                final_user = trim(input);
+            }
+        }
+
+        if (final_token.empty()) {
+            std::cout << "\033[1;33m? Enter Developer Access Key (starts with nv_...): \033[0m";
+            std::string input;
+            if (std::getline(std::cin, input)) {
+                final_token = trim(input);
+            }
+        }
+
+        if (access_arg.empty()) {
+            std::cout << "\033[1;33m? Package Visibility (public/private) [default: public]: \033[0m";
+            std::string input;
+            if (std::getline(std::cin, input)) {
+                input = trim(input);
+                if (input == "private") {
+                    final_access = "private";
+                } else {
+                    final_access = "public";
+                }
+            }
+        }
+
+        std::cout << "\033[1;33m? Save credentials to ~/.nextviperrc for future releases? (Y/n): \033[0m";
+        std::string save_in;
+        if (std::getline(std::cin, save_in)) {
+            save_in = trim(save_in);
+            if (save_in.empty() || save_in == "y" || save_in == "Y" || save_in == "yes") {
+                should_save_rc = true;
+            }
+        } else {
+            should_save_rc = true;
+        }
+    }
+
+    if (final_token.empty()) {
+        std::cerr << "\033[1;31merror:\033[0m missing developer access key.\n"
+                  << "  • Set NEXTVIPER_TOKEN environment variable\n"
+                  << "  • Or run: nextviper publish --token <nv_...> --user <username>\n"
+                  << "  • Or save credentials in ~/.nextviperrc\n";
+        return 1;
+    }
+
+    if (final_user.empty()) {
+        std::cerr << "\033[1;31merror:\033[0m missing NextViper username.\n"
+                  << "  • Set NEXTVIPER_USER environment variable\n"
+                  << "  • Or run: nextviper publish --user <username> --token <nv_...>\n";
+        return 1;
+    }
+
+    if (should_save_rc) {
+        save_nextviperrc(final_user, final_token, final_registry);
+        std::cout << "\033[1;32m✓ Saved credentials to ~/.nextviperrc\033[0m\n";
+    }
+
+    // ------------------------------------------------------------------------
+    // Remote Network Upload Dispatch
+    // ------------------------------------------------------------------------
+    std::string is_private_val = (final_access == "private") ? "true" : "false";
+    std::cout << "\033[1;34m[Publishing]\033[0m Uploading " << m.name << "@" << m.version.to_string() 
+              << " (" << final_access << ") to NextViper Registry (" << final_registry << ")...\n";
+
+    std::string upload_cmd = "curl -s -w \"\\n__HTTP_STATUS__:%{http_code}\" -X POST \"" + final_registry + "/api/packages/publish\" "
+        "-H \"Authorization: Bearer " + final_token + "\" "
+        "-H \"X-NextViper-Access-Key: " + final_token + "\" "
+        "-H \"X-NextViper-User: " + final_user + "\" "
+        "-F \"file=@" + dist_pkg.string() + "\" "
+        "-F \"license=" + m.license + "\" "
+        "-F \"description=" + m.description + "\" "
+        "-F \"category=" + m.category + "\" "
+        "-F \"access=" + final_access + "\" "
+        "-F \"is_private=" + is_private_val + "\"";
+
+    FILE* pipe = popen(upload_cmd.c_str(), "r");
+    if (!pipe) {
+        std::cerr << "\033[1;31merror:\033[0m failed to execute network upload command\n";
+        return 1;
+    }
+
+    char buf[512];
+    std::string result = "";
+    while (fgets(buf, sizeof(buf), pipe) != NULL) {
+        result += buf;
+    }
+    pclose(pipe);
+
+    // Extract HTTP Status Code
+    int http_status = 0;
+    size_t status_pos = result.rfind("__HTTP_STATUS__:");
+    std::string body = result;
+    if (status_pos != std::string::npos) {
+        std::string status_str = result.substr(status_pos + 16);
+        try {
+            http_status = std::stoi(trim(status_str));
+        } catch (...) {}
+        body = result.substr(0, status_pos);
+    }
+
+    if (http_status == 200 || http_status == 201) {
+        std::cout << "\n\033[1;32m====================================================\033[0m\n";
+        std::cout << "\033[1;32m 🎉 SUCCESS: " << m.name << "@" << m.version.to_string() 
+                  << " (" << final_access << ") PUBLISHED SUCCESSFULLY!\033[0m\n";
+        std::cout << "\033[1;32m====================================================\033[0m\n";
+        std::cout << "  Package:      " << m.name << "\n";
+        std::cout << "  Version:      " << m.version.to_string() << " (Latest)\n";
+        std::cout << "  Visibility:   " << final_access << "\n";
+        std::cout << "  Owner:        @" << final_user << "\n";
+        std::cout << "  Registry URL: " << final_registry << "/packages/" << m.name << "\n";
+        std::cout << "  Install with: nextviper add " << m.name << "\n\n";
         return 0;
     } else {
-        std::cerr << "error: failed to archive package bundle\n";
+        std::cerr << "\n\033[1;31m✗ Registry Publish Failed (HTTP " << http_status << "):\033[0m\n";
+        std::cerr << "  " << trim(body) << "\n\n";
         return 1;
     }
 }
