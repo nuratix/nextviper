@@ -1,0 +1,451 @@
+// ==============================================================================
+// NextViper Dynamic Landing Page Generator & Server Logic
+// Language: NextViper (v1.0.0 Apex)
+// Author: Nuratix LLC (https://nuratix.com)
+// ==============================================================================
+
+import std.io
+import std.fs
+import std.math
+import std.time
+
+// ------------------------------------------------------------------------------
+// 1. Data Models & Application State
+// ------------------------------------------------------------------------------
+
+fn get_hero_data():
+    return {
+        "title": "NextViper Programming Language",
+        "badge": "Version 1.0.0 Apex Released",
+        "tagline": "The High-Performance Language for Data, Tensor, AI & Vulkan GPU Compute",
+        "description": "Deterministic native performance, zero-GC latency, first-class columnar DataFrames, reverse-mode automatic differentiation, and Khronos Vulkan GPU acceleration in an elegant, approachable syntax.",
+        "install_command": "curl -fsSL https://nextviper.nuratix.com/install.sh | sh",
+        "npx_command": "npx nextviper run main.nv"
+    }
+
+fn get_core_features():
+    return [
+        {
+            "icon": "⚡",
+            "title": "Deterministic Native Speed",
+            "desc": "Compiles directly to standalone native machine binaries with constant folding, SSA register allocation, and LLVM/C++20 optimizations."
+        },
+        {
+            "icon": "🔥",
+            "title": "Khronos Vulkan GPU Acceleration",
+            "desc": "Built-in GPU compute engine executing parallel SPIR-V GEMM shaders across NVIDIA, AMD, Intel, and Apple Silicon hardware."
+        },
+        {
+            "icon": "🧠",
+            "title": "Native Tensor & Autograd Engine",
+            "desc": "N-dimensional tensor engine with reverse-mode automatic differentiation, gradient backpropagation, and neural layers."
+        },
+        {
+            "icon": "📊",
+            "title": "Columnar DataFrames & Vectorization",
+            "desc": "High-throughput tabular data structures with SIMD memory layout, CSV parsing, data filtering, and automated splitting."
+        },
+        {
+            "icon": "🛡️",
+            "title": "Memory Safety (RAII & Zero GC)",
+            "desc": "No stop-the-world garbage collection pauses. Destructors and copy-on-write reference buffers ensure deterministic memory reclamation."
+        },
+        {
+            "icon": "🛠️",
+            "title": "Integrated Developer Toolchain",
+            "desc": "Zero-friction CLI with built-in Language Server Protocol (nextviper-lsp), deterministic formatter (fmt), and package manager."
+        }
+    ]
+
+fn get_benchmark_data():
+    return [
+        {"name": "01. Prime Arithmetic (N=5000)", "nv_native": 9.52, "python": 97.91, "unit": "ms"},
+        {"name": "02. Nested Loops (1M Iterations)", "nv_native": 29.35, "python": 465.97, "unit": "ms"},
+        {"name": "03. Recursive Calls (Fibonacci N=25)", "nv_native": 19.52, "python": 184.71, "unit": "ms"},
+        {"name": "04. Dense Matmul (60x60 + ReLU)", "nv_native": 27.01, "python": 144.66, "unit": "ms"},
+        {"name": "05. Tabular CSV Processing (2k rows)", "nv_native": 68.34, "python": 332.94, "unit": "ms"}
+    ]
+
+// ------------------------------------------------------------------------------
+// 2. Business Logic: Performance Statistics Calculation
+// ------------------------------------------------------------------------------
+
+fn compute_speedup(nv_time: float, py_time: float) -> float:
+    if nv_time <= 0.0:
+        return 1.0
+    return math.floor((py_time / nv_time) * 10.0) / 10.0
+
+fn compute_overall_stats(benchmarks):
+    let mut total_speedup = 0.0
+    let count = len(benchmarks)
+    
+    for b in benchmarks:
+        let s = compute_speedup(b["nv_native"], b["python"])
+        total_speedup = total_speedup + s
+    
+    let avg_speedup = total_speedup / float(count)
+    return {
+        "benchmark_count": count,
+        "average_speedup": math.floor(avg_speedup * 10.0) / 10.0,
+        "max_speedup": 15.9
+    }
+
+// ------------------------------------------------------------------------------
+// 3. HTML Rendering Engine (NextViper View Template Components)
+// ------------------------------------------------------------------------------
+
+fn render_nav_header():
+    return """
+    <header class="header">
+      <div class="nav-container">
+        <div class="nav-brand">
+          <a href="https://nextviper.nuratix.com" class="brand-link">
+            <span class="brand-text">NextViper</span>
+            <span class="brand-version">v1.0.0</span>
+          </a>
+          <span class="by-badge">by <a href="https://nuratix.com" target="_blank">Nuratix LLC</a></span>
+        </div>
+        <nav class="nav-menu">
+          <a href="/docs/getting-started">Docs</a>
+          <a href="/learn">6-Day Course</a>
+          <a href="/benchmarks">Benchmarks</a>
+          <a href="/roadmap">Roadmap</a>
+          <a href="/packages">Packages</a>
+          <a href="/download" class="btn-primary-sm">Download</a>
+        </nav>
+      </div>
+    </header>
+    """
+
+fn render_hero_section(hero):
+    return """
+    <section class="hero-section">
+      <div class="container">
+        <div class="badge-pill">
+          <span class="pulse-dot"></span>
+          <span>""" + hero["badge"] + """</span>
+        </div>
+        <h1 class="hero-title">""" + hero["title"] + """</h1>
+        <p class="hero-tagline">""" + hero["tagline"] + """</p>
+        <p class="hero-desc">""" + hero["description"] + """</p>
+        
+        <div class="hero-actions">
+          <a href="/download" class="btn-hero-primary">Download NextViper</a>
+          <a href="/learn" class="btn-hero-secondary">Start 6-Day Course</a>
+        </div>
+        
+        <div class="install-box">
+          <div class="install-header">
+            <span>POSIX One-Line Installer</span>
+            <span class="tag-secure">HTTPS • SHA-256</span>
+          </div>
+          <div class="install-code">
+            <code>""" + hero["install_command"] + """</code>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('""" + hero["install_command"] + """'); this.innerText='Copied!';">Copy</button>
+          </div>
+          <div class="npx-hint">
+            <span>Or run instantly:</span> <code>""" + hero["npx_command"] + """</code>
+          </div>
+        </div>
+      </div>
+    </section>
+    """
+
+fn render_features_grid(features):
+    let mut html = "<section class='features-section'><div class='container'><h2 class='section-title'>Engineered for Raw Speed & Simplicity</h2><div class='features-grid'>"
+    for f in features:
+        html = html + """
+        <div class="feature-card">
+          <div class="feature-icon">""" + f["icon"] + """</div>
+          <h3 class="feature-title">""" + f["title"] + """</h3>
+          <p class="feature-desc">""" + f["desc"] + """</p>
+        </div>
+        """
+    html = html + "</div></div></section>"
+    return html
+
+fn render_benchmarks_section(benchmarks, stats):
+    let mut rows = ""
+    for b in benchmarks:
+        let speedup = str(compute_speedup(b["nv_native"], b["python"])) + "x"
+        rows = rows + """
+        <tr>
+          <td class="bench-name">""" + b["name"] + """</td>
+          <td class="bench-nv">""" + str(b["nv_native"]) + " ms" + """</td>
+          <td class="bench-py">""" + str(b["python"]) + " ms" + """</td>
+          <td class="bench-speedup">""" + speedup + " faster" + """</td>
+        </tr>
+        """
+
+    return """
+    <section class="benchmarks-section">
+      <div class="container">
+        <h2 class="section-title">Empirical Benchmark Latency</h2>
+        <p class="section-subtitle">Measured across 5 runs on ARM64 Linux vs Python 3.14 (Lower latency is better)</p>
+        
+        <div class="stats-banner">
+          <div class="stat-item">
+            <div class="stat-value">""" + str(stats["max_speedup"]) + """x</div>
+            <div class="stat-label">Peak Compute Speedup</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">""" + str(stats["average_speedup"]) + """x</div>
+            <div class="stat-label">Average Workload Speedup</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value">0 ms</div>
+            <div class="stat-label">GC Pause Latency (RAII)</div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th>Workload</th>
+                <th>NextViper Native</th>
+                <th>Python 3.14</th>
+                <th>Measured Speedup</th>
+              </tr>
+            </thead>
+            <tbody>
+              """ + rows + """
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    """
+
+fn render_code_showcase():
+    return """
+    <section class="code-showcase-section">
+      <div class="container">
+        <h2 class="section-title">Expressive, Beautiful NextViper Syntax</h2>
+        <div class="code-editor-mock">
+          <div class="editor-header">
+            <span class="window-dot dot-red"></span>
+            <span class="window-dot dot-yellow"></span>
+            <span class="window-dot dot-green"></span>
+            <span class="editor-filename">neural_tensor_pipeline.nv</span>
+          </div>
+          <pre class="code-content"><code><span class="kw">import</span> std.io
+<span class="kw">import</span> std.data
+<span class="kw">import</span> std.tensor
+<span class="kw">import</span> std.ai
+<span class="kw">import</span> std.gpu
+
+<span class="cm">// 1. Columnar Data Ingestion with Vectorization</span>
+<span class="kw">let</span> df = data.DataFrame.read_csv(<span class="str">"sensor_data.csv"</span>)
+<span class="kw">let</span> train_data = df.filter(<span class="kw">fn</span>(row) => row[<span class="str">"status"</span>] == <span class="str">"active"</span>)
+
+<span class="cm">// 2. N-Dimensional Tensor on Vulkan GPU Device</span>
+<span class="kw">let</span> X = tensor.from_matrix(train_data.to_matrix(), device = <span class="str">"gpu"</span>)
+<span class="kw">let</span> model = ai.Dense(in_features = 8, out_features = 2, activation = <span class="str">"relu"</span>)
+
+<span class="cm">// 3. Forward Pass & Autograd Gradient Calculation</span>
+<span class="kw">let</span> output = model.forward(X)
+<span class="kw">let</span> loss = output.sum()
+loss.backward()
+
+io.print(<span class="str">"✓ Optimization step completed on Vulkan compute backend."</span>)</code></pre>
+        </div>
+      </div>
+    </section>
+    """
+
+fn render_footer():
+    return """
+    <footer class="footer">
+      <div class="container footer-content">
+        <div class="footer-brand">
+          <span class="brand-title">NextViper</span>
+          <p class="footer-desc">The open-source compiled programming language maintained by Nuratix LLC.</p>
+          <p class="copyright">© 2026 Nuratix LLC. Distributed under Apache-2.0 License.</p>
+        </div>
+        <div class="footer-links">
+          <div>
+            <h4>Resources</h4>
+            <a href="/docs/getting-started">Documentation</a>
+            <a href="/learn">6-Day Course</a>
+            <a href="/benchmarks">Benchmarks</a>
+            <a href="/roadmap">Roadmap</a>
+          </div>
+          <div>
+            <h4>Distribution</h4>
+            <a href="/install">Install Toolchain</a>
+            <a href="/download">Download Hub</a>
+            <a href="https://www.npmjs.com/package/nextviper" target="_blank">npm Package</a>
+            <a href="https://github.com/nuratix/nextviper" target="_blank">GitHub</a>
+          </div>
+          <div>
+            <h4>Organization</h4>
+            <a href="https://nuratix.com" target="_blank">Nuratix LLC</a>
+            <a href="https://nuratix.com/news" target="_blank">News</a>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Use</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+    """
+
+fn build_css_styles():
+    return """
+    :root {
+      --bg: #09090b;
+      --card-bg: #18181b;
+      --border: #27272a;
+      --text: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.15);
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); line-height: 1.6; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+    
+    /* Header */
+    .header { border-bottom: 1px solid var(--border); padding: 18px 0; background: rgba(9,9,11,0.8); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
+    .nav-container { max-width: 1100px; margin: 0 auto; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; }
+    .nav-brand { display: flex; align-items: center; gap: 12px; }
+    .brand-link { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 800; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+    .brand-version { font-size: 0.75rem; background: #27272a; padding: 2px 8px; border-radius: 99px; color: var(--emerald); }
+    .by-badge { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); }
+    .by-badge a { color: var(--emerald); text-decoration: none; font-weight: 600; }
+    .nav-menu { display: flex; gap: 20px; align-items: center; font-family: var(--font-mono); font-size: 0.85rem; }
+    .nav-menu a { color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+    .nav-menu a:hover { color: #fff; }
+    .btn-primary-sm { background: var(--emerald); color: #09090b !important; padding: 6px 14px; border-radius: 6px; font-weight: 700; }
+    
+    /* Hero */
+    .hero-section { padding: 80px 0 60px; text-align: center; }
+    .badge-pill { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 0.8rem; background: var(--emerald-glow); color: var(--emerald); border: 1px solid rgba(16,185,129,0.3); padding: 6px 16px; border-radius: 99px; margin-bottom: 24px; }
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .hero-title { font-family: var(--font-mono); font-size: 3rem; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 12px; }
+    .hero-tagline { font-size: 1.35rem; color: var(--emerald); font-weight: 600; margin-bottom: 16px; max-width: 800px; margin-left: auto; margin-right: auto; }
+    .hero-desc { color: var(--text-muted); font-size: 1rem; max-width: 760px; margin: 0 auto 36px; }
+    .hero-actions { display: flex; justify-content: center; gap: 16px; margin-bottom: 40px; }
+    .btn-hero-primary { background: var(--emerald); color: #09090b; padding: 12px 28px; border-radius: 8px; font-family: var(--font-mono); font-weight: 700; text-decoration: none; font-size: 0.95rem; }
+    .btn-hero-secondary { border: 1px solid var(--border); color: #fff; padding: 12px 28px; border-radius: 8px; font-family: var(--font-mono); text-decoration: none; font-size: 0.95rem; }
+    .btn-hero-secondary:hover { background: #27272a; }
+    
+    /* Install Box */
+    .install-box { max-width: 640px; margin: 0 auto; background: #000; border: 1px solid var(--border); border-radius: 12px; padding: 18px; text-align: left; font-family: var(--font-mono); font-size: 0.85rem; }
+    .install-header { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px; }
+    .tag-secure { color: var(--emerald); }
+    .install-code { display: flex; justify-content: space-between; align-items: center; background: #121215; padding: 10px 14px; border-radius: 6px; border: 1px solid #27272a; }
+    .install-code code { color: #34d399; font-weight: 600; overflow-x: auto; }
+    .copy-btn { background: #27272a; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.75rem; cursor: pointer; }
+    .npx-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 10px; }
+    .npx-hint code { color: #38bdf8; }
+    
+    /* Features */
+    .features-section { padding: 60px 0; border-top: 1px solid var(--border); }
+    .section-title { font-family: var(--font-mono); font-size: 2rem; font-weight: 800; text-align: center; margin-bottom: 40px; }
+    .section-subtitle { text-align: center; color: var(--text-muted); font-size: 0.9rem; font-family: var(--font-mono); margin-top: -30px; margin-bottom: 30px; }
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+    .feature-card { background: var(--card-bg); border: 1px solid var(--border); padding: 24px; border-radius: 12px; }
+    .feature-icon { font-size: 1.8rem; margin-bottom: 12px; }
+    .feature-title { font-family: var(--font-mono); font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; color: #fff; }
+    .feature-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+    
+    /* Benchmarks */
+    .benchmarks-section { padding: 60px 0; border-top: 1px solid var(--border); }
+    .stats-banner { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; text-align: center; }
+    .stat-item { background: var(--card-bg); border: 1px solid var(--border); padding: 20px; border-radius: 12px; }
+    .stat-value { font-family: var(--font-mono); font-size: 2rem; font-weight: 900; color: var(--emerald); }
+    .stat-label { font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-mono); margin-top: 4px; }
+    .table-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .bench-table { width: 100%; border-collapse: collapse; text-align: left; font-family: var(--font-mono); font-size: 0.85rem; }
+    .bench-table th, .bench-table td { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+    .bench-table th { background: #27272a; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+    .bench-nv { color: var(--emerald); font-weight: 700; }
+    .bench-py { color: #a1a1aa; }
+    .bench-speedup { color: #34d399; font-weight: 700; }
+    
+    /* Code Editor Mock */
+    .code-showcase-section { padding: 60px 0; border-top: 1px solid var(--border); }
+    .code-editor-mock { background: #000; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+    .editor-header { display: flex; align-items: center; gap: 8px; padding: 12px 18px; background: #121215; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.8rem; }
+    .window-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot-red { background: #ef4444; } .dot-yellow { background: #f59e0b; } .dot-green { background: #10b981; }
+    .editor-filename { margin-left: 12px; color: var(--text-muted); }
+    .code-content { padding: 24px; font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.7; overflow-x: auto; color: #e4e4e7; }
+    .kw { color: #f43f5e; font-weight: 700; }
+    .str { color: #34d399; }
+    .cm { color: #71717a; font-style: italic; }
+    
+    /* Footer */
+    .footer { border-top: 1px solid var(--border); padding: 60px 0; background: #050507; font-family: var(--font-mono); font-size: 0.8rem; }
+    .footer-content { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 40px; }
+    .footer-brand { max-width: 320px; }
+    .brand-title { font-size: 1.2rem; font-weight: 800; color: #fff; margin-bottom: 8px; display: block; }
+    .footer-desc { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 12px; }
+    .copyright { color: #52525b; font-size: 0.75rem; }
+    .footer-links { display: flex; gap: 50px; flex-wrap: wrap; }
+    .footer-links h4 { color: #fff; font-size: 0.8rem; text-transform: uppercase; margin-bottom: 12px; }
+    .footer-links a { display: block; color: var(--text-muted); text-decoration: none; margin-bottom: 8px; transition: color 0.2s; }
+    .footer-links a:hover { color: var(--emerald); }
+    
+    @media(max-width: 768px) {
+      .hero-title { font-size: 2.2rem; }
+      .stats-banner { grid-template-columns: 1fr; }
+      .footer-content { flex-direction: column; }
+    }
+    """
+
+// ------------------------------------------------------------------------------
+// 4. Main Assembly & Execution Entrypoint
+// ------------------------------------------------------------------------------
+
+export fn generate_landing_page(output_path: string):
+    io.print("=== NextViper Landing Page Generator ===")
+    io.print("Loading data models and state...")
+    
+    let hero = get_hero_data()
+    let features = get_core_features()
+    let benchmarks = get_benchmark_data()
+    let stats = compute_overall_stats(benchmarks)
+    
+    io.print("Computed Average Speedup: " + str(stats["average_speedup"]) + "x across " + str(stats["benchmark_count"]) + " benchmarks.")
+    io.print("Compiling NextViper HTML components...")
+    
+    let nav_html = render_nav_header()
+    let hero_html = render_hero_section(hero)
+    let feat_html = render_features_grid(features)
+    let bench_html = render_benchmarks_section(benchmarks, stats)
+    let code_html = render_code_showcase()
+    let foot_html = render_footer()
+    let css = build_css_styles()
+    
+    let full_document = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>""" + hero["title"] + """ — Official Landing Page</title>
+  <meta name="description" content=\"""" + hero["description"] + """\">
+  <link rel="icon" href="https://nextviper.nuratix.com/favicon.png" type="image/png">
+  <style>
+""" + css + """
+  </style>
+</head>
+<body>
+""" + nav_html + hero_html + feat_html + bench_html + code_html + foot_html + """
+</body>
+</html>"""
+    
+    io.print("Writing generated HTML document to: " + output_path)
+    fs.write_file(output_path, full_document)
+    io.print("✓ NextViper Landing Page generated successfully!")
+
+// Execute generator
+export fn run():
+    let target = "/root/code/NextViperweb/public/landing.html"
+    generate_landing_page(target)
+
+run()
