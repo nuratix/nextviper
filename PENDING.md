@@ -14,6 +14,7 @@ This document provides a transparent overview of implemented features, pending r
 - **Developer Tooling**: Standalone `nextviper-lsp` language server, VS Code syntax and LSP extension, `nextviper fmt`, `nextviper check`, `nextviper test`, `nextviper info`, `nextviper run --watch`.
 - **Stable Error Reference System**: 16 error codes (`NV1001`–`NV5001`) with live docs on `https://nextviper.nuratix.com/docs/errors/<slug>`.
 - **Official POSIX Installer (`install.sh`)**: HTTPS installer supporting OS and CPU architecture detection, checksum validation, and automated PATH configuration.
+- **Android / Termux ARM64 Compatibility (`nextviper@1.0.1`)**: Fixed recursive subprocess fork-bomb bug where `which nextviper` returned the node launcher; added strict native binary magic header checks (`0x7fELF`) and lightweight offline project initialization (`nextviper init`, `nextviper --version`, `nextviper doctor`).
 - **Website Legal & Distribution Hubs**: `/install`, `/download`, `/releases`, `/license`, `/contributing`, `/security`, `/privacy`, `/terms`.
 
 ---
