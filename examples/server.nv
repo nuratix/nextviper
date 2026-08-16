@@ -178,11 +178,11 @@ export fn start_server(port: int):
     fs.write_file(web_root + "/index.html", html_content)
     
     io.print("Landing page HTML generated at: " + web_root + "/index.html")
-    io.print("Starting HTTP listener on: http://127.0.0.1:" + str(port))
+    io.print("Starting HTTP listener on: http://0.0.0.0:" + str(port) + " (Accessible on all interfaces)")
     io.print("Listening for incoming HTTP requests... (Press Ctrl+C to stop)")
     
-    // Start lightweight HTTP serving daemon using POSIX python3 http.server
-    let cmd = "python3 -m http.server " + str(port) + " --directory " + web_root
+    // Start lightweight HTTP serving daemon binding to all interfaces (0.0.0.0)
+    let cmd = "python3 -m http.server " + str(port) + " --bind 0.0.0.0 --directory " + web_root
     let res = process.exec(cmd)
     io.print("Server process ended with code: " + str(res["exit_code"]))
 
