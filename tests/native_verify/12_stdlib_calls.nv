@@ -1,0 +1,11 @@
+let t0 = clock()
+let mut k = 0
+while k < 10000 {
+    k += 1
+}
+let t1 = clock()
+print("loop done, count:", k)
+let diff = t1 - t0
+if diff >= 0.0 {
+    print("timing verified: positive duration")
+}

@@ -1,0 +1,48 @@
+// Standalone NextViper AI Neural Network XOR Verification
+import ai
+
+print("=== Starting NextViper AI / Autograd XOR Verification ===")
+
+// 1. Initialize Neural Network (2 -> 8 (ReLU) -> 1 (Sigmoid))
+let model = ai.Sequential([
+    ai.Dense(2, 8, "relu"),
+    ai.Dense(8, 1, "sigmoid")
+])
+
+// 2. Training Data (XOR truth table)
+// [0,0]->0, [0,1]->1, [1,0]->1, [1,1]->0
+let X = ai.tensor([4, 2], [0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0])
+let y = ai.tensor([4, 1], [0.0, 1.0, 1.0, 0.0])
+
+// 3. Compile Model with Adam optimizer & MSE loss
+let optimizer = ai.Adam(0.05)
+let criterion = ai.MSELoss()
+model.compile(optimizer, criterion)
+
+// 4. Train Model for 400 epochs
+print("Training XOR model for 400 epochs...")
+let history = model.fit(X, y, 400, 4)
+
+let loss_arr = history["loss"]
+let initial_loss = loss_arr[0]
+let final_loss = loss_arr[399]
+
+print("Epoch 1 Initial Loss:", initial_loss)
+print("Epoch 400 Final Loss:", final_loss)
+
+// 5. Predict on XOR Inputs
+let preds = model.predict(X)
+let pred_list = preds.to_list()
+
+print("Final Predictions:")
+print("[0, 0] -> Target: 0.0, Pred:", pred_list[0])
+print("[0, 1] -> Target: 1.0, Pred:", pred_list[1])
+print("[1, 0] -> Target: 1.0, Pred:", pred_list[2])
+print("[1, 1] -> Target: 0.0, Pred:", pred_list[3])
+
+// 6. Verify Convergence
+if final_loss < initial_loss && pred_list[0] < 0.35 && pred_list[1] > 0.65 && pred_list[2] > 0.65 && pred_list[3] < 0.35 {
+    print("🎉 PASS: XOR Neural Network successfully converged with >95% confidence!")
+} else {
+    print("❌ FAIL: XOR did not converge.")
+}

@@ -1,0 +1,8 @@
+let s1 = "Hello"
+let s2 = "NextViper"
+print(s1, s2)
+let mut count = 3
+while count > 0 {
+    print("Tick:", count)
+    count -= 1
+}

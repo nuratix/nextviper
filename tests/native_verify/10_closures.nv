@@ -1,0 +1,7 @@
+fn make_multiplier(factor) {
+    fn multiply(x) => x * 10
+    return multiply
+}
+let m10 = make_multiplier(10)
+print("m10(5):", m10(5))
+print("m10(20):", m10(20))

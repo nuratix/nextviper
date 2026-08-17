@@ -1312,7 +1312,7 @@ Value ModuleManager::create_http_module() {
         int res = std::system(cmd.c_str());
         if (res != 0) {
             std::remove(temp_out.c_str());
-            // Return fallback mock response if network or curl fails
+            // Return 500 error response if network or curl fails
             return make_response(500, "{\"error\": \"HTTP request execution failed\"}", {{"content-type", Value::make_string("application/json")}});
         }
 
@@ -1367,6 +1367,16 @@ Value ModuleManager::create_http_module() {
     });
 
     exports["request"] = Value::make_native_fn("request", -1, [execute_http](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (args.empty()) throw RuntimeError("http.request requires arguments", span);
+        if (args.size() == 1 && args[0].is_object()) {
+            auto cfg = *args[0].as_object();
+            std::string method = cfg.count("method") ? cfg["method"].as_string() : "GET";
+            std::string url = cfg.count("url") ? cfg["url"].as_string() : "";
+            std::string body = cfg.count("body") ? (cfg["body"].is_string() ? cfg["body"].as_string() : json_stringify_val(cfg["body"], 0, 0)) : "";
+            Value headers = cfg.count("headers") ? cfg["headers"] : Value::make_object({});
+            if (url.empty()) throw RuntimeError("http.request config object requires 'url' field", span);
+            return execute_http(method, url, body, headers, span);
+        }
         if (args.size() < 2) throw RuntimeError("http.request requires method and URL", span);
         std::string method = args[0].as_string();
         std::string url = args[1].as_string();
@@ -2226,6 +2236,17 @@ Value ModuleManager::create_net_module() {
                         body = raw_req.substr(body_pos + 4);
                     }
 
+                    if (headers_map.count("content-length")) {
+                        try {
+                            size_t expected_content_len = std::stoull(headers_map["content-length"].as_string());
+                            while (body.size() < expected_content_len) {
+                                int n2 = recv(client_fd, buf, sizeof(buf) - 1, 0);
+                                if (n2 <= 0) break;
+                                body.append(buf, n2);
+                            }
+                        } catch (...) {}
+                    }
+
                     // CORS preflight
                     if (method == "OPTIONS") {
                         std::string resp = "HTTP/1.1 204 No Content\r\n"
@@ -2249,8 +2270,11 @@ Value ModuleManager::create_net_module() {
                         if (path.rfind(prefix, 0) == 0) {
                             std::string rel_path = path.substr(prefix.size());
                             if (rel_path.empty() || rel_path == "/") rel_path = "/index.html";
-                            fs::path full_file = fs::path(dir) / rel_path.substr(1);
-                            if (fs::exists(full_file) && !fs::is_directory(full_file)) {
+                            fs::path base_dir = fs::weakly_canonical(dir);
+                            fs::path full_file = fs::weakly_canonical(base_dir / (rel_path.rfind("/", 0) == 0 ? rel_path.substr(1) : rel_path));
+                            std::string base_str = base_dir.string();
+                            std::string target_str = full_file.string();
+                            if (target_str.rfind(base_str, 0) == 0 && fs::exists(full_file) && !fs::is_directory(full_file)) {
                                 std::ifstream f(full_file, std::ios::binary);
                                 std::string fcontent((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
                                 std::string ctype = "text/plain";

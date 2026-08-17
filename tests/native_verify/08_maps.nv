@@ -1,0 +1,8 @@
+let dict = {
+    "name": "NextViper",
+    "version": 1,
+    "fast": 1
+}
+print("dict:", dict)
+print("name:", dict["name"])
+print("version:", dict["version"])

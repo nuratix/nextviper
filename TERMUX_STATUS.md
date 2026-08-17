@@ -1,42 +1,59 @@
-# NextViper Termux & Android Compatibility Investigation
+# NextViper Termux & Android Environment Status
 
-## 1. Issue Analysis: Signal 9 (SIGKILL) on Android / Termux
-When building large C++ codebases or executing heavy compiler tasks in Termux on Android 12+ (API Level 31 and above), processes may abruptly terminate with `Signal 9` (SIGKILL).
+## 1. Classification: EXPERIMENTAL
 
-### Root Causes
-1. **Android Phantom Process Killer**:
-   Android 12 introduced a feature to terminate background child processes spawned by apps if:
-   - The total number of child processes across all apps exceeds 32.
-   - A child process uses significant CPU/memory while the parent activity is backgrounded.
-2. **Low Memory Killer Daemon (LMKD)**:
-   Termux runs inside Android's process sandboxing without swap memory enabled by default. Compiling C++ with `-O3` and `-j4`/`-j8` causes memory spikes above Android's per-process RSS limit, triggering `lmkd` to send `SIGKILL`.
+Termux (Android) is classified as an **EXPERIMENTAL** platform for NextViper compilation and native code generation.
 
 ---
 
-## 2. Recommended Workarounds and Configurations for Termux
+## 2. Root Cause Analysis of Termux Build Failures
 
-### A. Disable Phantom Process Killer (via ADB)
-For Android 12, 13, and 14 devices with ADB access:
+When building NextViper from source on Android devices running Termux, users may encounter sudden termination messages such as:
+```
+g++: fatal error: Killed signal terminated program cc1plus
+make: *** [Makefile:45: build/module.o] Error 137
+[Process completed (signal 9) - press Enter]
+```
+
+### Technical Root Causes:
+1. **Signal 9 (SIGKILL) - Low Memory Killer (LMK)**:
+   - NextViper's full source code (including standard library `module.cpp`, autograd engine `ai_subsystem.cpp`, and native C emitter `native_compiler.cpp`) comprises modern C++20 templates and header inclusions (`<filesystem>`, `<chrono>`, `<regex>`, `<vulkan/vulkan.h>`, `<libpq-fe.h>`).
+   - Running `make` or `g++` without `-j1` flags causes memory usage to exceed Android's per-process cgroup memory limit (typically 512MB - 1.5GB on mobile devices), triggering the Linux kernel Out-Of-Memory (OOM) killer.
+
+2. **Android 12+ Phantom Process Killer**:
+   - Starting with Android 12, Google introduced the Phantom Process Killer (PPK), which strictly limits background processes spawned by user apps (such as sub-processes of `make`, `g++`, `as`, `ld`) to a total maximum of 32 concurrent processes across the entire Android user space.
+   - When parallel compilation spawns multiple sub-processes, Android terminates the Termux session with `SIGKILL (signal 9)`.
+
+---
+
+## 3. Recommended Build Procedure on Termux
+
+To successfully build NextViper on Android / Termux:
+
+### Step 1: Install Single-Threaded Dependencies
 ```bash
-adb shell "/system/bin/device_config set_sync_disabled_for_tests persistent"
-adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
-adb shell "setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false"
+pkg update && pkg upgrade -y
+pkg install clang make libvulkan-dev -y
 ```
 
-### B. Conservative Build Concurrency
-Build NextViper with reduced parallelism to prevent peak RSS spikes:
+### Step 2: Build with Serial Execution (`-j1`)
 ```bash
-# In Termux: Use 1 or 2 build jobs instead of -j4
-make -j2
+# Do NOT run make -j4 or make -j8 on Termux. Run strictly with single core:
+make clean
+make -j1
 ```
 
-### C. Compiler Memory Optimization Flags
-In `Makefile`, compile with `-O2` or `-Os` in Termux environments:
-```makefile
-CXXFLAGS += -O2 --param ggc-min-expand=20 --param ggc-min-heapsize=32768
-```
-
-### D. Runtime Environment Variables
+### Step 3: Run Verification
 ```bash
-export MALLOC_ARENA_MAX=1
+./bin/nextviper --version
+./bin/nextviper run examples/fibonacci.nv
 ```
+
+---
+
+## 4. Minimum System Requirements for Termux
+- **Android OS**: Android 8.0+ (Oreo or newer)
+- **Architecture**: `aarch64` (ARM64)
+- **RAM**: Minimum 4GB physical RAM (with at least 2GB free before starting build)
+- **Storage**: 1.5GB free internal storage
+- **Swap / zRAM**: Recommended 2GB zRAM enabled for heavy template compilation units.

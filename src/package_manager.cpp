@@ -877,30 +877,33 @@ int PackageManager::cmd_init(const std::string& name) {
     fs::path main_src = project_root_ / "src" / "main.nv";
     if (!fs::exists(main_src, ec)) {
         std::string raw = "// " + pkg_name + " application entrypoint\n"
-                          "import std.io\n\n"
-                          "export fn run():\n"
-                          "    io.print(\"Hello from " + pkg_name + "!\")\n\n"
+                          "import io\n\n"
+                          "fn run() {\n"
+                          "    io.println(\"Hello from " + pkg_name + "!\")\n"
+                          "}\n\n"
                           "run()\n";
-        std::string formatted = Formatter::format_source(raw);
         std::ofstream out(main_src);
         if (out.is_open()) {
-            out << (formatted.empty() ? raw : formatted);
+            out << raw;
         }
     }
 
     fs::path test_file = project_root_ / "tests" / "main_test.nv";
     if (!fs::exists(test_file, ec)) {
         std::string raw = "// Automated test suite for " + pkg_name + "\n"
-                          "import std.io\n\n"
-                          "fn test_basic_assertion():\n"
+                          "import io\n\n"
+                          "fn test_basic_assertion() {\n"
                           "    let x = 10 + 20\n"
-                          "    if x != 30:\n"
-                          "        io.print(\"Assertion failed!\")\n\n"
+                          "    if x != 30 {\n"
+                          "        io.println(\"Assertion failed!\")\n"
+                          "    } else {\n"
+                          "        io.println(\"Test passed!\")\n"
+                          "    }\n"
+                          "}\n\n"
                           "test_basic_assertion()\n";
-        std::string formatted = Formatter::format_source(raw);
         std::ofstream out(test_file);
         if (out.is_open()) {
-            out << (formatted.empty() ? raw : formatted);
+            out << raw;
         }
     }
 

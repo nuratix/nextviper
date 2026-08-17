@@ -1,0 +1,11 @@
+let a = 10
+let b = 3
+print(a + b)
+print(a - b)
+print(a * b)
+print(a / b)
+print(a % b)
+let mut c = 5
+c += 10
+c *= 2
+print(c)

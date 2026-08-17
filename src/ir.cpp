@@ -203,7 +203,9 @@ void IRGenerator::visit_while_stmt(const WhileStmt& stmt) {
     emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(exit_lbl)});
 
     current_block_ = current_func_->create_block(body_lbl);
+    loop_stack_.push_back({cond_lbl, exit_lbl});
     stmt.body().accept(*this);
+    loop_stack_.pop_back();
     emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(cond_lbl)});
 
     current_block_ = current_func_->create_block(exit_lbl);
@@ -272,7 +274,9 @@ void IRGenerator::visit_for_in_stmt(const ForInStmt& stmt) {
 
         // Body block
         current_block_ = current_func_->create_block(body_lbl);
+        loop_stack_.push_back({step_lbl, exit_lbl});
         stmt.body().accept(*this);
+        loop_stack_.pop_back();
         emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(step_lbl)});
 
         // Step block: var = var + 1
@@ -314,7 +318,9 @@ void IRGenerator::visit_for_in_stmt(const ForInStmt& stmt) {
         int item_reg = alloc_reg();
         emit(IROpcode::CALL, item_reg, IRTypeKind::INT64, {IROperand::make_symbol("get"), arr_op, IROperand::make_reg(cur_idx_reg)}, stmt.span());
         emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(var_reg), IROperand::make_reg(item_reg)}, stmt.span());
+        loop_stack_.push_back({step_lbl, exit_lbl});
         stmt.body().accept(*this);
+        loop_stack_.pop_back();
         emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(step_lbl)});
 
         current_block_ = current_func_->create_block(step_lbl);
@@ -364,6 +370,14 @@ void IRGenerator::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     current_block_ = saved_block;
     var_allocas_ = saved_allocas;
     var_types_ = saved_var_types;
+
+    if (current_func_) {
+        int r = alloc_reg();
+        var_allocas_[stmt.name()] = r;
+        var_types_[stmt.name()] = IRTypeKind::PTR;
+        emit(IROpcode::ALLOCA, r, IRTypeKind::PTR, {IROperand::make_symbol(stmt.name())}, stmt.span());
+        emit(IROpcode::STORE, -1, IRTypeKind::PTR, {IROperand::make_reg(r), IROperand::make_symbol("nv_fn_" + stmt.name())}, stmt.span());
+    }
 }
 
 void IRGenerator::visit_return_stmt(const ReturnStmt& stmt) {
@@ -380,8 +394,18 @@ void IRGenerator::visit_return_stmt(const ReturnStmt& stmt) {
     }
 }
 
-void IRGenerator::visit_break_stmt(const BreakStmt&) {}
-void IRGenerator::visit_continue_stmt(const ContinueStmt&) {}
+void IRGenerator::visit_break_stmt(const BreakStmt& stmt) {
+    if (!loop_stack_.empty()) {
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(loop_stack_.back().second)}, stmt.span());
+    }
+}
+
+void IRGenerator::visit_continue_stmt(const ContinueStmt& stmt) {
+    if (!loop_stack_.empty()) {
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(loop_stack_.back().first)}, stmt.span());
+    }
+}
+
 void IRGenerator::visit_import_stmt(const ImportStmt&) {}
 void IRGenerator::visit_export_stmt(const ExportStmt& stmt) {
     stmt.inner_stmt().accept(*this);
@@ -500,6 +524,14 @@ void IRGenerator::visit_binary(const BinaryExpr& expr) {
         case TokenType::GREATER: op = IROpcode::GT; break;
         case TokenType::GREATER_EQUAL: op = IROpcode::GE; break;
         default: op = IROpcode::ADD; break;
+    }
+
+    if (expr.op() == TokenType::SLASH) {
+        left_t = IRTypeKind::FLOAT64;
+    } else if (expr.op() == TokenType::EQUAL_EQUAL || expr.op() == TokenType::BANG_EQUAL ||
+               expr.op() == TokenType::LESS || expr.op() == TokenType::LESS_EQUAL ||
+               expr.op() == TokenType::GREATER || expr.op() == TokenType::GREATER_EQUAL) {
+        left_t = IRTypeKind::BOOL;
     }
 
     emit(op, r, left_t, {left_op, right_op}, expr.span());
@@ -646,7 +678,48 @@ void IRGenerator::visit_range(const RangeExpr& expr) {
     last_type_ = IRTypeKind::PTR;
 }
 
-void IRGenerator::visit_lambda(const LambdaExpr&) {}
+void IRGenerator::visit_lambda(const LambdaExpr& expr) {
+    static int lambda_id = 0;
+    std::string lambda_name = "lambda_" + std::to_string(++lambda_id);
+    
+    auto saved_func = current_func_;
+    auto saved_block = current_block_;
+    auto saved_allocas = var_allocas_;
+    auto saved_var_types = var_types_;
+
+    current_func_ = module_->create_function(lambda_name, IRTypeKind::INT64);
+    current_block_ = current_func_->create_block("entry");
+
+    for (const auto& param : expr.params()) {
+        current_func_->params.push_back({param, IRTypeKind::INT64});
+        int reg = alloc_reg();
+        emit(IROpcode::ALLOCA, reg, IRTypeKind::INT64, {IROperand::make_symbol(param)}, expr.span());
+        emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(reg), IROperand::make_symbol(param)}, expr.span());
+        var_allocas_[param] = reg;
+        var_types_[param] = IRTypeKind::INT64;
+    }
+
+    if (expr.body_expr()) {
+        expr.body_expr()->accept(*this);
+        emit(IROpcode::RET, -1, last_type_, {last_operand_}, expr.span());
+    } else if (expr.body_block()) {
+        expr.body_block()->accept(*this);
+    }
+
+    if (current_block_ && (current_block_->instructions.empty() || current_block_->instructions.back().opcode != IROpcode::RET)) {
+        int r = alloc_reg();
+        emit(IROpcode::CONST_INT, r, IRTypeKind::INT64, {IROperand::make_int(0)});
+        emit(IROpcode::RET, -1, IRTypeKind::VOID, {IROperand::make_reg(r)});
+    }
+
+    current_func_ = saved_func;
+    current_block_ = saved_block;
+    var_allocas_ = saved_allocas;
+    var_types_ = saved_var_types;
+
+    last_operand_ = IROperand::make_symbol("nv_fn_" + lambda_name);
+    last_type_ = IRTypeKind::PTR;
+}
 
 // --- IROptimizer Implementation ---
 

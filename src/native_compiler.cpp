@@ -207,7 +207,23 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
     // Printing Helpers
     ss << "static inline void nv_print_val_arr(int64_t ptr);\n\n";
     ss << "static inline void nv_print_map_val(int64_t val) {\n";
-    ss << "    if (val == 0) { printf(\"0\"); return; }\n";
+    ss << "    if (val == 0) { printf(\"null\"); return; }\n";
+    ss << "    if ((uintptr_t)val > 0x10000) {\n";
+    ss << "        uint32_t* mag = (uint32_t*)(uintptr_t)val;\n";
+    ss << "        if (*mag == 0x4D415053 || *mag == 0x41525259) {\n";
+    ss << "            nv_print_val_arr(val);\n";
+    ss << "            return;\n";
+    ss << "        }\n";
+    ss << "        const char* s = (const char*)(uintptr_t)val;\n";
+    ss << "        if (s) {\n";
+    ss << "            bool is_str = true;\n";
+    ss << "            size_t l = 0;\n";
+    ss << "            for (; l < 512 && s[l] != '\\0'; ++l) {\n";
+    ss << "                if ((unsigned char)s[l] < 32 && s[l] != '\\t' && s[l] != '\\n' && s[l] != '\\r') { is_str = false; break; }\n";
+    ss << "            }\n";
+    ss << "            if (is_str && l > 0) { printf(\"\\\"%s\\\"\", s); return; }\n";
+    ss << "        }\n";
+    ss << "    }\n";
     ss << "    printf(\"%ld\", (long)val);\n";
     ss << "}\n\n";
 
@@ -217,6 +233,10 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
     ss << "static inline void nv_print_val_bool(bool b) { printf(\"%s\", b ? \"true\" : \"false\"); }\n";
     ss << "static inline void nv_print_val_arr(int64_t ptr) {\n";
     ss << "    if (!ptr) { printf(\"[]\"); return; }\n";
+    ss << "    if ((uintptr_t)ptr < 0x10000) {\n";
+    ss << "        printf(\"%ld\", (long)ptr);\n";
+    ss << "        return;\n";
+    ss << "    }\n";
     ss << "    NVMap* m = (NVMap*)(uintptr_t)ptr;\n";
     ss << "    if (m->magic == 0x4D415053) {\n";
     ss << "        printf(\"{\");\n";
@@ -303,7 +323,10 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
             if (op.kind == OperandKind::CONSTANT_FLOAT) return std::to_string(op.float_val);
             if (op.kind == OperandKind::CONSTANT_STRING) return "(int64_t)(uintptr_t)\"" + c_escape_string(op.str_val) + "\"";
             if (op.kind == OperandKind::CONSTANT_BOOL) return op.bool_val ? "true" : "false";
-            if (op.kind == OperandKind::SYMBOL) return op.str_val;
+            if (op.kind == OperandKind::SYMBOL) {
+                if (op.str_val.rfind("nv_fn_", 0) == 0) return "(int64_t)(uintptr_t)" + op.str_val;
+                return op.str_val;
+            }
             return "0";
         };
 

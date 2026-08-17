@@ -1,0 +1,17 @@
+import tensor
+
+print("=== Starting NextViper GPU Subsystem Verification ===")
+let gpu_avail = tensor.is_gpu_available()
+let dev_count = tensor.device_count()
+let dev_name = tensor.device_name()
+
+print("GPU Available:", gpu_avail)
+print("Device Count:", dev_count)
+print("Device Name:", dev_name)
+
+if gpu_avail {
+    print("✓ Vulkan Compute Device operational.")
+} else {
+    print("ℹ Vulkan Physical GPU not present in this sandbox environment; CPU SIMD fallback active.")
+}
+print("=== GPU Subsystem Verification Complete ===")

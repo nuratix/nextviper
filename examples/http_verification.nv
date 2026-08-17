@@ -1,0 +1,73 @@
+// NextViper Full HTTP Subsystem Verification
+import http
+import time
+
+let app = http.server()
+
+// 1. Global Middleware
+app.use(fn(req) {
+    print("[LOG] " + req.method + " " + req.path)
+})
+
+// 2. GET Route with Query Parameters
+app.get("/api/search", fn(req) {
+    let q = req.query["q"]
+    let page = req.query["page"]
+    return {
+        "status": 200,
+        "headers": {"content-type": "application/json", "x-verified-by": "NextViper-Core"},
+        "body": {
+            "query": q,
+            "page": page,
+            "results_count": 42
+        }
+    }
+})
+
+// 3. Dynamic Route with Path Parameters
+app.get("/users/:id", fn(req) {
+    let user_id = req.params["id"]
+    return {
+        "status": 200,
+        "headers": {"content-type": "application/json"},
+        "body": {
+            "id": user_id,
+            "username": "user_" + user_id,
+            "active": true
+        }
+    }
+})
+
+// 4. POST Route with JSON Body Parsing
+app.post("/api/echo", fn(req) {
+    let json_data = req.json()
+    return {
+        "status": 201,
+        "headers": {"content-type": "application/json"},
+        "body": {
+            "received": json_data,
+            "processed": true
+        }
+    }
+})
+
+// 5. Custom Status & Headers Route
+app.get("/health", fn(req) {
+    return {
+        "status": 200,
+        "headers": {"x-service-status": "healthy"},
+        "body": "OK"
+    }
+})
+
+// Start server on background thread (port 8999)
+print("=== Starting NextViper HTTP Verification Server ===")
+app.listen(8999, "127.0.0.1", true)
+print("✓ NextViper HTTP Server listening on http://127.0.0.1:8999")
+
+// Keep alive for 4 seconds to accept requests from test suite
+time.sleep(4000)
+
+// Clean shutdown
+app.close()
+print("✓ NextViper HTTP Server closed cleanly.")

@@ -1,0 +1,7 @@
+let list = [10, 20, 30]
+list.push(40)
+list.push(50)
+print("list:", list)
+print("len:", list.len())
+print("first:", list[0])
+print("last:", list[4])

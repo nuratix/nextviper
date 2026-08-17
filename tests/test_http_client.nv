@@ -1,0 +1,37 @@
+// Test real HTTP client against local test server
+import http
+
+print("=== Starting NextViper HTTP Client Verification ===")
+
+// 1. GET Request
+let res_get = http.get("http://127.0.0.1:8997/get_endpoint")
+print("GET Status:", res_get.status)
+print("GET Body:", res_get.text)
+let get_json = res_get.json()
+print("GET JSON msg:", get_json["message"])
+
+// 2. POST Request with JSON
+let payload = {"client": "NextViper-Client", "status": "active"}
+let res_post = http.post("http://127.0.0.1:8997/post_endpoint", payload)
+print("POST Status:", res_post.status)
+let post_json = res_post.json()
+print("POST JSON ack:", post_json["received"]["client"])
+
+// 3. Custom http.request with Headers
+let res_custom = http.request({
+    "url": "http://127.0.0.1:8997/custom_endpoint",
+    "method": "PUT",
+    "headers": {"X-Custom-Auth": "SecretToken-123"},
+    "body": "custom_raw_data"
+})
+print("CUSTOM Status:", res_custom.status)
+print("CUSTOM Body:", res_custom.text)
+
+// 4. Connection Error Handling (Unreachable Server)
+let res_unreachable = http.get("http://127.0.0.1:59999/unreachable")
+print("Unreachable ok status:", res_unreachable.ok)
+if !res_unreachable.ok {
+    print("Unreachable server correctly identified with non-ok response")
+}
+
+print("=== HTTP Client Verification Completed Successfully ===")

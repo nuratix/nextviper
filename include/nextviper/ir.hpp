@@ -252,6 +252,7 @@ private:
     std::map<std::string, int> var_allocas_;
     std::map<std::string, IRTypeKind> var_types_;
     std::map<std::string, IRTypeKind> func_return_types_;
+    std::vector<std::pair<std::string, std::string>> loop_stack_;
 
     int alloc_reg();
     std::string new_block_label(const std::string& prefix = "bb");
