@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -Iinclude -pthread -MMD -MP
-LDFLAGS = -lvulkan
+CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -Iinclude -I/usr/include/postgresql -pthread -MMD -MP
+LDFLAGS = -lvulkan -lpq
 
 SRC_DIR = src
 INC_DIR = include

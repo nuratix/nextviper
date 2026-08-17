@@ -113,10 +113,10 @@ public:
     static constexpr size_t MAX_ARRAY_ELEMENTS = 10'000'000;
 
     size_t call_stack_depth() const { return call_stack_depth_; }
+    Value call_function(const Value& callee, const std::vector<Value>& args, SourceSpan span);
 
 private:
     void init_builtins();
-    Value call_function(const Value& callee, const std::vector<Value>& args, SourceSpan span);
     void execute_block(const std::vector<std::unique_ptr<Stmt>>& statements, std::shared_ptr<Environment> env);
 
     size_t call_stack_depth_ = 0;

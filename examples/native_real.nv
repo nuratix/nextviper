@@ -1,0 +1,59 @@
+// Real Native Compilation Showcase: Algorithms, Higher-Order Functions, Recursion, Objects & Arrays
+
+fn calculate_primes(limit) {
+    let primes = []
+    let mut num = 2
+    while num <= limit {
+        let mut is_prime = true
+        let mut divisor = 2
+        while divisor * divisor <= num {
+            if num % divisor == 0 {
+                is_prime = false
+            }
+            divisor = divisor + 1
+        }
+        if is_prime {
+            primes.push(num)
+        }
+        num = num + 1
+    }
+    return primes
+}
+
+fn apply_transform(arr, transform_fn) {
+    let result = []
+    let mut i = 0
+    while i < arr.len() {
+        let transformed = transform_fn(arr[i])
+        result.push(transformed)
+        i = i + 1
+    }
+    return result
+}
+
+fn square(x) => x * x
+
+fn main() {
+    print("=== NextViper Native Execution Showcase ===")
+    
+    // 1. Prime computation
+    let primes = calculate_primes(30)
+    print("Found primes up to 30:", primes)
+    print("Total prime count:", primes.len())
+
+    // 2. Higher-order function application
+    let squares = apply_transform(primes, square)
+    print("Squared primes:", squares)
+
+    // 3. Structured Data & Dictionary Access
+    let telemetry = {
+        "engine": "NextViper-Native-AOT",
+        "version": 1,
+        "sample_count": primes.len()
+    }
+    print("Telemetry engine:", telemetry["engine"])
+    print("Telemetry samples:", telemetry["sample_count"])
+    print("=== Native Verification Completed Successfully ===")
+}
+
+main()

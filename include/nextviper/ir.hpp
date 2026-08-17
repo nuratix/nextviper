@@ -251,6 +251,7 @@ private:
     // Scope symbol table mapping variable name -> alloca register or operand
     std::map<std::string, int> var_allocas_;
     std::map<std::string, IRTypeKind> var_types_;
+    std::map<std::string, IRTypeKind> func_return_types_;
 
     int alloc_reg();
     std::string new_block_label(const std::string& prefix = "bb");

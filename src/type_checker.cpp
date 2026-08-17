@@ -241,7 +241,11 @@ void TypeChecker::visit_index(const IndexExpr& expr) {
     TypePtr index_type = infer_expression(expr.index());
 
     if (target_type->is_list()) {
-        if (!index_type->is_int() && !index_type->is_any()) {
+        if (index_type->is_string() || index_type->is_any()) {
+            last_inferred_type_ = Type::make_any();
+            return;
+        }
+        if (!index_type->is_int()) {
             diagnostics_.error("TypeError: list index must be an integer, got '" + index_type->to_string() + "'",
                                expr.index().span(), "use an integer index", "NV1003");
         }
@@ -462,7 +466,7 @@ void TypeChecker::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
         }
     }
 
-    TypePtr return_type = Type::make_void();
+    TypePtr return_type = Type::make_any();
     if (!stmt.return_type().empty()) {
         return_type = Type::parse(stmt.return_type());
     }

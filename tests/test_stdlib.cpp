@@ -381,17 +381,69 @@ NV_TEST(StdLib, StdConcurrencyOperations) {
     NV_ASSERT_TRUE(out.find("CONCURRENCY_OK") != std::string::npos);
 }
 
-NV_TEST(StdLib, StdHttpMockAndResponse) {
+NV_TEST(StdLib, StdHttpServerAndClientExecution) {
     std::string code = R"nv(
         import std.http
-        let res = http.get("http://127.0.0.1:9999/non_existent_mock")
-        if (res.status == nil) { print("FAIL_HTTP_STATUS"); }
-        if (res.text == nil) { print("FAIL_HTTP_TEXT"); }
-        print("HTTP_OK")
+        import std.time
+
+        let app = http.server()
+        app.get("/test", fn(req) {
+            return {
+                "status": 200,
+                "body": {"result": "server_ok", "path": req.path}
+            }
+        })
+        app.listen(9292, "127.0.0.1", true)
+        time.sleep(200)
+
+        let res = http.get("http://127.0.0.1:9292/test")
+        if (res.status != 200) { print("FAIL_HTTP_STATUS"); }
+        let json_data = res.json()
+        if (json_data["result"] != "server_ok") { print("FAIL_HTTP_BODY"); }
+
+        app.close()
+        print("HTTP_REAL_OK")
     )nv";
 
     std::string out = run_script(code);
-    NV_ASSERT_TRUE(out.find("HTTP_OK") != std::string::npos);
+    NV_ASSERT_TRUE(out.find("HTTP_REAL_OK") != std::string::npos);
+}
+
+NV_TEST(StdLib, StdPostgresRealDriverAndErrorHandling) {
+    std::string code = R"nv(
+        import std.db
+        // Test real connection attempt - should report real PostgreSQL connection error when host is unreachable
+        let client = db.postgres({
+            "host": "127.0.0.1",
+            "port": 5432,
+            "database": "test_db",
+            "user": "non_existent_user",
+            "password": "no_password"
+        })
+    )nv";
+
+    SourceManager sm;
+    DiagnosticEngine diag(sm, false);
+    Lexer lexer(code, "<test_db>", diag);
+    auto tokens = lexer.tokenize();
+    Parser parser(tokens, diag);
+    auto program = parser.parse_program();
+    NV_ASSERT_TRUE(program != nullptr);
+
+    Interpreter interp(diag);
+    bool ok = interp.execute(*program);
+    NV_ASSERT_FALSE(ok);
+    NV_ASSERT_TRUE(diag.has_errors());
+    bool found_expected_error = false;
+    for (const auto& d : diag.diagnostics()) {
+        if (d.message.find("PostgreSQL Connection Error") != std::string::npos ||
+            d.message.find("Connection refused") != std::string::npos ||
+            d.message.find("could not connect") != std::string::npos) {
+            found_expected_error = true;
+            break;
+        }
+    }
+    NV_ASSERT_TRUE(found_expected_error);
 }
 
 NV_TEST(StdLib, InterpreterAndNativeStdlibEquivalence) {

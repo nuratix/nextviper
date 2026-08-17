@@ -1,0 +1,18 @@
+import db
+
+print("=== NextViper Real PostgreSQL Driver ===")
+print("Attempting connection to PostgreSQL via libpq...")
+
+let client = db.postgres({
+    "host": "127.0.0.1",
+    "port": 5432,
+    "database": "postgres",
+    "user": "postgres",
+    "password": "secret_password"
+})
+
+print("Executing query...")
+let res = client.query("SELECT 1 as test_val;")
+print("Query result rows:", res.rows)
+print("Affected rows:", res.count)
+client.close()

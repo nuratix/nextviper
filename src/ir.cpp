@@ -121,7 +121,7 @@ std::unique_ptr<IRModule> IRGenerator::generate(const Program& program) {
     module_->name = "main_module";
 
     // Create main entry function
-    current_func_ = module_->create_function("main", IRTypeKind::INT64);
+    current_func_ = module_->create_function("__nv_entry_main", IRTypeKind::INT64);
     current_block_ = current_func_->create_block("entry");
 
     for (const auto& stmt : program.statements()) {
@@ -210,13 +210,130 @@ void IRGenerator::visit_while_stmt(const WhileStmt& stmt) {
 }
 
 void IRGenerator::visit_for_in_stmt(const ForInStmt& stmt) {
-    stmt.body().accept(*this);
+    int var_reg = alloc_reg();
+    var_allocas_[stmt.variable_name()] = var_reg;
+    var_types_[stmt.variable_name()] = IRTypeKind::INT64;
+    emit(IROpcode::ALLOCA, var_reg, IRTypeKind::INT64, {IROperand::make_symbol(stmt.variable_name())}, stmt.span());
+
+    const RangeExpr* range_expr = dynamic_cast<const RangeExpr*>(&stmt.iterable());
+    const CallExpr* call_expr = dynamic_cast<const CallExpr*>(&stmt.iterable());
+    bool is_range_call = false;
+    if (call_expr) {
+        if (auto id = dynamic_cast<const IdentifierExpr*>(&call_expr->callee())) {
+            if (id->name() == "range") is_range_call = true;
+        }
+    }
+
+    if (range_expr || is_range_call) {
+        IROperand start_op = IROperand::make_int(0);
+        IROperand end_op = IROperand::make_int(0);
+        bool inclusive = false;
+
+        if (range_expr) {
+            if (range_expr->start()) {
+                range_expr->start()->accept(*this);
+                start_op = last_operand_;
+            }
+            if (range_expr->end()) {
+                range_expr->end()->accept(*this);
+                end_op = last_operand_;
+            }
+            inclusive = range_expr->inclusive();
+        } else if (call_expr) {
+            if (call_expr->args().size() == 1) {
+                call_expr->args()[0]->accept(*this);
+                end_op = last_operand_;
+            } else if (call_expr->args().size() >= 2) {
+                call_expr->args()[0]->accept(*this);
+                start_op = last_operand_;
+                call_expr->args()[1]->accept(*this);
+                end_op = last_operand_;
+            }
+        }
+
+        // Store start into var
+        emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(var_reg), start_op}, stmt.span());
+
+        std::string cond_lbl = new_block_label("for_cond");
+        std::string body_lbl = new_block_label("for_body");
+        std::string step_lbl = new_block_label("for_step");
+        std::string exit_lbl = new_block_label("for_exit");
+
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(cond_lbl)});
+
+        // Cond block
+        current_block_ = current_func_->create_block(cond_lbl);
+        int cur_val_reg = alloc_reg();
+        emit(IROpcode::LOAD, cur_val_reg, IRTypeKind::INT64, {IROperand::make_reg(var_reg)}, stmt.span());
+        int cmp_reg = alloc_reg();
+        emit(inclusive ? IROpcode::LE : IROpcode::LT, cmp_reg, IRTypeKind::BOOL, {IROperand::make_reg(cur_val_reg), end_op}, stmt.span());
+        emit(IROpcode::JMP_IF_TRUE, -1, IRTypeKind::VOID, {IROperand::make_reg(cmp_reg), IROperand::make_label(body_lbl)}, stmt.span());
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(exit_lbl)});
+
+        // Body block
+        current_block_ = current_func_->create_block(body_lbl);
+        stmt.body().accept(*this);
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(step_lbl)});
+
+        // Step block: var = var + 1
+        current_block_ = current_func_->create_block(step_lbl);
+        int step_cur_reg = alloc_reg();
+        emit(IROpcode::LOAD, step_cur_reg, IRTypeKind::INT64, {IROperand::make_reg(var_reg)}, stmt.span());
+        int inc_reg = alloc_reg();
+        emit(IROpcode::ADD, inc_reg, IRTypeKind::INT64, {IROperand::make_reg(step_cur_reg), IROperand::make_int(1)}, stmt.span());
+        emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(var_reg), IROperand::make_reg(inc_reg)}, stmt.span());
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(cond_lbl)});
+
+        current_block_ = current_func_->create_block(exit_lbl);
+    } else {
+        stmt.iterable().accept(*this);
+        IROperand arr_op = last_operand_;
+
+        int idx_reg = alloc_reg();
+        emit(IROpcode::ALLOCA, idx_reg, IRTypeKind::INT64, {IROperand::make_symbol("_idx")}, stmt.span());
+        emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(idx_reg), IROperand::make_int(0)}, stmt.span());
+
+        std::string cond_lbl = new_block_label("for_arr_cond");
+        std::string body_lbl = new_block_label("for_arr_body");
+        std::string step_lbl = new_block_label("for_arr_step");
+        std::string exit_lbl = new_block_label("for_arr_exit");
+
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(cond_lbl)});
+
+        current_block_ = current_func_->create_block(cond_lbl);
+        int cur_idx_reg = alloc_reg();
+        emit(IROpcode::LOAD, cur_idx_reg, IRTypeKind::INT64, {IROperand::make_reg(idx_reg)}, stmt.span());
+        int len_reg = alloc_reg();
+        emit(IROpcode::CALL, len_reg, IRTypeKind::INT64, {IROperand::make_symbol("len"), arr_op}, stmt.span());
+        int cmp_reg = alloc_reg();
+        emit(IROpcode::LT, cmp_reg, IRTypeKind::BOOL, {IROperand::make_reg(cur_idx_reg), IROperand::make_reg(len_reg)}, stmt.span());
+        emit(IROpcode::JMP_IF_TRUE, -1, IRTypeKind::VOID, {IROperand::make_reg(cmp_reg), IROperand::make_label(body_lbl)}, stmt.span());
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(exit_lbl)});
+
+        current_block_ = current_func_->create_block(body_lbl);
+        int item_reg = alloc_reg();
+        emit(IROpcode::CALL, item_reg, IRTypeKind::INT64, {IROperand::make_symbol("get"), arr_op, IROperand::make_reg(cur_idx_reg)}, stmt.span());
+        emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(var_reg), IROperand::make_reg(item_reg)}, stmt.span());
+        stmt.body().accept(*this);
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(step_lbl)});
+
+        current_block_ = current_func_->create_block(step_lbl);
+        int step_cur_idx = alloc_reg();
+        emit(IROpcode::LOAD, step_cur_idx, IRTypeKind::INT64, {IROperand::make_reg(idx_reg)}, stmt.span());
+        int next_idx = alloc_reg();
+        emit(IROpcode::ADD, next_idx, IRTypeKind::INT64, {IROperand::make_reg(step_cur_idx), IROperand::make_int(1)}, stmt.span());
+        emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(idx_reg), IROperand::make_reg(next_idx)}, stmt.span());
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(cond_lbl)});
+
+        current_block_ = current_func_->create_block(exit_lbl);
+    }
 }
 
 void IRGenerator::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     auto saved_func = current_func_;
     auto saved_block = current_block_;
     auto saved_allocas = var_allocas_;
+    auto saved_var_types = var_types_;
 
     current_func_ = module_->create_function(stmt.name(), IRTypeKind::INT64);
     current_block_ = current_func_->create_block("entry");
@@ -227,9 +344,15 @@ void IRGenerator::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
         emit(IROpcode::ALLOCA, reg, IRTypeKind::INT64, {IROperand::make_symbol(p.name)}, stmt.span());
         emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(reg), IROperand::make_symbol(p.name)}, stmt.span());
         var_allocas_[p.name] = reg;
+        var_types_[p.name] = IRTypeKind::INT64;
     }
 
-    if (stmt.body()) stmt.body()->accept(*this);
+    if (stmt.is_arrow_body() && stmt.expr_body()) {
+        stmt.expr_body()->accept(*this);
+        emit(IROpcode::RET, -1, last_type_, {last_operand_}, stmt.span());
+    } else if (stmt.body()) {
+        stmt.body()->accept(*this);
+    }
 
     if (current_block_ && (current_block_->instructions.empty() || current_block_->instructions.back().opcode != IROpcode::RET)) {
         int r = alloc_reg();
@@ -240,11 +363,15 @@ void IRGenerator::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     current_func_ = saved_func;
     current_block_ = saved_block;
     var_allocas_ = saved_allocas;
+    var_types_ = saved_var_types;
 }
 
 void IRGenerator::visit_return_stmt(const ReturnStmt& stmt) {
     if (stmt.value()) {
         stmt.value()->accept(*this);
+        if (current_func_) {
+            func_return_types_[current_func_->name] = last_type_;
+        }
         emit(IROpcode::RET, -1, last_type_, {last_operand_}, stmt.span());
     } else {
         int r = alloc_reg();
@@ -300,22 +427,52 @@ void IRGenerator::visit_identifier(const IdentifierExpr& expr) {
         last_operand_ = IROperand::make_reg(r);
         last_type_ = t;
     } else {
-        last_operand_ = IROperand::make_symbol(expr.name());
-        last_type_ = IRTypeKind::ANY;
+        last_operand_ = IROperand::make_symbol("(int64_t)(uintptr_t)nv_fn_" + expr.name());
+        last_type_ = IRTypeKind::PTR;
     }
 }
 
 void IRGenerator::visit_assign(const AssignExpr& expr) {
+    if (expr.is_index_assign() && expr.index_target()) {
+        expr.index_target()->target().accept(*this);
+        IROperand target_op = last_operand_;
+        expr.index_target()->index().accept(*this);
+        IROperand index_op = last_operand_;
+        expr.value().accept(*this);
+        IROperand val_op = last_operand_;
+        int r = alloc_reg();
+        emit(IROpcode::CALL, r, IRTypeKind::INT64, {IROperand::make_symbol("set"), target_op, index_op, val_op}, expr.span());
+        last_operand_ = IROperand::make_reg(r);
+        return;
+    }
+
     expr.value().accept(*this);
+    IROperand rhs_val = last_operand_;
+    IRTypeKind rhs_type = last_type_;
+
     auto it = var_allocas_.find(expr.name());
     if (it != var_allocas_.end()) {
-        emit(IROpcode::STORE, -1, var_types_[expr.name()], {IROperand::make_reg(it->second), last_operand_}, expr.span());
+        if (expr.op() == TokenType::PLUS_ASSIGN || expr.op() == TokenType::MINUS_ASSIGN ||
+            expr.op() == TokenType::STAR_ASSIGN || expr.op() == TokenType::SLASH_ASSIGN ||
+            expr.op() == TokenType::PERCENT_ASSIGN) {
+            int cur_r = alloc_reg();
+            emit(IROpcode::LOAD, cur_r, var_types_[expr.name()], {IROperand::make_reg(it->second)}, expr.span());
+            int res_r = alloc_reg();
+            IROpcode bin_op = IROpcode::ADD;
+            if (expr.op() == TokenType::MINUS_ASSIGN) bin_op = IROpcode::SUB;
+            else if (expr.op() == TokenType::STAR_ASSIGN) bin_op = IROpcode::MUL;
+            else if (expr.op() == TokenType::SLASH_ASSIGN) bin_op = IROpcode::DIV;
+            else if (expr.op() == TokenType::PERCENT_ASSIGN) bin_op = IROpcode::MOD;
+            emit(bin_op, res_r, var_types_[expr.name()], {IROperand::make_reg(cur_r), rhs_val}, expr.span());
+            rhs_val = IROperand::make_reg(res_r);
+        }
+        emit(IROpcode::STORE, -1, var_types_[expr.name()], {IROperand::make_reg(it->second), rhs_val}, expr.span());
     } else {
         int alloca_reg = alloc_reg();
-        emit(IROpcode::ALLOCA, alloca_reg, last_type_, {IROperand::make_symbol(expr.name())}, expr.span());
+        emit(IROpcode::ALLOCA, alloca_reg, rhs_type, {IROperand::make_symbol(expr.name())}, expr.span());
         var_allocas_[expr.name()] = alloca_reg;
-        var_types_[expr.name()] = last_type_;
-        emit(IROpcode::STORE, -1, last_type_, {IROperand::make_reg(alloca_reg), last_operand_}, expr.span());
+        var_types_[expr.name()] = rhs_type;
+        emit(IROpcode::STORE, -1, rhs_type, {IROperand::make_reg(alloca_reg), rhs_val}, expr.span());
     }
 }
 
@@ -375,14 +532,20 @@ void IRGenerator::visit_call(const CallExpr& expr) {
 
     std::vector<IROperand> call_args;
     if (auto id = dynamic_cast<const IdentifierExpr*>(&expr.callee())) {
-        call_args.push_back(IROperand::make_symbol(id->name()));
+        auto it = var_allocas_.find(id->name());
+        if (it != var_allocas_.end()) {
+            int r = alloc_reg();
+            emit(IROpcode::LOAD, r, var_types_[id->name()], {IROperand::make_reg(it->second)}, expr.span());
+            call_args.push_back(IROperand::make_reg(r));
+        } else {
+            call_args.push_back(IROperand::make_symbol(id->name()));
+        }
     } else if (auto idx_expr = dynamic_cast<const IndexExpr*>(&expr.callee())) {
-        if (auto obj_id = dynamic_cast<const IdentifierExpr*>(&idx_expr->target())) {
-            if (auto mem_lit = dynamic_cast<const LiteralExpr*>(&idx_expr->index())) {
-                call_args.push_back(IROperand::make_symbol(obj_id->name() + "_" + mem_lit->string_value()));
-            } else {
-                call_args.push_back(IROperand::make_symbol(obj_id->name()));
-            }
+        if (auto mem_lit = dynamic_cast<const LiteralExpr*>(&idx_expr->index())) {
+            std::string method_name = mem_lit->string_value();
+            call_args.push_back(IROperand::make_symbol(method_name));
+            idx_expr->target().accept(*this);
+            call_args.push_back(last_operand_);
         } else {
             expr.callee().accept(*this);
             call_args.push_back(last_operand_);
@@ -397,18 +560,92 @@ void IRGenerator::visit_call(const CallExpr& expr) {
         call_args.push_back(last_operand_);
     }
 
+    IRTypeKind ret_type = IRTypeKind::INT64;
+    if (auto id = dynamic_cast<const IdentifierExpr*>(&expr.callee())) {
+        if (id->name() == "clock") ret_type = IRTypeKind::FLOAT64;
+        else if (id->name() == "array_new" || id->name() == "object_new" || id->name() == "range" || id->name() == "push" || id->name() == "append" || id->name() == "insert") {
+            ret_type = IRTypeKind::PTR;
+        } else if (func_return_types_.count(id->name())) {
+            ret_type = func_return_types_[id->name()];
+        }
+    } else if (auto idx_expr = dynamic_cast<const IndexExpr*>(&expr.callee())) {
+        if (auto mem_lit = dynamic_cast<const LiteralExpr*>(&idx_expr->index())) {
+            std::string m = mem_lit->string_value();
+            if (m == "push" || m == "append" || m == "insert" || m == "slice" || m == "keys" || m == "values") {
+                ret_type = IRTypeKind::PTR;
+            } else if (m == "len") {
+                ret_type = IRTypeKind::INT64;
+            }
+        }
+    }
+
     int r = alloc_reg();
-    emit(IROpcode::CALL, r, IRTypeKind::INT64, std::move(call_args), expr.span());
+    emit(IROpcode::CALL, r, ret_type, std::move(call_args), expr.span());
     last_operand_ = IROperand::make_reg(r);
-    last_type_ = IRTypeKind::INT64;
+    last_type_ = ret_type;
 }
 
-void IRGenerator::visit_index(const IndexExpr&) {}
+void IRGenerator::visit_index(const IndexExpr& expr) {
+    expr.target().accept(*this);
+    IROperand target_op = last_operand_;
+    expr.index().accept(*this);
+    IROperand index_op = last_operand_;
+    IRTypeKind res_type = (index_op.kind == OperandKind::CONSTANT_STRING || last_type_ == IRTypeKind::STRING) ? IRTypeKind::PTR : IRTypeKind::INT64;
+    int r = alloc_reg();
+    emit(IROpcode::CALL, r, res_type, {IROperand::make_symbol("get"), target_op, index_op}, expr.span());
+    last_operand_ = IROperand::make_reg(r);
+    last_type_ = res_type;
+}
+
 void IRGenerator::visit_slice(const SliceExpr&) {}
-void IRGenerator::visit_array(const ArrayExpr&) {}
-void IRGenerator::visit_object(const ObjectExpr&) {}
+
+void IRGenerator::visit_array(const ArrayExpr& expr) {
+    int arr_reg = alloc_reg();
+    emit(IROpcode::CALL, arr_reg, IRTypeKind::PTR, {IROperand::make_symbol("array_new")}, expr.span());
+    for (const auto& elem : expr.elements()) {
+        elem->accept(*this);
+        int push_res = alloc_reg();
+        emit(IROpcode::CALL, push_res, IRTypeKind::INT64, {IROperand::make_symbol("push"), IROperand::make_reg(arr_reg), last_operand_}, expr.span());
+    }
+    last_operand_ = IROperand::make_reg(arr_reg);
+    last_type_ = IRTypeKind::PTR;
+}
+
+void IRGenerator::visit_object(const ObjectExpr& expr) {
+    int obj_reg = alloc_reg();
+    emit(IROpcode::CALL, obj_reg, IRTypeKind::PTR, {IROperand::make_symbol("object_new")}, expr.span());
+    for (const auto& entry : expr.entries()) {
+        entry.second->accept(*this);
+        int set_res = alloc_reg();
+        emit(IROpcode::CALL, set_res, IRTypeKind::INT64, {
+            IROperand::make_symbol("set_prop"),
+            IROperand::make_reg(obj_reg),
+            IROperand::make_str(entry.first),
+            last_operand_
+        }, expr.span());
+    }
+    last_operand_ = IROperand::make_reg(obj_reg);
+    last_type_ = IRTypeKind::PTR;
+}
 void IRGenerator::visit_pipe(const PipeExpr&) {}
-void IRGenerator::visit_range(const RangeExpr&) {}
+
+void IRGenerator::visit_range(const RangeExpr& expr) {
+    IROperand start_op = IROperand::make_int(0);
+    IROperand end_op = IROperand::make_int(0);
+    if (expr.start()) {
+        expr.start()->accept(*this);
+        start_op = last_operand_;
+    }
+    if (expr.end()) {
+        expr.end()->accept(*this);
+        end_op = last_operand_;
+    }
+    int r = alloc_reg();
+    emit(IROpcode::CALL, r, IRTypeKind::PTR, {IROperand::make_symbol("range"), start_op, end_op}, expr.span());
+    last_operand_ = IROperand::make_reg(r);
+    last_type_ = IRTypeKind::PTR;
+}
+
 void IRGenerator::visit_lambda(const LambdaExpr&) {}
 
 // --- IROptimizer Implementation ---

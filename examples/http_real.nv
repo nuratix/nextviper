@@ -1,0 +1,53 @@
+import http
+import time
+
+let app = http.server()
+
+app.get("/", fn(req) {
+    return {
+        "status": 200,
+        "body": "Welcome to NextViper Real HTTP Server!"
+    }
+})
+
+app.get("/api/users", fn(req) {
+    let users = [
+        {"id": 1, "name": "Alice", "role": "admin"},
+        {"id": 2, "name": "Bob", "role": "engineer"},
+        {"id": 3, "name": "Charlie", "role": "designer"}
+    ]
+    return {
+        "status": 200,
+        "headers": {"x-custom-header": "NextViper-Engine"},
+        "body": users
+    }
+})
+
+app.post("/api/echo", fn(req) {
+    let payload = req.json()
+    return {
+        "status": 201,
+        "body": {
+            "received": payload,
+            "method": req.method,
+            "path": req.path
+        }
+    }
+})
+
+print("Starting NextViper HTTP Server on port 9191...")
+app.listen(9191, "127.0.0.1", true)
+print("Server is listening in background thread on 127.0.0.1:9191")
+
+time.sleep(300)
+
+let client_res = http.get("http://127.0.0.1:9191/api/users")
+print("Client received status:", client_res.status)
+print("Client received body:", client_res.body)
+
+let post_res = http.post("http://127.0.0.1:9191/api/echo", {"message": "Hello from NextViper!"})
+print("POST echo status:", post_res.status)
+print("POST echo body:", post_res.body)
+
+app.close()
+print("Server stopped cleanly.")

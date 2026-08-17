@@ -43,6 +43,8 @@
 #include <netdb.h>
 #endif
 
+#include <libpq-fe.h>
+
 namespace nextviper {
 
 namespace fs = std::filesystem;
@@ -2067,7 +2069,36 @@ Value ModuleManager::create_net_module() {
             return true;
         };
 
-        app["listen"] = Value::make_native_fn("listen", -1, [state, match_route](const std::vector<Value>& args, SourceSpan span) -> Value {
+        auto invoke_val_func = [](const Value& fn, const std::vector<Value>& fn_args) -> Value {
+            if (fn.type() == ValueType::NATIVE_FUNCTION) {
+                return fn.as_native_fn()->func(fn_args, SourceSpan{});
+            }
+            if (fn.type() == ValueType::FUNCTION) {
+                SourceManager sm;
+                DiagnosticEngine diag(sm, false);
+                Interpreter interp(diag);
+                return interp.call_function(fn, fn_args, SourceSpan{});
+            }
+            return Value::make_nil();
+        };
+
+        app["close"] = Value::make_native_fn("close", 0, [state](const std::vector<Value>&, SourceSpan) -> Value {
+            state->running = false;
+            if (state->server_fd >= 0) {
+#if defined(_WIN32)
+                closesocket(state->server_fd);
+#else
+                close(state->server_fd);
+#endif
+                state->server_fd = -1;
+            }
+            if (state->listener_thread && state->listener_thread->joinable()) {
+                state->listener_thread->detach();
+            }
+            return Value::make_bool(true);
+        });
+
+        app["listen"] = Value::make_native_fn("listen", -1, [state, match_route, invoke_val_func](const std::vector<Value>& args, SourceSpan span) -> Value {
             int port = args.empty() ? 8080 : static_cast<int>(args[0].as_int());
             std::string host = args.size() >= 2 ? args[1].as_string() : "0.0.0.0";
             bool background = args.size() >= 3 ? args[2].as_bool() : false;
@@ -2112,7 +2143,7 @@ Value ModuleManager::create_net_module() {
             state->server_fd = fd;
             state->running = true;
 
-            auto serve_loop = [state, match_route, fd, port, host]() {
+            auto serve_loop = [state, match_route, invoke_val_func, fd]() {
                 while (state->running) {
                     sockaddr_in client_addr{};
                     socklen_t client_len = sizeof(client_addr);
@@ -2280,14 +2311,18 @@ Value ModuleManager::create_net_module() {
                                 Value req_val = Value::make_object(std::move(req_obj));
 
                                 try {
-                                    Value handler_res = Value::make_nil();
-                                    if (route.handler.type() == ValueType::NATIVE_FUNCTION) {
-                                        handler_res = route.handler.as_native_fn()->func({req_val}, SourceSpan{});
+                                    // Execute middlewares first
+                                    for (const auto& mw : state->middlewares) {
+                                        invoke_val_func(mw, {req_val});
                                     }
+
+                                    // Execute route handler
+                                    Value handler_res = invoke_val_func(route.handler, {req_val});
 
                                     int status_code = 200;
                                     std::string resp_body;
                                     std::string ctype = "application/json; charset=utf-8";
+                                    std::map<std::string, std::string> custom_headers;
 
                                     if (handler_res.is_object() && handler_res.as_object()->count("status") && handler_res.as_object()->count("body")) {
                                         auto robj = *handler_res.as_object();
@@ -2298,17 +2333,28 @@ Value ModuleManager::create_net_module() {
                                             resp_body = json_stringify_val(robj["body"], 0, 0);
                                         }
                                         if (robj.count("content_type")) ctype = robj["content_type"].as_string();
+                                        if (robj.count("headers") && robj["headers"].is_object()) {
+                                            for (const auto& [hk, hv] : *robj["headers"].as_object()) {
+                                                custom_headers[hk] = hv.as_string();
+                                            }
+                                        }
                                     } else if (handler_res.is_string()) {
                                         resp_body = handler_res.as_string();
-                                        ctype = "text/html; charset=utf-8";
+                                        ctype = "text/plain; charset=utf-8";
                                     } else {
                                         resp_body = json_stringify_val(handler_res, 0, 0);
+                                    }
+
+                                    std::string header_str;
+                                    for (const auto& [hk, hv] : custom_headers) {
+                                        header_str += hk + ": " + hv + "\r\n";
                                     }
 
                                     std::string resp = "HTTP/1.1 " + std::to_string(status_code) + " OK\r\n"
                                                        "Content-Type: " + ctype + "\r\n"
                                                        "Content-Length: " + std::to_string(resp_body.size()) + "\r\n"
-                                                       "Access-Control-Allow-Origin: *\r\n"
+                                                       "Access-Control-Allow-Origin: *\r\n" +
+                                                       header_str +
                                                        "Connection: close\r\n\r\n" + resp_body;
                                     send(client_fd, resp.data(), resp.size(), 0);
                                 } catch (const std::exception& e) {
@@ -2352,22 +2398,6 @@ Value ModuleManager::create_net_module() {
             return Value::make_bool(true);
         });
 
-        app["stop"] = Value::make_native_fn("stop", 0, [state](const std::vector<Value>&, SourceSpan) -> Value {
-            state->running = false;
-            if (state->server_fd >= 0) {
-#if defined(_WIN32)
-                closesocket(state->server_fd);
-#else
-                close(state->server_fd);
-#endif
-                state->server_fd = -1;
-            }
-            if (state->listener_thread && state->listener_thread->joinable()) {
-                state->listener_thread->join();
-            }
-            return Value::make_bool(true);
-        });
-
         return Value::make_object(std::move(app));
     });
 
@@ -2379,20 +2409,53 @@ Value ModuleManager::create_net_module() {
 Value ModuleManager::create_db_module() {
     std::map<std::string, Value> exports;
 
-    exports["postgres"] = Value::make_native_fn("postgres", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
-        std::string conn_str = args.empty() ? "postgres://localhost:5432/default" : (args[0].is_string() ? args[0].as_string() : json_stringify_val(args[0], 0, 0));
+    exports["postgres"] = Value::make_native_fn("postgres", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        std::string conn_str;
+        if (!args.empty() && args[0].is_object()) {
+            auto obj = *args[0].as_object();
+            std::string h = obj.count("host") ? obj["host"].as_string() : "localhost";
+            int p = obj.count("port") ? static_cast<int>(obj["port"].as_int()) : 5432;
+            std::string db = obj.count("database") ? obj["database"].as_string() : (obj.count("dbname") ? obj["dbname"].as_string() : "postgres");
+            std::string u = obj.count("user") ? obj["user"].as_string() : (obj.count("username") ? obj["username"].as_string() : "postgres");
+            std::string pw = obj.count("password") ? obj["password"].as_string() : "";
+            conn_str = "host=" + h + " port=" + std::to_string(p) + " dbname=" + db + " user=" + u;
+            if (!pw.empty()) conn_str += " password=" + pw;
+            if (obj.count("sslmode")) conn_str += " sslmode=" + obj["sslmode"].as_string();
+        } else if (!args.empty() && args[0].is_string()) {
+            conn_str = args[0].as_string();
+        } else {
+            conn_str = "host=localhost port=5432 dbname=postgres user=postgres";
+        }
 
-        struct DBState {
-            std::string uri;
+        PGconn* raw_conn = PQconnectdb(conn_str.c_str());
+        if (!raw_conn || PQstatus(raw_conn) != CONNECTION_OK) {
+            std::string err_msg = raw_conn ? PQerrorMessage(raw_conn) : "Failed to allocate PostgreSQL connection handle";
+            if (raw_conn) PQfinish(raw_conn);
+            while (!err_msg.empty() && (err_msg.back() == '\n' || err_msg.back() == '\r')) err_msg.pop_back();
+            throw RuntimeError("PostgreSQL Connection Error: " + err_msg, span, "Ensure the PostgreSQL server is running and connection parameters are valid");
+        }
+
+        struct RealPGState {
+            PGconn* conn = nullptr;
             std::mutex mtx;
-            std::map<std::string, std::vector<std::map<std::string, Value>>> tables;
+            bool closed = false;
+
+            ~RealPGState() {
+                std::lock_guard<std::mutex> lock(mtx);
+                if (conn && !closed) {
+                    PQfinish(conn);
+                    conn = nullptr;
+                    closed = true;
+                }
+            }
         };
 
-        auto state = std::make_shared<DBState>();
-        state->uri = conn_str;
+        auto state = std::make_shared<RealPGState>();
+        state->conn = raw_conn;
 
         std::map<std::string, Value> client;
 
+        // query(sql, [params]) -> {rows: [...], count: N, fields: [...], sql: "..."}
         client["query"] = Value::make_native_fn("query", -1, [state](const std::vector<Value>& a, SourceSpan s) -> Value {
             if (a.empty()) throw RuntimeError("db.query requires SQL query string", s);
             std::string sql = a[0].as_string();
@@ -2400,31 +2463,196 @@ Value ModuleManager::create_db_module() {
             if (a.size() >= 2 && a[1].is_array()) params = *a[1].as_array();
 
             std::lock_guard<std::mutex> lock(state->mtx);
-            std::vector<Value> rows;
-            std::vector<Value> fields = {Value::make_string("id"), Value::make_string("status"), Value::make_string("data")};
+            if (state->closed || !state->conn) {
+                throw RuntimeError("PostgreSQL Error: query executed on closed database connection", s);
+            }
 
-            std::map<std::string, Value> res;
-            res["rows"] = Value::make_array(std::move(rows));
-            res["count"] = Value::make_int(0);
-            res["fields"] = Value::make_array(std::move(fields));
-            res["sql"] = Value::make_string(sql);
-            return Value::make_object(std::move(res));
+            std::vector<std::string> param_strings;
+            std::vector<const char*> param_ptrs;
+            for (const auto& p : params) {
+                if (p.is_nil()) {
+                    param_ptrs.push_back(nullptr);
+                } else {
+                    param_strings.push_back(p.is_string() ? p.as_string() : p.to_string());
+                    param_ptrs.push_back(param_strings.back().c_str());
+                }
+            }
+
+            PGresult* res = nullptr;
+            if (param_ptrs.empty()) {
+                res = PQexec(state->conn, sql.c_str());
+            } else {
+                res = PQexecParams(state->conn, sql.c_str(), static_cast<int>(param_ptrs.size()),
+                                   nullptr, param_ptrs.data(), nullptr, nullptr, 0);
+            }
+
+            if (!res) {
+                std::string err = PQerrorMessage(state->conn);
+                while (!err.empty() && (err.back() == '\n' || err.back() == '\r')) err.pop_back();
+                throw RuntimeError("PostgreSQL Query Execution Failed: " + err, s);
+            }
+
+            ExecStatusType status = PQresultStatus(res);
+            if (status != PGRES_TUPLES_OK && status != PGRES_COMMAND_OK) {
+                std::string err = PQresultErrorMessage(res);
+                if (err.empty()) err = PQerrorMessage(state->conn);
+                while (!err.empty() && (err.back() == '\n' || err.back() == '\r')) err.pop_back();
+                PQclear(res);
+                throw RuntimeError("PostgreSQL Query Error: " + err, s);
+            }
+
+            int nfields = PQnfields(res);
+            std::vector<Value> fields;
+            std::vector<std::string> col_names;
+            for (int i = 0; i < nfields; ++i) {
+                const char* fname = PQfname(res, i);
+                std::string col = fname ? fname : ("col_" + std::to_string(i));
+                col_names.push_back(col);
+                fields.push_back(Value::make_string(col));
+            }
+
+            int ntuples = PQntuples(res);
+            std::vector<Value> rows;
+            for (int r = 0; r < ntuples; ++r) {
+                std::map<std::string, Value> row_map;
+                for (int c = 0; c < nfields; ++c) {
+                    if (PQgetisnull(res, r, c)) {
+                        row_map[col_names[c]] = Value::make_nil();
+                    } else {
+                        const char* val_str = PQgetvalue(res, r, c);
+                        row_map[col_names[c]] = Value::make_string(val_str ? val_str : "");
+                    }
+                }
+                rows.push_back(Value::make_object(std::move(row_map)));
+            }
+
+            PQclear(res);
+
+            std::map<std::string, Value> out_obj;
+            out_obj["rows"] = Value::make_array(std::move(rows));
+            out_obj["count"] = Value::make_int(ntuples);
+            out_obj["fields"] = Value::make_array(std::move(fields));
+            out_obj["sql"] = Value::make_string(sql);
+            return Value::make_object(std::move(out_obj));
         });
 
+        // execute(sql, [params]) -> {affected_rows: N, status: "OK"}
         client["execute"] = Value::make_native_fn("execute", -1, [state](const std::vector<Value>& a, SourceSpan s) -> Value {
             if (a.empty()) throw RuntimeError("db.execute requires SQL statement", s);
             std::string sql = a[0].as_string();
-            std::map<std::string, Value> res;
-            res["affected_rows"] = Value::make_int(1);
-            res["status"] = Value::make_string("OK");
-            return Value::make_object(std::move(res));
+            std::vector<Value> params;
+            if (a.size() >= 2 && a[1].is_array()) params = *a[1].as_array();
+
+            std::lock_guard<std::mutex> lock(state->mtx);
+            if (state->closed || !state->conn) {
+                throw RuntimeError("PostgreSQL Error: execute called on closed database connection", s);
+            }
+
+            std::vector<std::string> param_strings;
+            std::vector<const char*> param_ptrs;
+            for (const auto& p : params) {
+                if (p.is_nil()) {
+                    param_ptrs.push_back(nullptr);
+                } else {
+                    param_strings.push_back(p.is_string() ? p.as_string() : p.to_string());
+                    param_ptrs.push_back(param_strings.back().c_str());
+                }
+            }
+
+            PGresult* res = nullptr;
+            if (param_ptrs.empty()) {
+                res = PQexec(state->conn, sql.c_str());
+            } else {
+                res = PQexecParams(state->conn, sql.c_str(), static_cast<int>(param_ptrs.size()),
+                                   nullptr, param_ptrs.data(), nullptr, nullptr, 0);
+            }
+
+            if (!res) {
+                std::string err = PQerrorMessage(state->conn);
+                while (!err.empty() && (err.back() == '\n' || err.back() == '\r')) err.pop_back();
+                throw RuntimeError("PostgreSQL Execute Failed: " + err, s);
+            }
+
+            ExecStatusType status = PQresultStatus(res);
+            if (status != PGRES_COMMAND_OK && status != PGRES_TUPLES_OK) {
+                std::string err = PQresultErrorMessage(res);
+                if (err.empty()) err = PQerrorMessage(state->conn);
+                while (!err.empty() && (err.back() == '\n' || err.back() == '\r')) err.pop_back();
+                PQclear(res);
+                throw RuntimeError("PostgreSQL Execute Error: " + err, s);
+            }
+
+            const char* cmd_tuples = PQcmdTuples(res);
+            int64_t affected = 0;
+            if (cmd_tuples && *cmd_tuples) {
+                try { affected = std::stoll(cmd_tuples); } catch (...) { affected = 0; }
+            }
+            PQclear(res);
+
+            std::map<std::string, Value> out_obj;
+            out_obj["affected_rows"] = Value::make_int(affected);
+            out_obj["status"] = Value::make_string("OK");
+            return Value::make_object(std::move(out_obj));
         });
 
-        client["transaction"] = Value::make_native_fn("transaction", 1, [](const std::vector<Value>&, SourceSpan) -> Value {
-            return Value::make_bool(true);
+        // transaction(callback) -> executes BEGIN, callback(client), COMMIT or ROLLBACK on error
+        client["transaction"] = Value::make_native_fn("transaction", 1, [state, client](const std::vector<Value>& a, SourceSpan s) -> Value {
+            if (a.empty() || !a[0].is_callable()) throw RuntimeError("db.transaction requires a callable callback function", s);
+            Value cb = a[0];
+
+            {
+                std::lock_guard<std::mutex> lock(state->mtx);
+                PGresult* res = PQexec(state->conn, "BEGIN");
+                if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+                    std::string err = PQerrorMessage(state->conn);
+                    PQclear(res);
+                    throw RuntimeError("PostgreSQL BEGIN Transaction Failed: " + err, s);
+                }
+                PQclear(res);
+            }
+
+            auto invoke_val_func = [](const Value& fn, const std::vector<Value>& fn_args) -> Value {
+                if (fn.type() == ValueType::NATIVE_FUNCTION) {
+                    return fn.as_native_fn()->func(fn_args, SourceSpan{});
+                }
+                if (fn.type() == ValueType::FUNCTION) {
+                    SourceManager sm;
+                    DiagnosticEngine diag(sm, false);
+                    Interpreter interp(diag);
+                    return interp.call_function(fn, fn_args, SourceSpan{});
+                }
+                return Value::make_nil();
+            };
+
+            Value result = Value::make_nil();
+            try {
+                result = invoke_val_func(cb, {Value::make_object(client)});
+                std::lock_guard<std::mutex> lock(state->mtx);
+                PGresult* res = PQexec(state->conn, "COMMIT");
+                if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+                    std::string err = PQerrorMessage(state->conn);
+                    PQclear(res);
+                    throw RuntimeError("PostgreSQL COMMIT Failed: " + err, s);
+                }
+                PQclear(res);
+            } catch (const std::exception& e) {
+                std::lock_guard<std::mutex> lock(state->mtx);
+                PGresult* res = PQexec(state->conn, "ROLLBACK");
+                PQclear(res);
+                throw;
+            }
+
+            return result;
         });
 
-        client["close"] = Value::make_native_fn("close", 0, [](const std::vector<Value>&, SourceSpan) -> Value {
+        // close() -> closes database connection
+        client["close"] = Value::make_native_fn("close", 0, [state](const std::vector<Value>&, SourceSpan) -> Value {
+            std::lock_guard<std::mutex> lock(state->mtx);
+            if (!state->closed && state->conn) {
+                PQfinish(state->conn);
+                state->conn = nullptr;
+                state->closed = true;
+            }
             return Value::make_bool(true);
         });
 

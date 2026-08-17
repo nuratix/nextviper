@@ -12,6 +12,21 @@
 
 namespace nextviper {
 
+namespace {
+static std::string c_escape_string(const std::string& str) {
+    std::string out;
+    for (char c : str) {
+        if (c == '\n') out += "\\n";
+        else if (c == '\r') out += "\\r";
+        else if (c == '\t') out += "\\t";
+        else if (c == '\\') out += "\\\\";
+        else if (c == '"') out += "\\\"";
+        else out += c;
+    }
+    return out;
+}
+}
+
 NativeCompiler::NativeCompiler(DiagnosticEngine& diag) : diag_(diag) {}
 
 std::string NativeCompiler::find_c_compiler() const {
@@ -36,7 +51,196 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
     ss << "#include <unistd.h>\n";
     ss << "#include <math.h>\n\n";
 
-    // Standard NextViper Native Runtime helpers
+    // Dynamic Array Runtime
+    ss << "typedef struct NVArray {\n";
+    ss << "    uint32_t magic;\n";
+    ss << "    int64_t* data;\n";
+    ss << "    size_t len;\n";
+    ss << "    size_t cap;\n";
+    ss << "} NVArray;\n\n";
+
+    // Key-Value Map Runtime
+    ss << "typedef struct NVMapEntry {\n";
+    ss << "    char* key;\n";
+    ss << "    int64_t val;\n";
+    ss << "} NVMapEntry;\n\n";
+
+    ss << "typedef struct NVMap {\n";
+    ss << "    uint32_t magic;\n";
+    ss << "    NVMapEntry* entries;\n";
+    ss << "    size_t len;\n";
+    ss << "    size_t cap;\n";
+    ss << "} NVMap;\n\n";
+
+    ss << "static inline int64_t nv_fn_array_new(void) {\n";
+    ss << "    NVArray* a = (NVArray*)malloc(sizeof(NVArray));\n";
+    ss << "    a->magic = 0x41525259;\n";
+    ss << "    a->len = 0;\n";
+    ss << "    a->cap = 8;\n";
+    ss << "    a->data = (int64_t*)malloc(sizeof(int64_t) * a->cap);\n";
+    ss << "    return (int64_t)(uintptr_t)a;\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_object_new(void) {\n";
+    ss << "    NVMap* m = (NVMap*)malloc(sizeof(NVMap));\n";
+    ss << "    m->magic = 0x4D415053;\n";
+    ss << "    m->len = 0;\n";
+    ss << "    m->cap = 8;\n";
+    ss << "    m->entries = (NVMapEntry*)malloc(sizeof(NVMapEntry) * m->cap);\n";
+    ss << "    return (int64_t)(uintptr_t)m;\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_set_prop(int64_t obj_ptr, int64_t key_ptr, int64_t val) {\n";
+    ss << "    NVMap* m = (NVMap*)(uintptr_t)obj_ptr;\n";
+    ss << "    const char* key = (const char*)(uintptr_t)key_ptr;\n";
+    ss << "    if (!m || !key) return 0;\n";
+    ss << "    for (size_t i = 0; i < m->len; ++i) {\n";
+    ss << "        if (m->entries[i].key && strcmp(m->entries[i].key, key) == 0) {\n";
+    ss << "            m->entries[i].val = val;\n";
+    ss << "            return val;\n";
+    ss << "        }\n";
+    ss << "    }\n";
+    ss << "    if (m->len >= m->cap) {\n";
+    ss << "        m->cap = m->cap < 8 ? 8 : m->cap * 2;\n";
+    ss << "        m->entries = (NVMapEntry*)realloc(m->entries, sizeof(NVMapEntry) * m->cap);\n";
+    ss << "    }\n";
+    ss << "    m->entries[m->len].key = strdup(key);\n";
+    ss << "    m->entries[m->len].val = val;\n";
+    ss << "    m->len++;\n";
+    ss << "    return val;\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_push(int64_t arr_ptr, int64_t val) {\n";
+    ss << "    NVArray* a = (NVArray*)(uintptr_t)arr_ptr;\n";
+    ss << "    if (!a) return 0;\n";
+    ss << "    if (a->len >= a->cap) {\n";
+    ss << "        a->cap = a->cap < 8 ? 8 : a->cap * 2;\n";
+    ss << "        a->data = (int64_t*)realloc(a->data, sizeof(int64_t) * a->cap);\n";
+    ss << "    }\n";
+    ss << "    a->data[a->len++] = val;\n";
+    ss << "    return val;\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_append(int64_t arr_ptr, int64_t val) { return nv_fn_push(arr_ptr, val); }\n\n";
+
+    ss << "static inline int64_t nv_fn_insert(int64_t arr_ptr, int64_t idx, int64_t val) {\n";
+    ss << "    NVArray* a = (NVArray*)(uintptr_t)arr_ptr;\n";
+    ss << "    if (!a) return 0;\n";
+    ss << "    if (idx < 0) idx += a->len;\n";
+    ss << "    if (idx < 0 || (size_t)idx > a->len) return 0;\n";
+    ss << "    if (a->len >= a->cap) {\n";
+    ss << "        a->cap = a->cap < 8 ? 8 : a->cap * 2;\n";
+    ss << "        a->data = (int64_t*)realloc(a->data, sizeof(int64_t) * a->cap);\n";
+    ss << "    }\n";
+    ss << "    for (size_t i = a->len; i > (size_t)idx; --i) a->data[i] = a->data[i - 1];\n";
+    ss << "    a->data[idx] = val;\n";
+    ss << "    a->len++;\n";
+    ss << "    return arr_ptr;\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_pop(int64_t arr_ptr) {\n";
+    ss << "    NVArray* a = (NVArray*)(uintptr_t)arr_ptr;\n";
+    ss << "    if (!a || a->len == 0) return 0;\n";
+    ss << "    return a->data[--a->len];\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_len(int64_t ptr_or_str) {\n";
+    ss << "    if (!ptr_or_str) return 0;\n";
+    ss << "    NVMap* m = (NVMap*)(uintptr_t)ptr_or_str;\n";
+    ss << "    if (m->magic == 0x4D415053) return (int64_t)m->len;\n";
+    ss << "    NVArray* a = (NVArray*)(uintptr_t)ptr_or_str;\n";
+    ss << "    return (int64_t)a->len;\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_get(int64_t arr_or_map, int64_t idx_or_key) {\n";
+    ss << "    if (!arr_or_map) return 0;\n";
+    ss << "    NVMap* m = (NVMap*)(uintptr_t)arr_or_map;\n";
+    ss << "    if (m->magic == 0x4D415053) {\n";
+    ss << "        const char* k = (const char*)(uintptr_t)idx_or_key;\n";
+    ss << "        if (k) {\n";
+    ss << "            for (size_t i = 0; i < m->len; ++i) {\n";
+    ss << "                if (m->entries[i].key && strcmp(m->entries[i].key, k) == 0) return m->entries[i].val;\n";
+    ss << "            }\n";
+    ss << "        }\n";
+    ss << "        return 0;\n";
+    ss << "    }\n";
+    ss << "    NVArray* a = (NVArray*)(uintptr_t)arr_or_map;\n";
+    ss << "    int64_t idx = idx_or_key;\n";
+    ss << "    if (idx < 0) idx += a->len;\n";
+    ss << "    if (idx >= 0 && (size_t)idx < a->len) return a->data[idx];\n";
+    ss << "    return 0;\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_set(int64_t arr_or_map, int64_t idx_or_key, int64_t val) {\n";
+    ss << "    if (!arr_or_map) return 0;\n";
+    ss << "    NVMap* m = (NVMap*)(uintptr_t)arr_or_map;\n";
+    ss << "    if (m->magic == 0x4D415053) {\n";
+    ss << "        return nv_fn_set_prop(arr_or_map, idx_or_key, val);\n";
+    ss << "    }\n";
+    ss << "    NVArray* a = (NVArray*)(uintptr_t)arr_or_map;\n";
+    ss << "    int64_t idx = idx_or_key;\n";
+    ss << "    if (idx < 0) idx += a->len;\n";
+    ss << "    if (idx >= 0 && (size_t)idx < a->len) {\n";
+    ss << "        a->data[idx] = val;\n";
+    ss << "        return val;\n";
+    ss << "    }\n";
+    ss << "    return val;\n";
+    ss << "}\n\n";
+
+    ss << "static inline int64_t nv_fn_range(int64_t start, int64_t end) {\n";
+    ss << "    NVArray* a = (NVArray*)malloc(sizeof(NVArray));\n";
+    ss << "    a->magic = 0x41525259;\n";
+    ss << "    int64_t count = end > start ? end - start : 0;\n";
+    ss << "    a->len = count;\n";
+    ss << "    a->cap = count > 0 ? count : 1;\n";
+    ss << "    a->data = (int64_t*)malloc(sizeof(int64_t) * a->cap);\n";
+    ss << "    for (int64_t i = 0; i < count; ++i) a->data[i] = start + i;\n";
+    ss << "    return (int64_t)(uintptr_t)a;\n";
+    ss << "}\n\n";
+
+    ss << "static inline double nv_fn_clock(void) {\n";
+    ss << "    struct timespec ts;\n";
+    ss << "    clock_gettime(CLOCK_MONOTONIC, &ts);\n";
+    ss << "    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;\n";
+    ss << "}\n\n";
+
+    // Printing Helpers
+    ss << "static inline void nv_print_val_arr(int64_t ptr);\n\n";
+    ss << "static inline void nv_print_map_val(int64_t val) {\n";
+    ss << "    if (val == 0) { printf(\"0\"); return; }\n";
+    ss << "    printf(\"%ld\", (long)val);\n";
+    ss << "}\n\n";
+
+    ss << "static inline void nv_print_val_i64(int64_t v) { printf(\"%ld\", (long)v); }\n";
+    ss << "static inline void nv_print_val_f64(double v) { printf(\"%g\", v); }\n";
+    ss << "static inline void nv_print_val_str(const char* s) { printf(\"%s\", s ? s : \"null\"); }\n";
+    ss << "static inline void nv_print_val_bool(bool b) { printf(\"%s\", b ? \"true\" : \"false\"); }\n";
+    ss << "static inline void nv_print_val_arr(int64_t ptr) {\n";
+    ss << "    if (!ptr) { printf(\"[]\"); return; }\n";
+    ss << "    NVMap* m = (NVMap*)(uintptr_t)ptr;\n";
+    ss << "    if (m->magic == 0x4D415053) {\n";
+    ss << "        printf(\"{\");\n";
+    ss << "        for (size_t i = 0; i < m->len; ++i) {\n";
+    ss << "            if (i > 0) printf(\", \");\n";
+    ss << "            printf(\"\\\"%s\\\": \", m->entries[i].key ? m->entries[i].key : \"\");\n";
+    ss << "            nv_print_map_val(m->entries[i].val);\n";
+    ss << "        }\n";
+    ss << "        printf(\"}\");\n";
+    ss << "        return;\n";
+    ss << "    }\n";
+    ss << "    NVArray* a = (NVArray*)(uintptr_t)ptr;\n";
+    ss << "    if (a->magic == 0x41525259) {\n";
+    ss << "        printf(\"[\");\n";
+    ss << "        for (size_t i = 0; i < a->len; ++i) {\n";
+    ss << "            if (i > 0) printf(\", \");\n";
+    ss << "            printf(\"%ld\", (long)a->data[i]);\n";
+    ss << "        }\n";
+    ss << "        printf(\"]\");\n";
+    ss << "        return;\n";
+    ss << "    }\n";
+    ss << "    printf(\"%s\", (const char*)(uintptr_t)ptr);\n";
+    ss << "}\n\n";
+
     ss << "static inline int64_t nv_print_i64(int64_t v) { printf(\"%ld\\n\", (long)v); return 0; }\n";
     ss << "static inline int64_t nv_print_f64(double v) { printf(\"%f\\n\", v); return 0; }\n";
     ss << "static inline int64_t nv_print_str(const char* s) { printf(\"%s\\n\", s ? s : \"null\"); return 0; }\n";
@@ -67,7 +271,7 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
 
     // Forward declarations
     for (const auto& fn : module.functions) {
-        if (fn->name == "main") continue;
+        if (fn->name == "__nv_entry_main") continue;
         ss << "int64_t nv_fn_" << fn->name << "(";
         for (size_t i = 0; i < fn->params.size(); ++i) {
             if (i > 0) ss << ", ";
@@ -79,7 +283,9 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
 
     // Function definitions
     for (const auto& fn : module.functions) {
-        if (fn->name == "main") {
+        std::map<int, IRTypeKind> reg_types;
+
+        if (fn->name == "__nv_entry_main") {
             ss << "int main(int argc, char** argv) {\n";
             ss << "  (void)argc; (void)argv;\n";
         } else {
@@ -91,6 +297,16 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
             ss << ") {\n";
         }
 
+        auto format_operand = [&](const IROperand& op) -> std::string {
+            if (op.kind == OperandKind::REGISTER) return "r" + std::to_string(op.reg_id);
+            if (op.kind == OperandKind::CONSTANT_INT) return std::to_string(op.int_val) + "LL";
+            if (op.kind == OperandKind::CONSTANT_FLOAT) return std::to_string(op.float_val);
+            if (op.kind == OperandKind::CONSTANT_STRING) return "(int64_t)(uintptr_t)\"" + c_escape_string(op.str_val) + "\"";
+            if (op.kind == OperandKind::CONSTANT_BOOL) return op.bool_val ? "true" : "false";
+            if (op.kind == OperandKind::SYMBOL) return op.str_val;
+            return "0";
+        };
+
         // Emit blocks
         for (const auto& bb : fn->blocks) {
             ss << " " << bb->label << ":\n";
@@ -98,74 +314,193 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
             for (const auto& inst : bb->instructions) {
                 switch (inst.opcode) {
                     case IROpcode::CONST_INT:
+                        reg_types[inst.dest_reg] = IRTypeKind::INT64;
                         ss << "  int64_t r" << inst.dest_reg << " = " << inst.args[0].int_val << "LL;\n";
                         break;
                     case IROpcode::CONST_FLOAT:
+                        reg_types[inst.dest_reg] = IRTypeKind::FLOAT64;
                         ss << "  double r" << inst.dest_reg << " = " << inst.args[0].float_val << ";\n";
                         break;
                     case IROpcode::CONST_BOOL:
+                        reg_types[inst.dest_reg] = IRTypeKind::BOOL;
                         ss << "  bool r" << inst.dest_reg << " = " << (inst.args[0].bool_val ? "true" : "false") << ";\n";
                         break;
                     case IROpcode::CONST_STRING:
-                        ss << "  const char* r" << inst.dest_reg << " = \"" << inst.args[0].str_val << "\";\n";
+                        reg_types[inst.dest_reg] = IRTypeKind::STRING;
+                        ss << "  const char* r" << inst.dest_reg << " = \"" << c_escape_string(inst.args[0].str_val) << "\";\n";
                         break;
                     case IROpcode::CONST_NIL:
+                        reg_types[inst.dest_reg] = IRTypeKind::PTR;
                         ss << "  void* r" << inst.dest_reg << " = NULL;\n";
                         break;
                     case IROpcode::ALLOCA:
-                        ss << "  int64_t r" << inst.dest_reg << " = 0; /* var " << inst.args[0].str_val << " */\n";
+                        reg_types[inst.dest_reg] = inst.type;
+                        if (inst.type == IRTypeKind::FLOAT64) {
+                            ss << "  double r" << inst.dest_reg << " = 0.0; /* var " << inst.args[0].str_val << " */\n";
+                        } else {
+                            ss << "  int64_t r" << inst.dest_reg << " = 0; /* var " << inst.args[0].str_val << " */\n";
+                        }
                         break;
                     case IROpcode::LOAD:
-                        ss << "  int64_t r" << inst.dest_reg << " = r" << inst.args[0].reg_id << ";\n";
+                        reg_types[inst.dest_reg] = inst.type;
+                        if (inst.type == IRTypeKind::FLOAT64) {
+                            ss << "  double r" << inst.dest_reg << " = r" << inst.args[0].reg_id << ";\n";
+                        } else {
+                            ss << "  int64_t r" << inst.dest_reg << " = r" << inst.args[0].reg_id << ";\n";
+                        }
                         break;
                     case IROpcode::STORE:
                         if (inst.args[1].kind == OperandKind::REGISTER) {
-                            ss << "  r" << inst.args[0].reg_id << " = r" << inst.args[1].reg_id << ";\n";
+                            if (reg_types[inst.args[0].reg_id] == IRTypeKind::FLOAT64) {
+                                ss << "  r" << inst.args[0].reg_id << " = r" << inst.args[1].reg_id << ";\n";
+                            } else {
+                                ss << "  r" << inst.args[0].reg_id << " = (int64_t)(uintptr_t)r" << inst.args[1].reg_id << ";\n";
+                            }
                         } else if (inst.args[1].kind == OperandKind::CONSTANT_INT) {
                             ss << "  r" << inst.args[0].reg_id << " = " << inst.args[1].int_val << "LL;\n";
+                        } else if (inst.args[1].kind == OperandKind::CONSTANT_FLOAT) {
+                            ss << "  r" << inst.args[0].reg_id << " = " << inst.args[1].float_val << ";\n";
+                        } else if (inst.args[1].kind == OperandKind::CONSTANT_STRING) {
+                            ss << "  r" << inst.args[0].reg_id << " = (int64_t)(uintptr_t)\"" << c_escape_string(inst.args[1].str_val) << "\";\n";
+                        } else if (inst.args[1].kind == OperandKind::CONSTANT_BOOL) {
+                            ss << "  r" << inst.args[0].reg_id << " = " << (inst.args[1].bool_val ? "1" : "0") << ";\n";
                         } else if (inst.args[1].kind == OperandKind::SYMBOL) {
-                            ss << "  r" << inst.args[0].reg_id << " = " << inst.args[1].str_val << ";\n";
+                            ss << "  r" << inst.args[0].reg_id << " = (int64_t)(uintptr_t)" << inst.args[1].str_val << ";\n";
                         }
                         break;
-                    case IROpcode::ADD:
-                        ss << "  int64_t r" << inst.dest_reg << " = r" << inst.args[0].reg_id << " + r" << inst.args[1].reg_id << ";\n";
+                    case IROpcode::ADD: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        bool is_flt = (inst.type == IRTypeKind::FLOAT64) ||
+                                      (inst.args[0].kind == OperandKind::REGISTER && reg_types[inst.args[0].reg_id] == IRTypeKind::FLOAT64) ||
+                                      (inst.args[1].kind == OperandKind::REGISTER && reg_types[inst.args[1].reg_id] == IRTypeKind::FLOAT64) ||
+                                      (inst.args[0].kind == OperandKind::CONSTANT_FLOAT) ||
+                                      (inst.args[1].kind == OperandKind::CONSTANT_FLOAT);
+                        if (is_flt) {
+                            reg_types[inst.dest_reg] = IRTypeKind::FLOAT64;
+                            ss << "  double r" << inst.dest_reg << " = (double)" << op0_str << " + (double)" << op1_str << ";\n";
+                        } else {
+                            reg_types[inst.dest_reg] = IRTypeKind::INT64;
+                            ss << "  int64_t r" << inst.dest_reg << " = " << op0_str << " + " << op1_str << ";\n";
+                        }
                         break;
-                    case IROpcode::SUB:
-                        ss << "  int64_t r" << inst.dest_reg << " = r" << inst.args[0].reg_id << " - r" << inst.args[1].reg_id << ";\n";
+                    }
+                    case IROpcode::SUB: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        bool is_flt = (inst.type == IRTypeKind::FLOAT64) ||
+                                      (inst.args[0].kind == OperandKind::REGISTER && reg_types[inst.args[0].reg_id] == IRTypeKind::FLOAT64) ||
+                                      (inst.args[1].kind == OperandKind::REGISTER && reg_types[inst.args[1].reg_id] == IRTypeKind::FLOAT64) ||
+                                      (inst.args[0].kind == OperandKind::CONSTANT_FLOAT) ||
+                                      (inst.args[1].kind == OperandKind::CONSTANT_FLOAT);
+                        if (is_flt) {
+                            reg_types[inst.dest_reg] = IRTypeKind::FLOAT64;
+                            ss << "  double r" << inst.dest_reg << " = (double)" << op0_str << " - (double)" << op1_str << ";\n";
+                        } else {
+                            reg_types[inst.dest_reg] = IRTypeKind::INT64;
+                            ss << "  int64_t r" << inst.dest_reg << " = " << op0_str << " - " << op1_str << ";\n";
+                        }
                         break;
-                    case IROpcode::MUL:
-                        ss << "  int64_t r" << inst.dest_reg << " = r" << inst.args[0].reg_id << " * r" << inst.args[1].reg_id << ";\n";
+                    }
+                    case IROpcode::MUL: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        bool is_flt = (inst.type == IRTypeKind::FLOAT64) ||
+                                      (inst.args[0].kind == OperandKind::REGISTER && reg_types[inst.args[0].reg_id] == IRTypeKind::FLOAT64) ||
+                                      (inst.args[1].kind == OperandKind::REGISTER && reg_types[inst.args[1].reg_id] == IRTypeKind::FLOAT64) ||
+                                      (inst.args[0].kind == OperandKind::CONSTANT_FLOAT) ||
+                                      (inst.args[1].kind == OperandKind::CONSTANT_FLOAT);
+                        if (is_flt) {
+                            reg_types[inst.dest_reg] = IRTypeKind::FLOAT64;
+                            ss << "  double r" << inst.dest_reg << " = (double)" << op0_str << " * (double)" << op1_str << ";\n";
+                        } else {
+                            reg_types[inst.dest_reg] = IRTypeKind::INT64;
+                            ss << "  int64_t r" << inst.dest_reg << " = " << op0_str << " * " << op1_str << ";\n";
+                        }
                         break;
-                    case IROpcode::DIV:
-                        ss << "  int64_t r" << inst.dest_reg << " = (r" << inst.args[1].reg_id << " != 0) ? (r" << inst.args[0].reg_id << " / r" << inst.args[1].reg_id << ") : 0;\n";
+                    }
+                    case IROpcode::DIV: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        bool is_flt = (inst.type == IRTypeKind::FLOAT64) ||
+                                      (inst.args[0].kind == OperandKind::REGISTER && reg_types[inst.args[0].reg_id] == IRTypeKind::FLOAT64) ||
+                                      (inst.args[1].kind == OperandKind::REGISTER && reg_types[inst.args[1].reg_id] == IRTypeKind::FLOAT64) ||
+                                      (inst.args[0].kind == OperandKind::CONSTANT_FLOAT) ||
+                                      (inst.args[1].kind == OperandKind::CONSTANT_FLOAT);
+                        if (is_flt) {
+                            reg_types[inst.dest_reg] = IRTypeKind::FLOAT64;
+                            ss << "  double r" << inst.dest_reg << " = ((double)" << op1_str << " != 0.0) ? ((double)" << op0_str << " / (double)" << op1_str << ") : 0.0;\n";
+                        } else {
+                            reg_types[inst.dest_reg] = IRTypeKind::INT64;
+                            ss << "  int64_t r" << inst.dest_reg << " = (" << op1_str << " != 0) ? (" << op0_str << " / " << op1_str << ") : 0;\n";
+                        }
                         break;
-                    case IROpcode::MOD:
-                        ss << "  int64_t r" << inst.dest_reg << " = (r" << inst.args[1].reg_id << " != 0) ? (r" << inst.args[0].reg_id << " % r" << inst.args[1].reg_id << ") : 0;\n";
+                    }
+                    case IROpcode::MOD: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        reg_types[inst.dest_reg] = IRTypeKind::INT64;
+                        ss << "  int64_t r" << inst.dest_reg << " = (" << op1_str << " != 0) ? (" << op0_str << " % " << op1_str << ") : 0;\n";
                         break;
-                    case IROpcode::NEG:
-                        ss << "  int64_t r" << inst.dest_reg << " = -r" << inst.args[0].reg_id << ";\n";
+                    }
+                    case IROpcode::NEG: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        reg_types[inst.dest_reg] = inst.type;
+                        if (inst.type == IRTypeKind::FLOAT64) {
+                            ss << "  double r" << inst.dest_reg << " = -" << op0_str << ";\n";
+                        } else {
+                            ss << "  int64_t r" << inst.dest_reg << " = -" << op0_str << ";\n";
+                        }
                         break;
-                    case IROpcode::NOT:
-                        ss << "  bool r" << inst.dest_reg << " = !r" << inst.args[0].reg_id << ";\n";
+                    }
+                    case IROpcode::NOT: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        reg_types[inst.dest_reg] = IRTypeKind::BOOL;
+                        ss << "  bool r" << inst.dest_reg << " = !" << op0_str << ";\n";
                         break;
-                    case IROpcode::EQ:
-                        ss << "  bool r" << inst.dest_reg << " = (r" << inst.args[0].reg_id << " == r" << inst.args[1].reg_id << ");\n";
+                    }
+                    case IROpcode::EQ: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        reg_types[inst.dest_reg] = IRTypeKind::BOOL;
+                        ss << "  bool r" << inst.dest_reg << " = (" << op0_str << " == " << op1_str << ");\n";
                         break;
-                    case IROpcode::NE:
-                        ss << "  bool r" << inst.dest_reg << " = (r" << inst.args[0].reg_id << " != r" << inst.args[1].reg_id << ");\n";
+                    }
+                    case IROpcode::NE: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        reg_types[inst.dest_reg] = IRTypeKind::BOOL;
+                        ss << "  bool r" << inst.dest_reg << " = (" << op0_str << " != " << op1_str << ");\n";
                         break;
-                    case IROpcode::LT:
-                        ss << "  bool r" << inst.dest_reg << " = (r" << inst.args[0].reg_id << " < r" << inst.args[1].reg_id << ");\n";
+                    }
+                    case IROpcode::LT: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        reg_types[inst.dest_reg] = IRTypeKind::BOOL;
+                        ss << "  bool r" << inst.dest_reg << " = (" << op0_str << " < " << op1_str << ");\n";
                         break;
-                    case IROpcode::LE:
-                        ss << "  bool r" << inst.dest_reg << " = (r" << inst.args[0].reg_id << " <= r" << inst.args[1].reg_id << ");\n";
+                    }
+                    case IROpcode::LE: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        reg_types[inst.dest_reg] = IRTypeKind::BOOL;
+                        ss << "  bool r" << inst.dest_reg << " = (" << op0_str << " <= " << op1_str << ");\n";
                         break;
-                    case IROpcode::GT:
-                        ss << "  bool r" << inst.dest_reg << " = (r" << inst.args[0].reg_id << " > r" << inst.args[1].reg_id << ");\n";
+                    }
+                    case IROpcode::GT: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        reg_types[inst.dest_reg] = IRTypeKind::BOOL;
+                        ss << "  bool r" << inst.dest_reg << " = (" << op0_str << " > " << op1_str << ");\n";
                         break;
-                    case IROpcode::GE:
-                        ss << "  bool r" << inst.dest_reg << " = (r" << inst.args[0].reg_id << " >= r" << inst.args[1].reg_id << ");\n";
+                    }
+                    case IROpcode::GE: {
+                        auto op0_str = format_operand(inst.args[0]);
+                        auto op1_str = format_operand(inst.args[1]);
+                        reg_types[inst.dest_reg] = IRTypeKind::BOOL;
+                        ss << "  bool r" << inst.dest_reg << " = (" << op0_str << " >= " << op1_str << ");\n";
                         break;
+                    }
                     case IROpcode::JMP:
                         ss << "  goto " << inst.args[0].str_val << ";\n";
                         break;
@@ -175,29 +510,82 @@ std::string NativeCompiler::emit_native_source(const IRModule& module) const {
                     case IROpcode::JMP_IF_FALSE:
                         ss << "  if (!r" << inst.args[0].reg_id << ") goto " << inst.args[1].str_val << ";\n";
                         break;
-                    case IROpcode::CALL:
-                        ss << "  int64_t r" << inst.dest_reg << " = nv_fn_" << inst.args[0].str_val << "(";
+                    case IROpcode::CALL: {
+                        std::string ret_type_str = "int64_t";
+                        if (inst.type == IRTypeKind::FLOAT64 || (inst.args[0].kind == OperandKind::SYMBOL && inst.args[0].str_val == "clock")) {
+                            ret_type_str = "double";
+                            reg_types[inst.dest_reg] = IRTypeKind::FLOAT64;
+                        } else if (inst.type == IRTypeKind::PTR) {
+                            reg_types[inst.dest_reg] = IRTypeKind::PTR;
+                        } else if (inst.type == IRTypeKind::BOOL) {
+                            reg_types[inst.dest_reg] = IRTypeKind::BOOL;
+                        } else {
+                            reg_types[inst.dest_reg] = IRTypeKind::INT64;
+                        }
+
+                        if (inst.args[0].kind == OperandKind::REGISTER) {
+                            ss << "  " << ret_type_str << " r" << inst.dest_reg << " = ((int64_t (*)(";
+                            for (size_t i = 1; i < inst.args.size(); ++i) {
+                                if (i > 1) ss << ", ";
+                                ss << "int64_t";
+                            }
+                            ss << "))r" << inst.args[0].reg_id << ")(";
+                        } else {
+                            std::string fn_name = inst.args[0].str_val;
+                            ss << "  " << ret_type_str << " r" << inst.dest_reg << " = nv_fn_" << fn_name << "(";
+                        }
+
                         for (size_t i = 1; i < inst.args.size(); ++i) {
                             if (i > 1) ss << ", ";
                             if (inst.args[i].kind == OperandKind::REGISTER) {
-                                ss << "r" << inst.args[i].reg_id;
+                                ss << "(int64_t)(uintptr_t)r" << inst.args[i].reg_id;
                             } else if (inst.args[i].kind == OperandKind::CONSTANT_INT) {
                                 ss << inst.args[i].int_val << "LL";
+                            } else if (inst.args[i].kind == OperandKind::CONSTANT_FLOAT) {
+                                ss << inst.args[i].float_val;
+                            } else if (inst.args[i].kind == OperandKind::CONSTANT_STRING) {
+                                ss << "(int64_t)(uintptr_t)\"" << c_escape_string(inst.args[i].str_val) << "\"";
+                            } else if (inst.args[i].kind == OperandKind::CONSTANT_BOOL) {
+                                ss << (inst.args[i].bool_val ? "true" : "false");
+                            } else if (inst.args[i].kind == OperandKind::SYMBOL) {
+                                ss << inst.args[i].str_val;
                             }
                         }
                         ss << ");\n";
                         break;
-                    case IROpcode::PRINT:
-                        for (const auto& arg : inst.args) {
+                    }
+                    case IROpcode::PRINT: {
+                        for (size_t i = 0; i < inst.args.size(); ++i) {
+                            if (i > 0) ss << "  printf(\" \");\n";
+                            const auto& arg = inst.args[i];
                             if (arg.kind == OperandKind::REGISTER) {
-                                ss << "  nv_fn_print(r" << arg.reg_id << ");\n";
+                                auto rtype = reg_types[arg.reg_id];
+                                if (rtype == IRTypeKind::PTR) {
+                                    ss << "  nv_print_val_arr(r" << arg.reg_id << ");\n";
+                                } else if (rtype == IRTypeKind::FLOAT64) {
+                                    ss << "  nv_print_val_f64((double)r" << arg.reg_id << ");\n";
+                                } else if (rtype == IRTypeKind::STRING) {
+                                    ss << "  nv_print_val_str((const char*)r" << arg.reg_id << ");\n";
+                                } else if (rtype == IRTypeKind::BOOL) {
+                                    ss << "  nv_print_val_bool((bool)r" << arg.reg_id << ");\n";
+                                } else {
+                                    ss << "  nv_print_val_i64((int64_t)r" << arg.reg_id << ");\n";
+                                }
                             } else if (arg.kind == OperandKind::CONSTANT_INT) {
-                                ss << "  nv_print_i64(" << arg.int_val << "LL);\n";
+                                ss << "  printf(\"%ld\", (long)" << arg.int_val << "LL);\n";
+                            } else if (arg.kind == OperandKind::CONSTANT_FLOAT) {
+                                ss << "  printf(\"%g\", (double)" << arg.float_val << ");\n";
                             } else if (arg.kind == OperandKind::CONSTANT_STRING) {
-                                ss << "  nv_print_str(\"" << arg.str_val << "\");\n";
+                                ss << "  printf(\"%s\", \"" << c_escape_string(arg.str_val) << "\");\n";
+                            } else if (arg.kind == OperandKind::CONSTANT_BOOL) {
+                                ss << "  printf(\"%s\", " << (arg.bool_val ? "\"true\"" : "\"false\"") << ");\n";
+                            } else if (arg.kind == OperandKind::SYMBOL) {
+                                ss << "  printf(\"%ld\", (long)" << arg.str_val << ");\n";
                             }
                         }
+                        ss << "  printf(\"\\n\");\n";
                         break;
+                    }
                     case IROpcode::RET:
                         if (!inst.args.empty()) {
                             if (inst.args[0].kind == OperandKind::REGISTER) {
@@ -229,6 +617,12 @@ bool NativeCompiler::compile_to_binary(const IRModule& module, const std::string
     if (!out.is_open()) return false;
     out << c_src;
     out.close();
+
+    std::ofstream debug_out("/tmp/last_generated.c");
+    if (debug_out.is_open()) {
+        debug_out << c_src;
+        debug_out.close();
+    }
 
     std::string compiler = find_c_compiler();
     std::string cmd = compiler + " -O3 " + temp_c + " -o " + output_binary_path + " -lm 2>&1";
