@@ -2153,7 +2153,65 @@ Value ModuleManager::create_net_module() {
             state->server_fd = fd;
             state->running = true;
 
-            auto serve_loop = [state, match_route, invoke_val_func, fd]() {
+            auto http_status_phrase = [](int code) -> std::string {
+                switch (code) {
+                    case 200: return "OK";
+                    case 201: return "Created";
+                    case 202: return "Accepted";
+                    case 204: return "No Content";
+                    case 400: return "Bad Request";
+                    case 401: return "Unauthorized";
+                    case 403: return "Forbidden";
+                    case 404: return "Not Found";
+                    case 405: return "Method Not Allowed";
+                    case 408: return "Request Timeout";
+                    case 413: return "Payload Too Large";
+                    case 431: return "Request Header Fields Too Large";
+                    case 500: return "Internal Server Error";
+                    case 501: return "Not Implemented";
+                    case 502: return "Bad Gateway";
+                    case 503: return "Service Unavailable";
+                    default: return code >= 400 ? "Error" : "OK";
+                }
+            };
+
+            auto url_decode = [](const std::string& in) -> std::string {
+                std::string out;
+                out.reserve(in.size());
+                for (size_t i = 0; i < in.size(); ++i) {
+                    if (in[i] == '%' && i + 2 < in.size() && std::isxdigit(static_cast<unsigned char>(in[i+1])) && std::isxdigit(static_cast<unsigned char>(in[i+2]))) {
+                        auto from_hex = [](char c) -> int {
+                            if (c >= '0' && c <= '9') return c - '0';
+                            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                            return 0;
+                        };
+                        int val = (from_hex(in[i+1]) << 4) | from_hex(in[i+2]);
+                        out.push_back(static_cast<char>(val));
+                        i += 2;
+                    } else if (in[i] == '+') {
+                        out.push_back(' ');
+                    } else {
+                        out.push_back(in[i]);
+                    }
+                }
+                return out;
+            };
+
+            auto safe_send_all = [](int sfd, const std::string& data) -> bool {
+                size_t total_sent = 0;
+                while (total_sent < data.size()) {
+                    int n = send(sfd, data.data() + total_sent, static_cast<int>(data.size() - total_sent), 0);
+                    if (n <= 0) return false;
+                    total_sent += static_cast<size_t>(n);
+                }
+                return true;
+            };
+
+            auto serve_loop = [state, match_route, invoke_val_func, fd, http_status_phrase, url_decode, safe_send_all]() {
+                constexpr size_t MAX_HEADER_BYTES = 16 * 1024;
+                constexpr size_t MAX_BODY_BYTES   = 10 * 1024 * 1024;
+
                 while (state->running) {
                     sockaddr_in client_addr{};
                     socklen_t client_len = sizeof(client_addr);
@@ -2163,16 +2221,36 @@ Value ModuleManager::create_net_module() {
                         continue;
                     }
 
-                    // Read request
+#if defined(_WIN32)
+                    DWORD timeout_ms = 5000;
+                    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout_ms, sizeof(timeout_ms));
+                    setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout_ms, sizeof(timeout_ms));
+#else
+                    struct timeval tv{5, 0};
+                    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+                    setsockopt(client_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+#endif
+
                     std::string raw_req;
                     char buf[4096];
-                    int n = recv(client_fd, buf, sizeof(buf) - 1, 0);
-                    if (n > 0) {
-                        buf[n] = '\0';
+                    size_t header_end = std::string::npos;
+                    bool read_error = false;
+
+                    while (raw_req.size() < MAX_HEADER_BYTES) {
+                        int n = recv(client_fd, buf, sizeof(buf) - 1, 0);
+                        if (n <= 0) {
+                            if (raw_req.empty()) read_error = true;
+                            break;
+                        }
                         raw_req.append(buf, n);
+                        header_end = raw_req.find("\r\n\r\n");
+                        if (header_end == std::string::npos) {
+                            header_end = raw_req.find("\n\n");
+                        }
+                        if (header_end != std::string::npos) break;
                     }
 
-                    if (raw_req.empty()) {
+                    if (read_error || raw_req.empty()) {
 #if defined(_WIN32)
                         closesocket(client_fd);
 #else
@@ -2181,20 +2259,45 @@ Value ModuleManager::create_net_module() {
                         continue;
                     }
 
-                    // Parse HTTP request line
+                    if (header_end == std::string::npos || header_end > MAX_HEADER_BYTES) {
+                        std::string resp = "HTTP/1.1 431 Request Header Fields Too Large\r\n"
+                                           "Content-Type: application/json\r\n"
+                                           "Connection: close\r\n\r\n"
+                                           "{\"error\":\"Request Header Fields Too Large\",\"status\":431}";
+                        safe_send_all(client_fd, resp);
+#if defined(_WIN32)
+                        closesocket(client_fd);
+#else
+                        close(client_fd);
+#endif
+                        continue;
+                    }
+
                     std::istringstream req_stream(raw_req);
                     std::string method, full_path, proto;
-                    req_stream >> method >> full_path >> proto;
+                    if (!(req_stream >> method >> full_path >> proto) || method.empty() || full_path.empty()) {
+                        std::string resp = "HTTP/1.1 400 Bad Request\r\n"
+                                           "Content-Type: application/json\r\n"
+                                           "Connection: close\r\n\r\n"
+                                           "{\"error\":\"Malformed HTTP request line\",\"status\":400}";
+                        safe_send_all(client_fd, resp);
+#if defined(_WIN32)
+                        closesocket(client_fd);
+#else
+                        close(client_fd);
+#endif
+                        continue;
+                    }
 
-                    std::string path = full_path;
+                    std::string raw_path = full_path;
                     std::string query_str;
                     size_t qpos = full_path.find('?');
                     if (qpos != std::string::npos) {
-                        path = full_path.substr(0, qpos);
+                        raw_path = full_path.substr(0, qpos);
                         query_str = full_path.substr(qpos + 1);
                     }
+                    std::string path = url_decode(raw_path);
 
-                    // Parse query params
                     std::map<std::string, Value> query_map;
                     if (!query_str.empty()) {
                         std::stringstream qss(query_str);
@@ -2202,43 +2305,54 @@ Value ModuleManager::create_net_module() {
                         while (std::getline(qss, pair, '&')) {
                             size_t eq = pair.find('=');
                             if (eq != std::string::npos) {
-                                query_map[pair.substr(0, eq)] = Value::make_string(pair.substr(eq + 1));
+                                std::string k = url_decode(pair.substr(0, eq));
+                                std::string v = url_decode(pair.substr(eq + 1));
+                                query_map[k] = Value::make_string(v);
                             } else {
-                                query_map[pair] = Value::make_string("");
+                                query_map[url_decode(pair)] = Value::make_string("");
                             }
                         }
                     }
 
-                    // Parse headers
                     std::map<std::string, Value> headers_map;
                     std::string line;
-                    std::getline(req_stream, line); // finish request line
+                    std::getline(req_stream, line);
                     while (std::getline(req_stream, line) && line != "\r" && !line.empty()) {
                         size_t colon = line.find(':');
                         if (colon != std::string::npos) {
                             std::string k = line.substr(0, colon);
                             std::string v = line.substr(colon + 1);
-                            // trim v
                             size_t start = v.find_first_not_of(" \t");
                             size_t end = v.find_last_not_of(" \t\r\n");
                             if (start != std::string::npos && end != std::string::npos) {
                                 v = v.substr(start, end - start + 1);
+                            } else {
+                                v.clear();
                             }
                             std::transform(k.begin(), k.end(), k.begin(), ::tolower);
                             headers_map[k] = Value::make_string(v);
                         }
                     }
 
-                    // Read body
-                    size_t body_pos = raw_req.find("\r\n\r\n");
-                    std::string body;
-                    if (body_pos != std::string::npos) {
-                        body = raw_req.substr(body_pos + 4);
-                    }
+                    size_t header_len = (header_end == raw_req.find("\r\n\r\n")) ? (header_end + 4) : (header_end + 2);
+                    std::string body = raw_req.substr(header_len);
 
                     if (headers_map.count("content-length")) {
                         try {
                             size_t expected_content_len = std::stoull(headers_map["content-length"].as_string());
+                            if (expected_content_len > MAX_BODY_BYTES) {
+                                std::string resp = "HTTP/1.1 413 Payload Too Large\r\n"
+                                                   "Content-Type: application/json\r\n"
+                                                   "Connection: close\r\n\r\n"
+                                                   "{\"error\":\"Payload Too Large\",\"status\":413}";
+                                safe_send_all(client_fd, resp);
+#if defined(_WIN32)
+                                closesocket(client_fd);
+#else
+                                close(client_fd);
+#endif
+                                continue;
+                            }
                             while (body.size() < expected_content_len) {
                                 int n2 = recv(client_fd, buf, sizeof(buf) - 1, 0);
                                 if (n2 <= 0) break;
@@ -2247,7 +2361,6 @@ Value ModuleManager::create_net_module() {
                         } catch (...) {}
                     }
 
-                    // CORS preflight
                     if (method == "OPTIONS") {
                         std::string resp = "HTTP/1.1 204 No Content\r\n"
                                            "Access-Control-Allow-Origin: *\r\n"
@@ -2255,7 +2368,7 @@ Value ModuleManager::create_net_module() {
                                            "Access-Control-Allow-Headers: *\r\n"
                                            "Content-Length: 0\r\n"
                                            "Connection: close\r\n\r\n";
-                        send(client_fd, resp.data(), resp.size(), 0);
+                        safe_send_all(client_fd, resp);
 #if defined(_WIN32)
                         closesocket(client_fd);
 #else
@@ -2264,36 +2377,45 @@ Value ModuleManager::create_net_module() {
                         continue;
                     }
 
-                    // Check static file routes
                     bool handled_static = false;
                     for (const auto& [prefix, dir] : state->static_dirs) {
                         if (path.rfind(prefix, 0) == 0) {
                             std::string rel_path = path.substr(prefix.size());
                             if (rel_path.empty() || rel_path == "/") rel_path = "/index.html";
-                            fs::path base_dir = fs::weakly_canonical(dir);
-                            fs::path full_file = fs::weakly_canonical(base_dir / (rel_path.rfind("/", 0) == 0 ? rel_path.substr(1) : rel_path));
-                            std::string base_str = base_dir.string();
-                            std::string target_str = full_file.string();
-                            if (target_str.rfind(base_str, 0) == 0 && fs::exists(full_file) && !fs::is_directory(full_file)) {
-                                std::ifstream f(full_file, std::ios::binary);
-                                std::string fcontent((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                                std::string ctype = "text/plain";
-                                std::string ext = full_file.extension().string();
-                                if (ext == ".html" || ext == ".htm") ctype = "text/html; charset=utf-8";
-                                else if (ext == ".js") ctype = "application/javascript";
-                                else if (ext == ".css") ctype = "text/css";
-                                else if (ext == ".json") ctype = "application/json";
-                                else if (ext == ".png") ctype = "image/png";
-                                else if (ext == ".svg") ctype = "image/svg+xml";
+                            
+                            std::error_code ec;
+                            fs::path base_dir = fs::weakly_canonical(dir, ec);
+                            fs::path target_file = fs::weakly_canonical(base_dir / (rel_path.rfind("/", 0) == 0 ? rel_path.substr(1) : rel_path), ec);
+                            
+                            std::string base_str = base_dir.lexically_normal().string();
+                            std::string target_str = target_file.lexically_normal().string();
+                            if (!base_str.empty() && base_str.back() != '/' && base_str.back() != '\\') {
+                                base_str += "/";
+                            }
+                            
+                            bool is_contained = (target_str + "/").rfind(base_str, 0) == 0;
+                            if (is_contained && fs::exists(target_file, ec) && !fs::is_directory(target_file, ec)) {
+                                std::ifstream f(target_file, std::ios::binary);
+                                if (f.is_open()) {
+                                    std::string fcontent((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                                    std::string ctype = "text/plain";
+                                    std::string ext = target_file.extension().string();
+                                    if (ext == ".html" || ext == ".htm") ctype = "text/html; charset=utf-8";
+                                    else if (ext == ".js") ctype = "application/javascript";
+                                    else if (ext == ".css") ctype = "text/css";
+                                    else if (ext == ".json") ctype = "application/json";
+                                    else if (ext == ".png") ctype = "image/png";
+                                    else if (ext == ".svg") ctype = "image/svg+xml";
 
-                                std::string resp = "HTTP/1.1 200 OK\r\n"
-                                                   "Content-Type: " + ctype + "\r\n"
-                                                   "Content-Length: " + std::to_string(fcontent.size()) + "\r\n"
-                                                   "Access-Control-Allow-Origin: *\r\n"
-                                                   "Connection: close\r\n\r\n" + fcontent;
-                                send(client_fd, resp.data(), resp.size(), 0);
-                                handled_static = true;
-                                break;
+                                    std::string resp = "HTTP/1.1 200 OK\r\n"
+                                                       "Content-Type: " + ctype + "\r\n"
+                                                       "Content-Length: " + std::to_string(fcontent.size()) + "\r\n"
+                                                       "Access-Control-Allow-Origin: *\r\n"
+                                                       "Connection: close\r\n\r\n" + fcontent;
+                                    safe_send_all(client_fd, resp);
+                                    handled_static = true;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -2307,7 +2429,6 @@ Value ModuleManager::create_net_module() {
                         continue;
                     }
 
-                    // Match dynamic routes
                     bool matched = false;
                     for (const auto& route : state->routes) {
                         if (route.method == method || route.method == "*") {
@@ -2315,7 +2436,6 @@ Value ModuleManager::create_net_module() {
                             if (match_route(route.path_pattern, path, params_map)) {
                                 matched = true;
 
-                                // Build Request Value
                                 std::map<std::string, Value> req_obj;
                                 req_obj["method"] = Value::make_string(method);
                                 req_obj["path"] = Value::make_string(path);
@@ -2335,12 +2455,10 @@ Value ModuleManager::create_net_module() {
                                 Value req_val = Value::make_object(std::move(req_obj));
 
                                 try {
-                                    // Execute middlewares first
                                     for (const auto& mw : state->middlewares) {
                                         invoke_val_func(mw, {req_val});
                                     }
 
-                                    // Execute route handler
                                     Value handler_res = invoke_val_func(route.handler, {req_val});
 
                                     int status_code = 200;
@@ -2374,13 +2492,14 @@ Value ModuleManager::create_net_module() {
                                         header_str += hk + ": " + hv + "\r\n";
                                     }
 
-                                    std::string resp = "HTTP/1.1 " + std::to_string(status_code) + " OK\r\n"
+                                    std::string phrase = http_status_phrase(status_code);
+                                    std::string resp = "HTTP/1.1 " + std::to_string(status_code) + " " + phrase + "\r\n"
                                                        "Content-Type: " + ctype + "\r\n"
                                                        "Content-Length: " + std::to_string(resp_body.size()) + "\r\n"
                                                        "Access-Control-Allow-Origin: *\r\n" +
                                                        header_str +
                                                        "Connection: close\r\n\r\n" + resp_body;
-                                    send(client_fd, resp.data(), resp.size(), 0);
+                                    safe_send_all(client_fd, resp);
                                 } catch (const std::exception& e) {
                                     std::string err_json = "{\"error\":\"Internal Server Error\",\"status\":500,\"message\":\"" + std::string(e.what()) + "\"}";
                                     std::string resp = "HTTP/1.1 500 Internal Server Error\r\n"
@@ -2388,7 +2507,7 @@ Value ModuleManager::create_net_module() {
                                                        "Content-Length: " + std::to_string(err_json.size()) + "\r\n"
                                                        "Access-Control-Allow-Origin: *\r\n"
                                                        "Connection: close\r\n\r\n" + err_json;
-                                    send(client_fd, resp.data(), resp.size(), 0);
+                                    safe_send_all(client_fd, resp);
                                 }
                                 break;
                             }
@@ -2402,7 +2521,7 @@ Value ModuleManager::create_net_module() {
                                            "Content-Length: " + std::to_string(nf_json.size()) + "\r\n"
                                            "Access-Control-Allow-Origin: *\r\n"
                                            "Connection: close\r\n\r\n" + nf_json;
-                        send(client_fd, resp.data(), resp.size(), 0);
+                        safe_send_all(client_fd, resp);
                     }
 
 #if defined(_WIN32)
@@ -2433,38 +2552,42 @@ Value ModuleManager::create_net_module() {
 Value ModuleManager::create_db_module() {
     std::map<std::string, Value> exports;
 
+    // PostgreSQL Real Driver using C libpq
     exports["postgres"] = Value::make_native_fn("postgres", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
-        std::string conn_str;
-        if (!args.empty() && args[0].is_object()) {
-            auto obj = *args[0].as_object();
-            std::string h = obj.count("host") ? obj["host"].as_string() : "localhost";
-            int p = obj.count("port") ? static_cast<int>(obj["port"].as_int()) : 5432;
-            std::string db = obj.count("database") ? obj["database"].as_string() : (obj.count("dbname") ? obj["dbname"].as_string() : "postgres");
-            std::string u = obj.count("user") ? obj["user"].as_string() : (obj.count("username") ? obj["username"].as_string() : "postgres");
-            std::string pw = obj.count("password") ? obj["password"].as_string() : "";
-            conn_str = "host=" + h + " port=" + std::to_string(p) + " dbname=" + db + " user=" + u;
-            if (!pw.empty()) conn_str += " password=" + pw;
-            if (obj.count("sslmode")) conn_str += " sslmode=" + obj["sslmode"].as_string();
-        } else if (!args.empty() && args[0].is_string()) {
-            conn_str = args[0].as_string();
+        if (args.empty()) throw RuntimeError("db.postgres requires connection string or configuration object", span);
+
+        std::string conninfo;
+        if (args[0].is_string()) {
+            conninfo = args[0].as_string();
+        } else if (args[0].is_object()) {
+            auto cfg = *args[0].as_object();
+            std::string host = cfg.count("host") ? cfg["host"].as_string() : "127.0.0.1";
+            int port = cfg.count("port") ? static_cast<int>(cfg["port"].as_int()) : 5432;
+            std::string user = cfg.count("user") ? cfg["user"].as_string() : "postgres";
+            std::string dbname = cfg.count("dbname") ? cfg["dbname"].as_string() : "postgres";
+            std::string pass = cfg.count("password") ? cfg["password"].as_string() : "";
+            int timeout = cfg.count("timeout") ? static_cast<int>(cfg["timeout"].as_int()) : 5;
+
+            conninfo = "host=" + host + " port=" + std::to_string(port) + " user=" + user + " dbname=" + dbname + " connect_timeout=" + std::to_string(timeout);
+            if (!pass.empty()) conninfo += " password=" + pass;
         } else {
-            conn_str = "host=localhost port=5432 dbname=postgres user=postgres";
+            throw RuntimeError("db.postgres argument must be connection string or config object", span);
         }
 
-        PGconn* raw_conn = PQconnectdb(conn_str.c_str());
-        if (!raw_conn || PQstatus(raw_conn) != CONNECTION_OK) {
-            std::string err_msg = raw_conn ? PQerrorMessage(raw_conn) : "Failed to allocate PostgreSQL connection handle";
-            if (raw_conn) PQfinish(raw_conn);
-            while (!err_msg.empty() && (err_msg.back() == '\n' || err_msg.back() == '\r')) err_msg.pop_back();
-            throw RuntimeError("PostgreSQL Connection Error: " + err_msg, span, "Ensure the PostgreSQL server is running and connection parameters are valid");
+        PGconn* conn = PQconnectdb(conninfo.c_str());
+        if (!conn || PQstatus(conn) != CONNECTION_OK) {
+            std::string err = conn ? PQerrorMessage(conn) : "Failed to allocate PostgreSQL connection handle";
+            while (!err.empty() && (err.back() == '\n' || err.back() == '\r')) err.pop_back();
+            if (conn) PQfinish(conn);
+            throw RuntimeError("PostgreSQL Connection Failed: " + err, span);
         }
 
-        struct RealPGState {
+        struct PostgresConnState {
             PGconn* conn = nullptr;
             std::mutex mtx;
             bool closed = false;
 
-            ~RealPGState() {
+            ~PostgresConnState() {
                 std::lock_guard<std::mutex> lock(mtx);
                 if (conn && !closed) {
                     PQfinish(conn);
@@ -2474,8 +2597,9 @@ Value ModuleManager::create_db_module() {
             }
         };
 
-        auto state = std::make_shared<RealPGState>();
-        state->conn = raw_conn;
+        auto state = std::make_shared<PostgresConnState>();
+        state->conn = conn;
+        state->closed = false;
 
         std::map<std::string, Value> client;
 
@@ -2491,15 +2615,26 @@ Value ModuleManager::create_db_module() {
                 throw RuntimeError("PostgreSQL Error: query executed on closed database connection", s);
             }
 
+            // Pass 1: Build all string representations in reserved stable storage
             std::vector<std::string> param_strings;
-            std::vector<const char*> param_ptrs;
+            std::vector<bool> is_null;
+            param_strings.reserve(params.size());
+            is_null.reserve(params.size());
             for (const auto& p : params) {
                 if (p.is_nil()) {
-                    param_ptrs.push_back(nullptr);
+                    is_null.push_back(true);
+                    param_strings.emplace_back("");
                 } else {
+                    is_null.push_back(false);
                     param_strings.push_back(p.is_string() ? p.as_string() : p.to_string());
-                    param_ptrs.push_back(param_strings.back().c_str());
                 }
+            }
+
+            // Pass 2: Obtain stable const char* pointers after storage is finalized
+            std::vector<const char*> param_ptrs;
+            param_ptrs.reserve(params.size());
+            for (size_t i = 0; i < params.size(); ++i) {
+                param_ptrs.push_back(is_null[i] ? nullptr : param_strings[i].c_str());
             }
 
             PGresult* res = nullptr;
@@ -2572,15 +2707,26 @@ Value ModuleManager::create_db_module() {
                 throw RuntimeError("PostgreSQL Error: execute called on closed database connection", s);
             }
 
+            // Pass 1: Build all string representations in reserved stable storage
             std::vector<std::string> param_strings;
-            std::vector<const char*> param_ptrs;
+            std::vector<bool> is_null;
+            param_strings.reserve(params.size());
+            is_null.reserve(params.size());
             for (const auto& p : params) {
                 if (p.is_nil()) {
-                    param_ptrs.push_back(nullptr);
+                    is_null.push_back(true);
+                    param_strings.emplace_back("");
                 } else {
+                    is_null.push_back(false);
                     param_strings.push_back(p.is_string() ? p.as_string() : p.to_string());
-                    param_ptrs.push_back(param_strings.back().c_str());
                 }
+            }
+
+            // Pass 2: Obtain stable const char* pointers after storage is finalized
+            std::vector<const char*> param_ptrs;
+            param_ptrs.reserve(params.size());
+            for (size_t i = 0; i < params.size(); ++i) {
+                param_ptrs.push_back(is_null[i] ? nullptr : param_strings[i].c_str());
             }
 
             PGresult* res = nullptr;

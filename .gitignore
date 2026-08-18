@@ -19,3 +19,4 @@ tests/my_test_calc.nv
 .nextviper/
 nextviper_modules/
 dist/
+__pycache__/

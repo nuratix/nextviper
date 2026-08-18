@@ -1,40 +1,23 @@
-# NextViper Implementation & Ecosystem Status
+# NextViper Pending Infrastructure & Verification Matrix
 
-This document provides a transparent overview of implemented features, pending roadmap items, and blocked external requirements.
-
----
-
-## 1. IMPLEMENTED & ACTIVE
-
-- **Core Language & C++20 Toolchain**: Full lexer, AST, parser, type checker, interpreter, and native compiler.
-- **Data & AI Subsystems**: Columnar DataFrame, autograd Tensor engine, neural network layers, loss functions, and optimizers.
-- **Vulkan GPU Compute Backend**: Hardware device detection, host/device memory transfers, GEMM matrix multiplication, and shader execution.
-- **Standard Library (`std`)**: 14 standard modules (`fs`, `math`, `collections`, `json`, `csv`, `crypto`, `time`, `process`, `regex`, etc.).
-- **Package Manager CLI & Registry**: `nextviper.toml`, `nextviper.lock`, SHA-256 tree hashing, SemVer resolution.
-- **Developer Tooling**: Standalone `nextviper-lsp` language server, VS Code syntax and LSP extension, `nextviper fmt`, `nextviper check`, `nextviper test`, `nextviper info`, `nextviper run --watch`.
-- **Stable Error Reference System**: 16 error codes (`NV1001`–`NV5001`) with live docs on `https://nextviper.nuratix.com/docs/errors/<slug>`.
-- **Official POSIX Installer (`install.sh`)**: HTTPS installer supporting OS and CPU architecture detection, checksum validation, and automated PATH configuration.
-- **Android / Termux ARM64 Compatibility (`nextviper@1.0.1`)**: Fixed recursive subprocess fork-bomb bug where `which nextviper` returned the node launcher; added strict native binary magic header checks (`0x7fELF`) and lightweight offline project initialization (`nextviper init`, `nextviper --version`, `nextviper doctor`).
-- **Website Legal & Distribution Hubs**: `/install`, `/download`, `/releases`, `/license`, `/contributing`, `/security`, `/privacy`, `/terms`.
+This document tracks items that are planned, partially implemented, or awaiting external infrastructure deployment. NextViper policy strictly requires documenting unsupported claims as **PENDING** rather than claiming operational status without evidence.
 
 ---
 
-## 2. PARTIALLY IMPLEMENTED
+## Pending Infrastructure Items
 
-- **Debian / Ubuntu Native Package (`.deb`)**: Package control files defined; awaiting launchpad PPA repository setup.
-- **Nightly CI Matrix Builds**: GitHub Actions workflow defined for multi-arch builds.
-
----
-
-## 3. PLANNED
-
-- **Homebrew Core / Tap Formula**: Formula specification defined in `MACOS_DISTRIBUTION.md`; community PR to be submitted following v1.0.0 tag.
-- **Windows WinGet Manifest**: Package specification defined in `WINDOWS_DISTRIBUTION.md`; PR to `microsoft/winget-pkgs` planned.
-- **Python Extension Module (`nextviper-py`)**: C-API bindings on PyPI for zero-copy tensor interoperability with PyTorch and NumPy.
+| Item | Category | Current Status | Blocker / Requirement |
+| :--- | :--- | :--- | :--- |
+| **Remote Installer CDN Hosting** | Distribution | `PLANNED` | `curl -fsSL https://nextviper.nuratix.com/install.sh \| bash` requires active public CDN deployment and DNS routing. Use `./scripts/install.sh` for local installation. |
+| **Termux Official Repository Package** | Distribution | `PLANNED` | `pkg install nextviper` requires upstream submission to `termux/termux-packages`. Build from source using `clang` and `make` on Termux. |
+| **Precompiled Multi-Platform Binaries** | Distribution | `PLANNED` | Automated builds for Windows (`x86_64-pc-windows-msvc`) and macOS (`aarch64-apple-darwin`, `x86_64-apple-darwin`) will be published via GitHub Actions when tags are pushed. |
+| **Direct x86-64 Machine-Code JIT Backend** | Compiler | `PLANNED` | Current native compilation translates `NextViper IR -> C emitter -> system C compiler -> binary`. Direct LLVM IR / binary machine-code generation is planned for a future major release. |
+| **Multi-Threaded HTTP Server Worker Pool** | Runtime | `PLANNED` | The current HTTP server utilizes a robust single-threaded accept/serve loop (with background listener thread support). A thread-pool worker architecture for high-concurrency request dispatching is planned. |
+| **Remote Package Registry Authentication** | Package Manager | `PLANNED` | Package publishing with API key authentication to `https://registry.nextviper.org` is designed; public registry backend hosting is currently in private preview. |
 
 ---
 
-## 4. BLOCKED BY EXTERNAL REQUIREMENT
-
-- **Microsoft Store Distribution**: Blocked pending corporate Nuratix LLC Microsoft Partner Center account verification and app identity certificates.
-- **Apple Developer ID Gatekeeper Notarization**: Required for unprompted macOS Gatekeeper binary distribution outside Homebrew.
+## Verification Level Guidelines
+1. **Source Verified**: Backed by executable source code in the repository and validated by automated test suites.
+2. **Infrastructure Verified**: Automated CI/CD pipelines executing on remote build runners.
+3. **Deployment Verified**: Hosted public artifacts available for download and signature-checked by end users.

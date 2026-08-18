@@ -1,56 +1,49 @@
-# NextViper Native Platform Support Matrix
+# NextViper Native Platform Support & Architecture
 
-## 1. Supported Platform Matrix
+## Compilation Architecture
 
-| Platform / Architecture | Verification Status | C/C++ Toolchain | Native Libraries | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Linux (x86_64)** | **VERIFIED** | `g++ >= 11` or `clang++ >= 14`, `gcc` (AOT) | `glibc`, `libpthread`, `libm`, `libvulkan`, `libpq` | Primary tier-1 development & test platform. Full test suite passing (154/154). |
-| **Linux (aarch64 / ARM64)** | **EXPERIMENTAL** | `g++ >= 11`, `gcc` (AOT) | `glibc`, `libpthread`, `libm` | IR and C code generation are architecture-neutral; requires build toolchain on host. |
-| **macOS (Apple Silicon / Intel)** | **EXPERIMENTAL** | Apple Clang / LLVM (`clang++`) | `libc++`, `libpthread`, `MoltenVK`, `libpq` | POSIX runtime compatible; Vulkan requires MoltenVK translation layer. |
-| **Windows (x86_64)** | **EXPERIMENTAL** | MSVC 2022 (`cl.exe`) or MinGW-w64 (`g++`) | `ucrt`, `ws2_32`, `vulkan-1.dll`, `libpq.dll` | Win32 socket translation implemented in `module.cpp`; requires Windows SDK. |
-| **Android / Termux** | **EXPERIMENTAL** | Clang via Termux packages | `bionic`, `libpthread` | Limited by Android 12+ Phantom Process Killer (Signal 9 SIGKILL) on multi-core builds. |
-
----
-
-## 2. Compiler Toolchain & Runtime Dependencies
-
-### Native AOT Compiler Pipeline
-The NextViper native compiler generates standard ISO C code conforming to C99 / C11 standards and invokes the host C compiler (`gcc` or `clang`) with `-O3` optimization flags:
+NextViper's Native AOT Compiler uses a high-performance, architecture-neutral translation pipeline:
 
 ```
-[NextViper Source (.nv)]
-         ↓ (Lexer & Parser)
+[NextViper Source Code (*.nv)]
+            │
+            ▼ (Lexer & Parser)
 [AST (Abstract Syntax Tree)]
-         ↓ (IRGenerator)
-[Typed Register IR (SSA-style)]
-         ↓ (IROptimizer: Constant Folding & DCE)
-[Optimized Typed IR]
-         ↓ (NativeCompiler: C Code Emitter)
-[Self-Contained C Source (.c)]
-         ↓ (Host C Compiler: gcc / clang -O3)
-[Standalone Machine Executable]
+            │
+            ▼ (IR Generator & Optimizer)
+[NextViper SSA Typed IR (Three-Address Code)]
+            │
+            ▼ (C Source Emitter)
+[Optimized Generated C Source (*.tmp.c)]
+            │
+            ▼ (Direct POSIX Process Execution: posix_spawnp)
+[Host System C Compiler (GCC / Clang -O3)]
+            │
+            ▼ (Native Linker)
+[Standalone Machine Binary Executable (ELF / Mach-O / PE)]
 ```
 
-### Compiler Dependencies
-- **C Compiler**: `gcc` or `clang` available on the system `$PATH`.
-- **Standard C Runtime**: `libc` (POSIX `glibc`, `musl`, or Windows `ucrt`).
-- **Standard Math**: `libm` (`sqrt`, `pow`, `cbrt`, `sin`, `cos`, `tan`, `floor`, `ceil`).
-- **Timing Primitives**: `clock_gettime` (`CLOCK_MONOTONIC`), `gettimeofday`, `usleep`.
-- **Memory Allocator**: `malloc`, `realloc`, `free` for dynamic `NVArray` and `NVMap` heap storage.
+### Key Architectural Characteristics
+1. **Portable Optimization**: NextViper leverages the host system's C compiler (GCC, Clang) with `-O3` to perform architecture-specific instruction scheduling, auto-vectorization (SIMD), register allocation, and native ABI calling conventions.
+2. **Safe Process Spawning**: Compilation commands are executed via direct `posix_spawnp` argument vectors rather than shell string interpretation (`sh -c` / `std::system`), eliminating shell injection vulnerabilities when paths contain spaces or metacharacters.
+3. **No Direct JIT Machine-Code Emission**: NextViper currently emits optimized C rather than direct x86-64/ARM machine-code bytes. Direct binary backend integration (LLVM/Cranelift) is planned for future major releases.
 
 ---
 
-## 3. Platform Verification Procedure
+## Supported Architectures & Environments
 
-To verify native compilation on any target platform:
-```bash
-# 1. Compile test program
-nextviper build --native tests/native_verify/01_hello.nv -o /tmp/hello_native
+| Architecture | Platform | Compiler Toolchain | Verification Status |
+| :--- | :--- | :--- | :--- |
+| **aarch64 (ARM64)** | Linux (Ubuntu, Debian, Alpine) | GCC 10+, Clang 12+ | `SOURCE VERIFIED` |
+| **x86_64 (AMD64)** | Linux (Ubuntu, Debian, Fedora) | GCC 10+, Clang 12+ | `SOURCE VERIFIED` |
+| **arm64 / x86_64** | macOS 12+ | Xcode Command Line Tools / Clang | `IMPLEMENTED` |
+| **x86_64** | Windows 10/11 | MSVC (Visual Studio) / MinGW-w64 | `IMPLEMENTED` |
+| **aarch64 / arm** | Android (Termux) | Clang in Termux environment | `SOURCE VERIFIED` |
 
-# 2. Execute binary directly
-/tmp/hello_native
-# Expected output: Hello, World!
+---
 
-# 3. Verify exact equivalence against interpreter
-nextviper run tests/native_verify/01_hello.nv
-```
+## Verification Test Suite
+The native compiler is verified via:
+- `tests/test_native_compiler.cpp`: Verifies arithmetic, functions, loops, arrays, and IR constant folding.
+- `tests/native_verify/`: Comprehensive 12-file test suite verifying exact interpreter vs native output equivalence.
+- `tests/test_native_security.py`: Verifies process execution resilience against spaces and shell metacharacters.

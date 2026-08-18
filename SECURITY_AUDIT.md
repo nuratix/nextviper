@@ -1,46 +1,41 @@
-# NextViper Security & Vulnerability Audit Report
+# NextViper Security Audit & Hardening Report
 
-## 1. Executive Summary
-This document records an independent security audit of the NextViper compiler, runtime, networking, standard library, and package management infrastructure.
-
----
-
-## 2. Threat Vector Review & Findings
-
-### Vector 1: Command & Process Injection
-- **Mechanism**: `std.process.exec` and `http.client` execution.
-- **Analysis**:
-  - `std.process.exec` uses POSIX `popen` to execute external commands. User code must sanitize any untrusted inputs passed directly into shell commands.
-  - `http.client` parameterizes URL and headers, escaping body payloads with JSON string quoting to prevent arbitrary command concatenation.
-- **Status**: **HARDENED / SECURE**.
-
-### Vector 2: HTTP Static File Path Traversal (`Directory Traversal`)
-- **Mechanism**: `http.server` static directory serving (`app.static("/assets", "./public")`).
-- **Audit**:
-  - Validated that requested URI paths containing `../` or encoded `%2e%2e` sequences cannot escape the designated static root directory.
-  - Runtime applies `std::filesystem::weakly_canonical` resolution and enforces that the target canonical file path retains the static base directory prefix (`target_str.rfind(base_str, 0) == 0`).
-- **Status**: **VERIFIED SECURE**.
-
-### Vector 3: SQL Injection Protection in PostgreSQL Driver
-- **Mechanism**: `std.db` PostgreSQL connection and query execution.
-- **Audit**:
-  - Parameterized queries utilize native PostgreSQL `PQexecParams` with `$1, $2, ...` server-side parameter binding, keeping user-provided inputs isolated from SQL query text parsing.
-- **Status**: **VERIFIED SECURE**.
-
-### Vector 4: Package Registry Archive Extraction (`ZipSlip`)
-- **Mechanism**: `nextviper install` and package decompression.
-- **Audit**:
-  - Package tarball extraction validates entry paths against parent directory traversal (`..`) before writing to the local package directory `.nextviper/packages/`.
-- **Status**: **VERIFIED SECURE**.
-
-### Vector 5: Memory Safety in Native C Code Emission
-- **Mechanism**: Native AOT compiler (`NativeCompiler` and `IROptimizer`).
-- **Audit**:
-  - Dynamic heap allocations for arrays (`NVArray`) and hash maps (`NVMap`) are managed with dedicated memory allocation tracking and bounds-checked indexing (`nv_fn_get`, `nv_fn_set`, `nv_fn_push`).
-  - Pointer dereferencing guards verify memory address thresholds (`(uintptr_t)ptr < 0x10000`) before accessing magic identifier headers (`0x4D415053`, `0x41525259`).
-- **Status**: **VERIFIED SECURE**.
+## Overview
+This security assessment documents the hardened surfaces, mitigations, and known boundaries of NextViper 1.0.0. In accordance with honest engineering practices, absolute claims of total invulnerability are avoided in favor of rigorous threat analysis and executable regression testing.
 
 ---
 
-## 3. Audit Conclusion
-NextViper standard library modules and native runtime components enforce explicit boundary checks and secure default configurations.
+## Hardened Subsystems & Mitigations
+
+### 1. HTTP Server Hardening (`std.http`)
+- **Path Traversal Containment**: Static file serving uses canonical lexical normalization (`std::filesystem::weakly_canonical` with separator-aware prefix verification). Requests attempting relative traversal (`../../` or URL-encoded `%2e%2e%2f`) are strictly contained within the designated root directory and cannot access parent filesystem paths.
+- **Resource Exhaustion Protection**:
+  - Max Header Size: 16 KB (Requests with unclosed or oversized headers trigger `431 Request Header Fields Too Large` or immediate connection termination).
+  - Max Body Size: 10 MB (Requests exceeding content bounds trigger `413 Payload Too Large`).
+- **Timeout Management**: Configured socket read/write timeouts (`SO_RCVTIMEO` / `SO_SNDTIMEO`) prevent slowloris connection starvation.
+- **Malformed Protocol Handling**: Unrecognized request methods, empty routes, and corrupted HTTP lines return standard `400 Bad Request` responses.
+
+### 2. Native Compiler Process Execution Safety
+- **Shell Injection Immunity**: The native compiler replaces `std::system()` shell execution with direct POSIX process execution (`posix_spawnp`). Compiler arguments are passed as discrete pointers in a vector, rendering paths with spaces, semicolons, backticks, or shell metacharacters immune to command injection.
+- **Binary Output Sandboxing**: Temporary `.c` source files and intermediate compilation artifacts are strictly removed following compilation.
+
+### 3. Database Driver Memory Safety (`std.db.postgres`)
+- **Stable Parameter Buffers**: Fixed a pointer invalidation vulnerability where `param_ptrs` stored `c_str()` pointers into a resizing vector. The driver now enforces a strict 2-pass allocation pattern: all string values are fully reserved and constructed in pass 1 before pointers are indexed in pass 2, guaranteeing pointer validity during `PQexecParams`.
+- **SQL Injection Prevention**: All queries supporting parameters use prepared parameter substitution (`$1, $2, ...`) via PostgreSQL's native binary protocol rather than string concatenation.
+
+---
+
+## Remaining Threat Models & Recommendations
+
+| Surface | Potential Risk | Mitigation / Best Practice |
+| :--- | :--- | :--- |
+| **HTTP Concurrency** | Single-threaded accept loop can be delayed by long-running synchronous route handlers. | Deploy NextViper behind a reverse proxy (Nginx / Envoy) for high-traffic production workloads. |
+| **Vulkan GPU Kernels** | Malformed compute shaders could trigger device-lost errors. | Run compute tasks on dedicated GPU queues with device error handling. |
+| **Package Dependency Supply Chain** | Malicious third-party package dependencies. | NextViper uses cryptographic tree hashing (SHA-256) in `nextviper.lock` to ensure build reproducibility. |
+
+---
+
+## Automated Security Regression Tests
+Security assertions are verified continuously in the repository via:
+- `tests/test_http_hardening.py`: Validates traversal blocking, encoded traversal rejection, oversized header limits, and TCP fragmentation.
+- `tests/test_native_security.py`: Validates compilation of output paths containing spaces and shell metacharacters without arbitrary code execution.

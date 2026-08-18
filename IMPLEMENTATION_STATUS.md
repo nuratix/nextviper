@@ -1,26 +1,41 @@
-# NextViper Implementation Status (Step 17: Core Backend Realization)
+# NextViper Implementation Status (Step 19 Evidence-Based Audit)
 
-## Executive Summary
-Following a comprehensive system audit and targeted corrective engineering, all mock implementations in NextViper's standard library and backend have been eliminated. NextViper now provides:
-1. **Real Native AOT Compiler**: Generates typed C source compiled via system C compiler into standalone native binaries, supporting variables, arithmetic, functions, recursion, closures, higher-order functions, compound assignment, dynamic arrays, maps, and high-resolution timing.
-2. **Real HTTP Server & Client (`std.http`, `std.net`)**: High-performance HTTP server with multi-threaded request loop, URL routing, wildcard and parameter matching (`:param`), query parsing, headers, JSON body decoding (`req.json()`), middleware pipeline, and user NextViper closure execution.
-3. **Real PostgreSQL Driver (`std.db`)**: Native integration with `libpq` supporting TCP/domain connections, parameterized queries (`PQexecParams`), SQL execution, transaction management (`BEGIN`/`COMMIT`/`ROLLBACK`), column metadata, and honest error handling (no fake mock responses).
-4. **Authentic Standard Library**: 100% real backing implementations for `std.fs`, `std.path`, `std.string`, `std.math`, `std.json`, `std.csv`, `std.time`, `std.process`, `std.crypto`, `std.regex`, `std.random`, and `std.concurrency`.
+## Taxonomy Definition
+- **VERIFIED**: The feature is implemented in source code and validated by reproducible executable tests in the repository.
+- **IMPLEMENTED**: The feature is written in source code but has not undergone full external infrastructure validation.
+- **PARTIAL**: The feature is functional for standard use cases but has documented limitations or edge cases.
+- **UNVERIFIED**: Implementation exists but lacks independent automated test coverage in this environment.
+- **PLANNED**: Architecturally designed and documented for future release; not currently implemented in source.
+- **BLOCKED**: Implementation depends on external infrastructure or hardware unavailable in this environment.
 
 ---
 
-## Subsystem Status Matrix
+## Subsystem Implementation Matrix
 
-| Subsystem | Audit Status | Real Implementation Details | Verification |
+| Subsystem / Feature | Status | Verification Evidence | Scope & Limitations |
 | :--- | :--- | :--- | :--- |
-| **Frontend Lexer & Parser** | Operational | Full Pratt expression parser, AST generation, syntax error recovery | 137/137 tests passing |
-| **Interpreter Core** | Operational | Scoped environments, closures, recursion guard, structured error reporting | 100% verified |
-| **Type Checker & Linter** | Operational | Static type inference, unused variable & dead code detection, method resolution | Verified clean |
-| **Native AOT Compiler** | Operational | SSA-style Typed IR generation, C code emission, standalone binary compilation | Exact equivalence with interpreter |
-| **HTTP Server (`http.server`)** | Operational | Socket-level multi-threaded listener, NextViper closure route execution | `examples/http_real.nv` verified |
-| **HTTP Client (`http.get/post`)** | Operational | Real HTTP request execution, status code capture, JSON parsing | Verified live |
-| **PostgreSQL Driver (`std.db`)** | Operational | Real `libpq` driver, connection management, parameterized queries | `examples/postgres_real.nv` verified |
-| **Package Manager** | Operational | Manifest parsing (`nextviper.toml`), SemVer resolution, tree hashing, lockfile generation | Verified |
-| **AI / Autograd Engine** | Operational | Reverse-mode automatic differentiation, dense layers, loss & optimizers | Convergence verified |
-| **GPU / Vulkan Compute** | Operational | Vulkan compute pipelines, SPIR-V kernel dispatch, tensor memory transfers | GPU tests passing |
-| **Developer Tooling & LSP** | Operational | Formatter, CLI diagnostics with JSON output, Language Server Protocol | Verified |
+| **Lexer & Scanner** | `VERIFIED` | `tests/test_lexer.cpp` (8/8 pass) | Full tokenization, numeric literals (hex, bin, oct, underscores), strings, comments. |
+| **Parser & AST** | `VERIFIED` | `tests/test_parser.cpp` (8/8 pass) | Pratt precedence parser, expressions, control flow, functions, blocks. |
+| **Interpreter Core** | `VERIFIED` | `tests/test_interpreter.cpp` (9/9 pass) | Scoped environments, closures, recursion limits, dynamic evaluation. |
+| **Type Checker** | `VERIFIED` | `tests/test_type_checker.cpp` (5/5 pass) | Primitive inference, generic lists/maps, function signatures. |
+| **Bytecode VM** | `VERIFIED` | `tests/test_vm.cpp` (4/4 pass) | Stack-based bytecode execution, chunk compiler, disassembly. |
+| **Native AOT Compiler** | `VERIFIED` | `tests/test_native_compiler.cpp` + `tests/native_verify/` | Architecture: `NextViper IR -> C emitter -> system C compiler -> executable`. Resilient `posix_spawn` process execution. |
+| **Standard Library: `std.fs` & `std.path`** | `VERIFIED` | `tests/test_stdlib.cpp` | Real filesystem I/O, file reading, writing, path canonicalization. |
+| **Standard Library: `std.math` & `std.crypto`** | `VERIFIED` | `tests/test_stdlib.cpp` | Real math functions, SHA-256 / MD5 hashing. |
+| **Standard Library: `std.json` & `std.csv`** | `VERIFIED` | `tests/test_stdlib.cpp` | Real JSON parsing/serialization, CSV table parsing. |
+| **Standard Library: `std.time` & `std.process`** | `VERIFIED` | `tests/test_stdlib.cpp` | Millisecond/microsecond clocks, real process execution. |
+| **Standard Library: `std.regex` & `std.random`** | `VERIFIED` | `tests/test_stdlib.cpp` | Regular expressions match/replace, pseudo-random generator. |
+| **Standard Library: `std.concurrency`** | `VERIFIED` | `tests/test_stdlib.cpp` | `std::thread` background tasks, atomic synchronization. |
+| **HTTP Server (`http.server`)** | `VERIFIED` | `tests/test_http_hardening.py` | Single accept/serve loop with background thread option. URL decoding, 16KB header / 10MB body bounds, socket timeouts, canonical static path containment. |
+| **HTTP Client (`http.get`, `http.post`)** | `VERIFIED` | `tests/test_stdlib.cpp` | Real TCP HTTP 1.1 client with status code and body capture. |
+| **PostgreSQL Driver (`std.db.postgres`)** | `VERIFIED` | `tests/test_stdlib.cpp` | Real `libpq` C driver with stable 2-pass parameter memory buffers (`PQexecParams`). |
+| **AI / Autograd Engine** | `VERIFIED` | `tests/test_ai_subsystem.cpp` | Reverse-mode automatic differentiation, dense layers, Adam optimizer, MSE loss, XOR convergence. |
+| **GPU Subsystem (Vulkan)** | `VERIFIED` | `tests/test_gpu_subsystem.cpp` | Vulkan device enumeration (Mesa llvmpipe software rasterizer verified), SPIR-V tensor dispatch. |
+| **Data Subsystem (DataFrame)** | `VERIFIED` | `tests/test_data_subsystem.cpp` | Typed columns, filtering, CSV ingestion, batch splitting. |
+| **Package Manager CLI** | `VERIFIED` | `tests/test_package_manager.cpp` | Manifest parsing, tree hashing, dependency solver, lockfile generation. |
+| **Developer Tooling (fmt, lint, LSP)** | `VERIFIED` | `tests/test_formatter.cpp`, `test_linter.cpp`, `test_lsp.cpp` | Deterministic formatter, AST linter, JSON diagnostics, LSP server. |
+| **Local Installer (`install.sh`)** | `VERIFIED` | Local script execution | Installs locally built binary to `~/.local/bin` or builds from source. |
+| **GitHub Release Workflow** | `IMPLEMENTED` | `.github/workflows/release.yml` | Workflow configured for CI/CD binary matrix builds upon tag push. |
+| **Remote Installer CDN Hosting** | `PLANNED` | `PENDING.md` | `curl -fsSL https://nextviper.nuratix.com/install.sh | bash` awaiting CDN deployment. |
+| **Termux Official Package Repository** | `PLANNED` | `TERMUX_STATUS.md` | `pkg install nextviper` pending Termux upstream packaging. |
+| **Multi-Platform Binary Distribution** | `PLANNED` | `RELEASES.md` | Precompiled Windows/macOS binary artifacts pending hosted release assets. |

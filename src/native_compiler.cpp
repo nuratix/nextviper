@@ -4,6 +4,7 @@
 #include "nextviper/vm.hpp"
 #include <sstream>
 #include <fstream>
+#include <filesystem>
 #include <cstdlib>
 #include <chrono>
 #include <cstdio>
@@ -27,14 +28,54 @@ static std::string c_escape_string(const std::string& str) {
 }
 }
 
+#if !defined(_WIN32)
+#include <sys/wait.h>
+#include <spawn.h>
+#include <unistd.h>
+extern "C" char** environ;
+
+static int safe_run_process(const std::string& exe, const std::vector<std::string>& args) {
+    std::vector<char*> c_args;
+    c_args.push_back(const_cast<char*>(exe.c_str()));
+    for (const auto& a : args) {
+        c_args.push_back(const_cast<char*>(a.c_str()));
+    }
+    c_args.push_back(nullptr);
+
+    pid_t pid;
+    int status = posix_spawnp(&pid, exe.c_str(), nullptr, nullptr, c_args.data(), environ);
+    if (status != 0) return -1;
+    if (waitpid(pid, &status, 0) == -1) return -1;
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    return -1;
+}
+#endif
+
 NativeCompiler::NativeCompiler(DiagnosticEngine& diag) : diag_(diag) {}
 
 std::string NativeCompiler::find_c_compiler() const {
-    // Check standard C compilers in PATH
-    if (std::system("which gcc > /dev/null 2>&1") == 0) return "gcc";
-    if (std::system("which clang > /dev/null 2>&1") == 0) return "clang";
-    if (std::system("which g++ > /dev/null 2>&1") == 0) return "g++";
-    if (std::system("which cc > /dev/null 2>&1") == 0) return "cc";
+    const char* path_env = std::getenv("PATH");
+    std::vector<std::string> path_dirs;
+    if (path_env) {
+        std::stringstream ss(path_env);
+        std::string dir;
+        while (std::getline(ss, dir, ':')) {
+            if (!dir.empty()) path_dirs.push_back(dir);
+        }
+    } else {
+        path_dirs = {"/usr/bin", "/usr/local/bin", "/bin"};
+    }
+
+    std::vector<std::string> candidates = {"gcc", "clang", "g++", "cc"};
+    for (const auto& c : candidates) {
+        for (const auto& dir : path_dirs) {
+            std::error_code ec;
+            std::filesystem::path p = std::filesystem::path(dir) / c;
+            if (std::filesystem::exists(p, ec) && !std::filesystem::is_directory(p, ec)) {
+                return c;
+            }
+        }
+    }
     return "cc";
 }
 
@@ -648,9 +689,15 @@ bool NativeCompiler::compile_to_binary(const IRModule& module, const std::string
     }
 
     std::string compiler = find_c_compiler();
-    std::string cmd = compiler + " -O3 " + temp_c + " -o " + output_binary_path + " -lm 2>&1";
 
+#if !defined(_WIN32)
+    std::vector<std::string> args = {"-O3", temp_c, "-o", output_binary_path, "-lm"};
+    int ret = safe_run_process(compiler, args);
+#else
+    std::string cmd = compiler + " -O3 \"" + temp_c + "\" -o \"" + output_binary_path + "\" -lm";
     int ret = std::system(cmd.c_str());
+#endif
+
     std::remove(temp_c.c_str());
     return ret == 0;
 }
@@ -674,10 +721,49 @@ std::pair<int, std::string> NativeCompiler::compile_and_run(const Program& progr
         return {-1, "Compilation failed"};
     }
 
-    // Execute compiled machine binary and capture output
+#if !defined(_WIN32)
+    int pipefd[2];
+    if (pipe(pipefd) != 0) {
+        std::remove(temp_bin.c_str());
+        return {-1, "Failed to create execution pipe"};
+    }
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addclose(&actions, pipefd[0]);
+    posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
+    posix_spawn_file_actions_addclose(&actions, pipefd[1]);
+
+    char* argv[] = {const_cast<char*>(temp_bin.c_str()), nullptr};
+    pid_t pid;
+    int spawn_res = posix_spawn(&pid, temp_bin.c_str(), &actions, nullptr, argv, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    close(pipefd[1]);
+
+    if (spawn_res != 0) {
+        close(pipefd[0]);
+        std::remove(temp_bin.c_str());
+        return {-1, "Failed to spawn compiled binary"};
+    }
+
+    std::string output;
+    char buffer[256];
+    ssize_t bytes_read;
+    while ((bytes_read = read(pipefd[0], buffer, sizeof(buffer) - 1)) > 0) {
+        buffer[bytes_read] = '\0';
+        output += buffer;
+    }
+    close(pipefd[0]);
+
+    int status = 0;
+    waitpid(pid, &status, 0);
+    int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    std::remove(temp_bin.c_str());
+    return {exit_code, output};
+#else
     std::string output;
     std::array<char, 256> buffer;
-    FILE* pipe = popen(temp_bin.c_str(), "r");
+    FILE* pipe = popen(("\"" + temp_bin + "\"").c_str(), "r");
     if (!pipe) {
         std::remove(temp_bin.c_str());
         return {-1, "Failed to run compiled binary"};
@@ -690,6 +776,7 @@ std::pair<int, std::string> NativeCompiler::compile_and_run(const Program& progr
     int exit_code = pclose(pipe);
     std::remove(temp_bin.c_str());
     return {exit_code, output};
+#endif
 }
 
 BenchmarkResult NativeCompiler::benchmark(const Program& program, const std::string& source_code, int iterations) {
@@ -733,8 +820,13 @@ BenchmarkResult NativeCompiler::benchmark(const Program& program, const std::str
         if (compile_program(program, temp_bin, true)) {
             auto start = std::chrono::high_resolution_clock::now();
             for (int i = 0; i < iterations; ++i) {
-                int r = std::system((temp_bin + " > /dev/null 2>&1").c_str());
+#if !defined(_WIN32)
+                std::vector<std::string> bench_args;
+                safe_run_process(temp_bin, bench_args);
+#else
+                int r = std::system(("\"" + temp_bin + "\" > NUL 2>&1").c_str());
                 (void)r;
+#endif
             }
             auto end = std::chrono::high_resolution_clock::now();
             res.native_ms = std::chrono::duration<double, std::milli>(end - start).count() / iterations;
