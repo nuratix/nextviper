@@ -46,12 +46,18 @@
 
 ## 🚀 Quick Start
 
-### 1. Automated Installation
+### 1. Install via npm (Global)
+```bash
+npm install -g nextviper
+nextviper --version
+```
+
+### 2. Automated Universal Installer (Linux & macOS)
 ```bash
 curl -fsSL https://nextviper.nuratix.com/install.sh | sh
 ```
 
-### 2. Build NextViper from Source
+### 3. Build NextViper from Source
 
 NextViper builds out of the box with any C++20 compiler (`g++` 10+, `clang++` 12+, Apple Clang 13+, or MSVC 2019+):
 
