@@ -11,24 +11,30 @@
 | **Linux (Prebuilt Tarball)** | `PENDING CI` | `nextviper-linux-x86_64.tar.gz` | Built automatically via `.github/workflows/release.yml` on release tag. |
 | **macOS (Apple Silicon / Intel)** | `PENDING CI` | `nextviper-darwin-*.tar.gz` | Source compilation supported via `clang++`; prebuilt binaries pending CI runner. |
 | **Windows (x86_64)** | `PENDING CI` | `nextviper-windows-x86_64.zip` | MSVC / MinGW compatible; prebuilt zip pending CI runner. |
-| **Android (Termux)** | `SOURCE VERIFIED` | Source Build (`make`) | Requires `pkg install clang make git libvulkan`. Upstream `pkg install` pending. |
+| **Android (Termux)** | `SOURCE VERIFIED` | Source Build (`make`) | Requires `pkg install clang make git libvulkan-dev`. Official `pkg install` is `NOT_PLANNED`. |
 
 ---
 
 ## Installation Methods
 
-### Method 1: Build & Install From Source (Verified)
+### Method 1: Install via npm (Verified)
+```bash
+npm install -g nextviper
+nextviper --version
+```
+
+### Method 2: Build & Install From Source (Verified)
 ```bash
 git clone https://github.com/nuratix/nextviper.git
 cd nextviper
-make -j4
+make -j$(nproc)
 ./scripts/install.sh
 ```
 
-### Method 2: Local One-Liner (Local Repository)
+### Method 3: Local One-Liner (Local Repository)
 ```bash
 ./install.sh
 ```
 
-### Method 3: Remote Curl Installation (Pending CDN Deployment)
+### Method 4: Remote Curl Installation (Pending CDN Deployment)
 > **Note**: Remote installation via `curl https://nextviper.nuratix.com/install.sh | bash` is currently `PENDING` public CDN infrastructure deployment.

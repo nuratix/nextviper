@@ -1,8 +1,8 @@
 # NextViper Android / Termux Support Status
 
 ## Distribution Status
-- **Official Package Repository (`pkg install nextviper`)**: `PLANNED` (Requires upstream submission to the official Termux package repository).
-- **Source Compilation on Termux**: `SOURCE VERIFIED` (Fully supported using Termux native development toolchains).
+- **Official Package Repository (`pkg install nextviper`)**: `NOT_PLANNED` (NextViper is not distributed through Termux package repositories. Official channels are npm, GitHub releases/source, and https://nextviper.nuratix.com).
+- **Source Compilation on Termux**: `SOURCE VERIFIED` (Technical manual source compilation is supported using Termux development toolchains `clang` and `make`).
 
 ---
 

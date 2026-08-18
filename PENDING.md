@@ -8,12 +8,27 @@ This document tracks items that are planned, partially implemented, or awaiting 
 
 | Item | Category | Current Status | Blocker / Requirement |
 | :--- | :--- | :--- | :--- |
-| **Remote Installer CDN Hosting** | Distribution | `PLANNED` | `curl -fsSL https://nextviper.nuratix.com/install.sh \| bash` requires active public CDN deployment and DNS routing. Use `./scripts/install.sh` for local installation. |
-| **Termux Official Repository Package** | Distribution | `PLANNED` | `pkg install nextviper` requires upstream submission to `termux/termux-packages`. Build from source using `clang` and `make` on Termux. |
-| **Precompiled Multi-Platform Binaries** | Distribution | `PLANNED` | Automated builds for Windows (`x86_64-pc-windows-msvc`) and macOS (`aarch64-apple-darwin`, `x86_64-apple-darwin`) will be published via GitHub Actions when tags are pushed. |
+| **Remote Installer CDN Hosting** | Distribution | `PENDING` | `curl -fsSL https://nextviper.nuratix.com/install.sh \| bash` requires active public CDN deployment and DNS routing. Use `./scripts/install.sh` for local installation. |
+| **Precompiled Multi-Platform Binaries** | Distribution | `PENDING` | Automated builds for Windows (`x86_64-pc-windows-msvc`) and macOS (`aarch64-apple-darwin`, `x86_64-apple-darwin`) will be published via GitHub Actions when tags are pushed. |
 | **Direct x86-64 Machine-Code JIT Backend** | Compiler | `PLANNED` | Current native compilation translates `NextViper IR -> C emitter -> system C compiler -> binary`. Direct LLVM IR / binary machine-code generation is planned for a future major release. |
 | **Multi-Threaded HTTP Server Worker Pool** | Runtime | `PLANNED` | The current HTTP server utilizes a robust single-threaded accept/serve loop (with background listener thread support). A thread-pool worker architecture for high-concurrency request dispatching is planned. |
 | **Remote Package Registry Authentication** | Package Manager | `PLANNED` | Package publishing with API key authentication to `https://registry.nextviper.org` is designed; public registry backend hosting is currently in private preview. |
+
+---
+
+## Termux Distribution
+
+**Status**: `NOT_PLANNED`
+
+**Reason**:
+NextViper is not officially distributed through the Termux package repository (`pkg install nextviper`).
+
+Official distribution channels are:
+- npm (`npm install -g nextviper`)
+- GitHub releases / source repository (`https://github.com/nuratix/nextviper`)
+- Official website (`https://nextviper.nuratix.com`)
+
+*Technical manual source compilation on Android/Termux environments using `clang` and `make` remains supported as documented in `TERMUX_STATUS.md`.*
 
 ---
 

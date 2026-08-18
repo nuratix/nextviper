@@ -35,7 +35,8 @@
 | **Package Manager CLI** | `VERIFIED` | `tests/test_package_manager.cpp` | Manifest parsing, tree hashing, dependency solver, lockfile generation. |
 | **Developer Tooling (fmt, lint, LSP)** | `VERIFIED` | `tests/test_formatter.cpp`, `test_linter.cpp`, `test_lsp.cpp` | Deterministic formatter, AST linter, JSON diagnostics, LSP server. |
 | **Local Installer (`install.sh`)** | `VERIFIED` | Local script execution | Installs locally built binary to `~/.local/bin` or builds from source. |
+| **npm Global Distribution** | `VERIFIED` | `npm view nextviper` | `nextviper` v1.0.3 verified live on npm registry with executable CLI wrapper. |
 | **GitHub Release Workflow** | `IMPLEMENTED` | `.github/workflows/release.yml` | Workflow configured for CI/CD binary matrix builds upon tag push. |
-| **Remote Installer CDN Hosting** | `PLANNED` | `PENDING.md` | `curl -fsSL https://nextviper.nuratix.com/install.sh | bash` awaiting CDN deployment. |
-| **Termux Official Package Repository** | `PLANNED` | `TERMUX_STATUS.md` | `pkg install nextviper` pending Termux upstream packaging. |
-| **Multi-Platform Binary Distribution** | `PLANNED` | `RELEASES.md` | Precompiled Windows/macOS binary artifacts pending hosted release assets. |
+| **Remote Installer CDN Hosting** | `PENDING` | `PENDING.md` | `curl -fsSL https://nextviper.nuratix.com/install.sh | bash` awaiting CDN deployment. |
+| **Termux Official Package Repository** | `NOT_PLANNED` | `PENDING.md`, `TERMUX_STATUS.md` | `pkg install nextviper` not in scope. Official distribution is npm, GitHub releases, and official website. |
+| **Multi-Platform Binary Distribution** | `PENDING` | `RELEASES.md`, `PLATFORM_SUPPORT.md` | Precompiled Windows/macOS binary artifacts pending hosted release assets. |

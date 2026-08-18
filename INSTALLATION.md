@@ -4,13 +4,24 @@ NextViper supports multiple official installation methods for Linux, macOS, and 
 
 ---
 
-## 1. Quick Install (Recommended for Linux & macOS)
+## 1. Install via npm (Global)
 
-Install the latest stable release via the official HTTPS installer script:
+```bash
+npm install -g nextviper
+nextviper --version
+```
+
+---
+
+## 2. Quick Install (Automated Shell Installer for Linux & macOS)
+
+Install the latest stable release via the official installer script:
 
 ```bash
 curl -fsSL https://nextviper.nuratix.com/install.sh | sh
 ```
+
+*(For local repository installation, run `./scripts/install.sh` directly).*
 
 ### Install a Specific Version
 To install a specific release version:

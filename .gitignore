@@ -20,3 +20,4 @@ tests/my_test_calc.nv
 nextviper_modules/
 dist/
 __pycache__/
+install
