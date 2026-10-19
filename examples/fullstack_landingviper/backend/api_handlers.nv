@@ -1,7 +1,7 @@
 // ==============================================================================
 // NextViper Backend API Handlers & Business Logic
 // Language: NextViper (v1.0.0 Apex)
-// Author: Nuratix LLC (https://nuratix.com)
+// Author: Nuratix (https://nuratix.com)
 // ==============================================================================
 
 import std.io
@@ -22,7 +22,7 @@ export fn get_system_health():
         "gpu_backend": "Khronos Vulkan SPIR-V",
         "timestamp": time.now(),
         "uptime_sec": 3600.0,
-        "author": "Nuratix LLC"
+        "author": "Nuratix"
     }
 
 // ------------------------------------------------------------------------------

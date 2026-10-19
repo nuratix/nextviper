@@ -1,6 +1,6 @@
 # Contributing to NextViper
 
-Thank you for your interest in contributing to NextViper! As an open-source programming language maintained by **Nuratix LLC** ([nuratix.com](https://nuratix.com)), NextViper thrives on community participation, bug reports, performance enhancements, and standard library extensions.
+Thank you for your interest in contributing to NextViper! As an open-source programming language maintained by **Nuratix** ([nuratix.com](https://nuratix.com)), NextViper thrives on community participation, bug reports, performance enhancements, and standard library extensions.
 
 ---
 

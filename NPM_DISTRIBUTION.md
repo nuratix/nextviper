@@ -3,7 +3,7 @@
 **Package**: [`nextviper`](https://www.npmjs.com/package/nextviper)  
 **Version**: `1.0.0`  
 **License**: Apache-2.0  
-**Maintainer**: Nuratix LLC ([https://nuratix.com](https://nuratix.com))
+**Maintainer**: Nuratix ([https://nuratix.com](https://nuratix.com))
 
 ---
 

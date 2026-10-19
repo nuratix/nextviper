@@ -15,7 +15,7 @@ NextViper supports Windows 10/11 x64 systems through the following planned chann
 - **Installer Type**: Standalone `.zip` archive containing `nextviper.exe` and `nextviper-lsp.exe` with portable command registration.
 
 ### 1.2 Microsoft Store
-- **Status**: Blocked pending corporate Nuratix LLC Microsoft Partner Center account verification and app identity certificates.
+- **Status**: Blocked pending corporate Nuratix Microsoft Partner Center account verification and app identity certificates.
 - **Tracking**: Documented in `PENDING.md`.
 
 ---
@@ -27,7 +27,7 @@ NextViper supports Windows 10/11 x64 systems through the following planned chann
 PackageIdentifier: Nuratix.NextViper
 PackageVersion: 1.0.0
 DefaultLocale: en-US
-Publisher: Nuratix LLC
+Publisher: Nuratix
 PublisherUrl: https://nuratix.com
 PublisherSupportUrl: https://nextviper.nuratix.com/docs
 PackageName: NextViper Programming Language

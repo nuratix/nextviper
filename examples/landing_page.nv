@@ -1,7 +1,7 @@
 // ==============================================================================
 // NextViper Dynamic Landing Page Generator & Server Logic
 // Language: NextViper (v1.0.0 Apex)
-// Author: Nuratix LLC (https://nuratix.com)
+// Author: Nuratix (https://nuratix.com)
 // ==============================================================================
 
 import std.io
@@ -103,7 +103,7 @@ fn render_nav_header():
             <span class="brand-text">NextViper</span>
             <span class="brand-version">v1.0.0</span>
           </a>
-          <span class="by-badge">by <a href="https://nuratix.com" target="_blank">Nuratix LLC</a></span>
+          <span class="by-badge">by <a href="https://nuratix.com" target="_blank">Nuratix</a></span>
         </div>
         <nav class="nav-menu">
           <a href="/docs/getting-started">Docs</a>
@@ -260,8 +260,8 @@ fn render_footer():
       <div class="container footer-content">
         <div class="footer-brand">
           <span class="brand-title">NextViper</span>
-          <p class="footer-desc">The open-source compiled programming language maintained by Nuratix LLC.</p>
-          <p class="copyright">© 2026 Nuratix LLC. Distributed under Apache-2.0 License.</p>
+          <p class="footer-desc">The open-source compiled programming language maintained by Nuratix.</p>
+          <p class="copyright">© 2026 Nuratix. Distributed under Apache-2.0 License.</p>
         </div>
         <div class="footer-links">
           <div>
@@ -280,7 +280,7 @@ fn render_footer():
           </div>
           <div>
             <h4>Organization</h4>
-            <a href="https://nuratix.com" target="_blank">Nuratix LLC</a>
+            <a href="https://nuratix.com" target="_blank">Nuratix</a>
             <a href="https://nuratix.com/news" target="_blank">News</a>
             <a href="/privacy">Privacy Policy</a>
             <a href="/terms">Terms of Use</a>

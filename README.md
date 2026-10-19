@@ -1,6 +1,24 @@
 # NextViper
 
-NextViper is an **experimental programming language** with Python-like syntax, an interpreter, an in-memory bytecode VM, and a native compiler. It is developed by Nuratix LLC and licensed under Apache-2.0.
+<p align="center">
+  <a href="https://nextviper.nuratix.com">
+    <img src="https://nextviper.nuratix.com/logo-black.png" alt="NextViper logo" width="360" />
+  </a>
+</p>
+
+<p align="center">
+  Developed by<br />
+  <a href="https://www.nuratix.com">
+    <img src="https://www.nuratix.com/nuratix-logo-light.png" alt="Nuratix logo" width="160" />
+  </a>
+</p>
+
+<p align="center">
+  Website: <a href="https://nextviper.nuratix.com">nextviper.nuratix.com</a><br />
+  Team contact: <a href="mailto:team@nuratix.com">team@nuratix.com</a>
+</p>
+
+NextViper is an **experimental programming language** with Python-like syntax, an interpreter, an in-memory bytecode VM, and a native compiler. It is developed by Nuratix and licensed under Apache-2.0.
 
 The version string is currently 1.0.0 (Apex). That version number is not a production-readiness guarantee. The project is suitable for learning and evaluation; production reliability, security, portability, and competitive performance have not been established.
 

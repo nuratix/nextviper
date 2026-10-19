@@ -6,13 +6,13 @@
 
 <p align="center">
   <a href="https://nuratix.com">
-    <img src="https://www.nuratix.com/nuratix-logo-light.png" alt="By Nuratix LLC" width="140" height="auto" />
+    <img src="https://www.nuratix.com/nuratix-logo-light.png" alt="By Nuratix" width="140" height="auto" />
   </a>
 </p>
 
 # landingviper
 
-**Full-Stack Web Application** with a **React Frontend** and a **NextViper Backend REST API & Compute Engine**, developed and maintained by **Nuratix LLC** ([https://nuratix.com](https://nuratix.com)).
+**Full-Stack Web Application** with a **React Frontend** and a **NextViper Backend REST API & Compute Engine**, developed and maintained by **Nuratix** ([https://nuratix.com](https://nuratix.com)).
 
 NextViper powers the backend services, handling REST API routing, high-performance tensor linear algebra, columnar DataFrame queries, and code execution evaluation.
 
@@ -84,4 +84,4 @@ landingviper/
 
 ## 📜 License
 
-Apache-2.0 © 2026 Nuratix LLC.
+Apache-2.0 © 2026 Nuratix.

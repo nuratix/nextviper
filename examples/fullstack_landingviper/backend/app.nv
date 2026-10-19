@@ -1,7 +1,7 @@
 // ==============================================================================
 // NextViper Backend Web Server & REST API Router
 // Language: NextViper (v1.0.0 Apex)
-// Author: Nuratix LLC (https://nuratix.com)
+// Author: Nuratix (https://nuratix.com)
 // ==============================================================================
 
 import std.io
@@ -66,7 +66,7 @@ export fn handle_route(path: string, query: string, body: string):
 export fn start_backend(port: int):
     io.print("==================================================")
     io.print("  NEXTVIPER BACKEND REST API SERVER (v1.0.0)      ")
-    io.print("  Powered by Nuratix LLC                          ")
+    io.print("  Powered by Nuratix                          ")
     io.print("==================================================")
     io.print("Backend listening on: http://0.0.0.0:" + str(port))
     io.print("Available REST API Endpoints:")

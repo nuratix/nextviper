@@ -1,7 +1,7 @@
 // ==============================================================================
 // NextViper Standalone HTTP Web Server & Landing Page
 // Language: NextViper (v1.0.0 Apex)
-// Author: Nuratix LLC (https://nuratix.com)
+// Author: Nuratix (https://nuratix.com)
 // ==============================================================================
 
 import std.io
@@ -155,7 +155,7 @@ fn build_landing_html():
     </div>
 
     <footer>
-      <p>© 2026 <a href="https://nuratix.com" target="_blank">Nuratix LLC</a>. Distributed under Apache-2.0 License.</p>
+      <p>© 2026 <a href="https://nuratix.com" target="_blank">Nuratix</a>. Distributed under Apache-2.0 License.</p>
       <p style="margin-top: 6px; font-size: 0.75rem;">Official Portal: <a href="https://nextviper.nuratix.com">https://nextviper.nuratix.com</a></p>
     </footer>
   </main>

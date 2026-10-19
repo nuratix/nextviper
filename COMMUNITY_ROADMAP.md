@@ -1,6 +1,6 @@
 # NextViper Community Roadmap & Evolution
 
-**Maintainer**: Nuratix LLC ([nuratix.com](https://nuratix.com))  
+**Maintainer**: Nuratix ([nuratix.com](https://nuratix.com))<br />
 **Governance**: Open Source with Maintainer Review  
 **Proposal Format**: NextViper RFCs (Request for Comments)
 

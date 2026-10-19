@@ -1,13 +1,13 @@
 # NextViper Package Signing & Cryptographic Verification
 
-**Authority**: Nuratix LLC Release Engineering  
+**Authority**: Nuratix Release Engineering<br />
 **Signing Technologies**: GPG / OpenPGP & Minisign
 
 ---
 
 ## 1. Release Signing Architecture
 
-To protect users against supply chain tampering, all official release archives and package checksums are signed with the official Nuratix LLC Release Signing Key.
+To protect users against supply chain tampering, all official release archives and package checksums are signed with the official Nuratix Release Signing Key.
 
 ```mermaid
 graph LR

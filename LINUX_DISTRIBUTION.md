@@ -33,7 +33,7 @@ graph TD
   Priority: optional
   Architecture: amd64
   Depends: libc6 (>= 2.31), libvulkan1 (>= 1.2.0)
-  Maintainer: Nuratix LLC <opensource@nuratix.com>
+  Maintainer: Nuratix <opensource@nuratix.com>
   Description: NextViper programming language compiler and runtime
    NextViper is a high-performance compiled programming language tailored
    for data processing, machine learning, and Vulkan GPU acceleration.

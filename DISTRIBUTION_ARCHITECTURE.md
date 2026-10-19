@@ -1,6 +1,6 @@
 # NextViper Distribution & Release Architecture
 
-**Maintainer & Legal Entity**: Nuratix LLC ([nuratix.com](https://nuratix.com))  
+**Maintainer & Legal Entity**: Nuratix ([nuratix.com](https://nuratix.com))<br />
 **Official Language Domain**: [nextviper.nuratix.com](https://nextviper.nuratix.com)  
 **Source Repository**: [github.com/nuratix/nextviper](https://github.com/nuratix/nextviper)  
 **Package Registry**: [nextviper.nuratix.com/packages](https://nextviper.nuratix.com/packages)
@@ -67,7 +67,7 @@ graph TD
 - **Python Integration (`nextviper-py`)**: Native C-API / PyBind11 bindings to embed NextViper execution inside Python scripts without replacing the compiler.
 
 ### 3.4 BLOCKED BY EXTERNAL REQUIREMENT
-- **Microsoft Store**: Blocked pending corporate Nuratix LLC Microsoft Partner Center account verification and app identity certificates.
+- **Microsoft Store**: Blocked pending corporate Nuratix Microsoft Partner Center account verification and app identity certificates.
 - **Apple Developer ID Notarization**: Required for unprompted macOS Gatekeeper binary distribution outside Homebrew.
 
 ---
@@ -89,7 +89,7 @@ graph TD
 
 Every published release asset is accompanied by:
 1. `SHA256SUMS`: Cryptographic manifest containing SHA-256 hashes of all archives.
-2. `SHA256SUMS.sig`: GPG digital signature signed with the official Nuratix LLC Release Key.
+2. `SHA256SUMS.sig`: GPG digital signature signed with the official Nuratix Release Key.
 3. Verification Command:
    ```bash
    sha256sum --check --ignore-missing SHA256SUMS

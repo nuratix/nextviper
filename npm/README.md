@@ -6,13 +6,13 @@
 
 <p align="center">
   <a href="https://nuratix.com">
-    <img src="https://www.nuratix.com/nuratix-logo-light.png" alt="By Nuratix LLC" width="140" height="auto" />
+    <img src="https://www.nuratix.com/nuratix-logo-light.png" alt="By Nuratix" width="140" height="auto" />
   </a>
 </p>
 
 # nextviper
 
-Official npm distribution and CLI runner for the **NextViper** programming language, developed and maintained by **Nuratix LLC** ([https://nuratix.com](https://nuratix.com)).
+Official npm distribution and CLI runner for the **NextViper** programming language, developed and maintained by **Nuratix** ([https://nuratix.com](https://nuratix.com)).
 
 NextViper is a modern, compiled, high-performance programming language designed for columnar Data, N-dimensional Tensors, AI/ML, and Khronos Vulkan GPU acceleration.
 
@@ -85,4 +85,4 @@ console.log(runResult.stdout);
 
 ## 📜 License
 
-Apache-2.0 © 2026 Nuratix LLC.
+Apache-2.0 © 2026 Nuratix.

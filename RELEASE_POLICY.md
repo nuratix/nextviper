@@ -1,13 +1,13 @@
 # NextViper Release Policy & Governance
 
-**Release Authority**: Nuratix LLC Release Engineering  
+**Release Authority**: Nuratix Release Engineering<br />
 **Versioning Standard**: Semantic Versioning 2.0.0 (`MAJOR.MINOR.PATCH`)
 
 ---
 
 ## 1. Release Authority & Ownership
 
-While NextViper is an open-source project with active community contributions, **official release artifacts, binaries, and version tags are strictly created and signed by authorized maintainers from Nuratix LLC**.
+While NextViper is an open-source project with active community contributions, **official release artifacts, binaries, and version tags are strictly created and signed by authorized maintainers from Nuratix**.
 
 This policy guarantees:
 - **Binary Integrity**: Every release binary is built in a verified, cleanroom CI environment.

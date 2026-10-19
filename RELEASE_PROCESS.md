@@ -1,6 +1,6 @@
 # NextViper Official Release Process & Checklist
 
-This document outlines the step-by-step procedure followed by Nuratix LLC maintainers to build, test, sign, and publish an official NextViper release.
+This document outlines the step-by-step procedure followed by Nuratix maintainers to build, test, sign, and publish an official NextViper release.
 
 ---
 

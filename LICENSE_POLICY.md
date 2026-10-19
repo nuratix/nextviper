@@ -1,6 +1,6 @@
 # NextViper Open-Source License Policy
 
-**Project Maintainer**: Nuratix LLC ([nuratix.com](https://nuratix.com))  
+**Project Maintainer**: Nuratix ([nuratix.com](https://nuratix.com))<br />
 **Official Website**: [nextviper.nuratix.com](https://nextviper.nuratix.com)  
 **Primary License**: Apache License, Version 2.0  
 **SPDX-License-Identifier**: `Apache-2.0`
@@ -15,13 +15,13 @@ NextViper is developed as a free, open-source programming language. The fundamen
 2. **Commercial & Private Freedom**: Developers, startups, enterprises, and researchers may build proprietary, commercial, or open-source software, services, packages, and applications with NextViper without paying royalties.
 3. **Open Source & Extensibility**: The full source code of the compiler, runtime, interpreter, standard library, and developer tooling is available for inspection, modification, and community enhancement.
 4. **Permissive Contribution Model**: Community members can submit improvements, bug fixes, and feature proposals via pull requests.
-5. **Copyright & Governance**: Nuratix LLC remains the copyright holder of its original project code, documentation, and associated assets, stewarding the project on behalf of the developer community.
+5. **Copyright & Governance**: Nuratix remains the copyright holder of its original project code, documentation, and associated assets, stewarding the project on behalf of the developer community.
 
 ---
 
 ## 2. Evaluation of Established OSI-Approved Permissive Licenses
 
-To select the most appropriate license, Nuratix LLC evaluated three primary OSI-approved open-source licenses:
+To select the most appropriate license, Nuratix evaluated three primary OSI-approved open-source licenses:
 
 ### 2.1 MIT License
 - **Pros**: Extremely concise, widely recognized, low barrier to comprehension.
@@ -53,6 +53,6 @@ Users who write code in NextViper or compile programs using the NextViper compil
 ## 4. Trademarks and Branding
 
 The Apache 2.0 license grants permissions to use the software code, but does **not** grant trademark rights:
-- "NextViper", the NextViper logo, and "Nuratix" are trademarks and brand assets of Nuratix LLC.
+- "NextViper", the NextViper logo, and "Nuratix" are trademarks and brand assets of Nuratix.
 - You may freely use the name "NextViper" to refer to the language (e.g., "Built with NextViper", "NextViper package for linear algebra").
-- You may not use the name or logo in a manner that falsely implies official sponsorship, endorsement, or ownership by Nuratix LLC without written permission.
+- You may not use the name or logo in a manner that falsely implies official sponsorship, endorsement, or ownership by Nuratix without written permission.
