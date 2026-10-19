@@ -43,6 +43,9 @@ void TypeChecker::init_builtins() {
     globals_->define("float", Type::make_function({Type::make_any()}, Type::make_float()), false);
     globals_->define("str", Type::make_function({Type::make_any()}, Type::make_string()), false);
     globals_->define("input", Type::make_function({Type::make_string()}, Type::make_string()), false);
+    for (const auto& name : {"print", "println", "print_raw", "range", "assert", "input", "min", "max", "pop", "join"})
+        variable_arity_builtins_[name] = globals_->lookup(name);
+
 }
 
 bool TypeChecker::check(const Program& program) {
@@ -197,7 +200,7 @@ void TypeChecker::visit_binary(const BinaryExpr& expr) {
         case TokenType::KEYWORD_AND:
         case TokenType::PIPE_PIPE:
         case TokenType::KEYWORD_OR:
-            last_inferred_type_ = Type::make_bool();
+            last_inferred_type_ = left->equals(right) ? left : Type::make_any();
             return;
 
         default:
@@ -206,34 +209,44 @@ void TypeChecker::visit_binary(const BinaryExpr& expr) {
     }
 }
 
-void TypeChecker::visit_call(const CallExpr& expr) {
-    TypePtr callee_type = infer_expression(expr.callee());
-
-    std::vector<TypePtr> arg_types;
-    for (const auto& arg : expr.args()) {
-        arg_types.push_back(infer_expression(*arg));
+TypePtr TypeChecker::check_call(const Expr& callee, const std::vector<TypePtr>& arguments, SourceSpan span) {
+    TypePtr function = infer_expression(callee);
+    if (!function->is_function()) {
+        if (!function->is_any() && !function->is_unknown() && !function->is_map())
+            diagnostics_.error("cannot call a non-function value", span, "", "NV1004");
+        return Type::make_any();
     }
-
-    if (callee_type->is_function()) {
-        const auto& param_types = callee_type->param_types();
-        if (param_types.size() != arg_types.size() && !param_types.empty() && !param_types[0]->is_any()) {
-            diagnostics_.error("TypeError: function expects " + std::to_string(param_types.size()) +
-                               " argument(s), got " + std::to_string(arg_types.size()), expr.span(),
-                               "adjust argument count to match function signature", "NV1004");
-        } else {
-            for (size_t i = 0; i < std::min(param_types.size(), arg_types.size()); ++i) {
-                if (!param_types[i]->is_assignable_from(arg_types[i])) {
-                    diagnostics_.error("TypeError: argument type mismatch for parameter " + std::to_string(i + 1) +
-                                       ": expected '" + param_types[i]->to_string() + "', got '" + arg_types[i]->to_string() + "'",
-                                       expr.args()[i]->span(), "pass value matching parameter type", "NV1004");
-                }
-            }
+    if (const auto* id = dynamic_cast<const IdentifierExpr*>(&callee)) {
+        auto builtin = variable_arity_builtins_.find(id->name());
+        if (builtin != variable_arity_builtins_.end() && builtin->second == function) {
+            const auto& name = id->name();
+            size_t minimum = 0, maximum = static_cast<size_t>(-1);
+            if (name == "range") { minimum = 1; maximum = 3; }
+            else if (name == "assert" || name == "min" || name == "max" || name == "pop" || name == "join") { minimum = 1; maximum = 2; }
+            else if (name == "input") maximum = 1;
+            if (arguments.size() < minimum || arguments.size() > maximum)
+                diagnostics_.error("invalid argument count for " + name, span, "", "NV1004");
+            if (name == "range") for (const auto& type : arguments)
+                if (!Type::make_int()->is_assignable_from(type))
+                    diagnostics_.error("range arguments must be integers", span, "", "NV1004");
+            return function->return_type();
         }
-        last_inferred_type_ = callee_type->return_type();
-        return;
     }
+    const auto& parameters = function->param_types();
+    if (parameters.size() != arguments.size()) {
+        diagnostics_.error("function expects " + std::to_string(parameters.size()) + " argument(s), got " +
+                           std::to_string(arguments.size()), span, "", "NV1004");
+    } else for (size_t i=0; i<arguments.size(); ++i) {
+        if (!parameters[i]->is_assignable_from(arguments[i]))
+            diagnostics_.error("argument type mismatch for parameter " + std::to_string(i+1), span, "", "NV1004");
+    }
+    return function->return_type();
+}
 
-    last_inferred_type_ = Type::make_any();
+void TypeChecker::visit_call(const CallExpr& expr) {
+    std::vector<TypePtr> arguments;
+    for (const auto& arg : expr.args()) arguments.push_back(infer_expression(*arg));
+    last_inferred_type_ = check_call(expr.callee(), arguments, expr.span());
 }
 
 void TypeChecker::visit_index(const IndexExpr& expr) {
@@ -332,23 +345,24 @@ void TypeChecker::visit_object(const ObjectExpr& expr) {
 }
 
 void TypeChecker::visit_pipe(const PipeExpr& expr) {
-    TypePtr left = infer_expression(expr.left());
-    (void)left;
-    last_inferred_type_ = infer_expression(expr.right());
+    std::vector<TypePtr> arguments{infer_expression(expr.left())};
+    if (const auto* call = dynamic_cast<const CallExpr*>(&expr.right())) {
+        for (const auto& arg : call->args()) arguments.push_back(infer_expression(*arg));
+        last_inferred_type_ = check_call(call->callee(), arguments, expr.span());
+    } else last_inferred_type_ = check_call(expr.right(), arguments, expr.span());
 }
 
 void TypeChecker::visit_assign(const AssignExpr& expr) {
     TypePtr val_type = infer_expression(expr.value());
 
-    auto var_type = current_env_->lookup(expr.name());
-    if (var_type) {
-        if (!var_type->is_assignable_from(val_type)) {
-            diagnostics_.error("TypeError: cannot assign value of type '" + val_type->to_string() +
-                               "' to variable '" + expr.name() + "' of type '" + var_type->to_string() + "'",
-                               expr.span(), "check value type or adjust variable declaration", "NV1003");
-        }
+    if (expr.is_index_assign() && expr.index_target()) {
+        auto target_type = infer_expression(*expr.index_target());
+        if (!target_type->is_assignable_from(val_type))
+            diagnostics_.error("indexed assignment type mismatch", expr.span(), "", "NV1003");
     } else {
-        current_env_->define(expr.name(), val_type, true);
+        std::string error;
+        if (!current_env_->assign(expr.name(), val_type, error))
+            diagnostics_.error(error, expr.span(), "", "NV1003");
     }
 
     last_inferred_type_ = val_type;
@@ -366,6 +380,10 @@ void TypeChecker::visit_lambda(const LambdaExpr& expr) {
     }
     auto prev_env = current_env_;
     current_env_ = fn_env;
+    auto saved_return_type = current_function_return_type_;
+    auto saved_loop_depth = loop_depth_;
+    current_function_return_type_ = Type::make_any();
+    loop_depth_ = 0;
     TypePtr ret_type = Type::make_any();
     if (expr.body_expr()) {
         ret_type = infer_expression(*expr.body_expr());
@@ -373,6 +391,8 @@ void TypeChecker::visit_lambda(const LambdaExpr& expr) {
         check_statement(*expr.body_block());
     }
     current_env_ = prev_env;
+    current_function_return_type_ = saved_return_type;
+    loop_depth_ = saved_loop_depth;
     last_inferred_type_ = Type::make_function(std::move(param_types), ret_type);
 }
 
@@ -422,7 +442,9 @@ void TypeChecker::visit_if_stmt(const IfStmt& stmt) {
 
 void TypeChecker::visit_while_stmt(const WhileStmt& stmt) {
     infer_expression(stmt.condition());
+    ++loop_depth_;
     check_statement(stmt.body());
+    --loop_depth_;
 }
 
 void TypeChecker::visit_for_in_stmt(const ForInStmt& stmt) {
@@ -434,11 +456,17 @@ void TypeChecker::visit_for_in_stmt(const ForInStmt& stmt) {
 
     auto prev_env = current_env_;
     current_env_ = loop_env;
+    ++loop_depth_;
     check_statement(stmt.body());
+    --loop_depth_;
     current_env_ = prev_env;
 }
 
 void TypeChecker::visit_return_stmt(const ReturnStmt& stmt) {
+    if (!current_function_return_type_) {
+        diagnostics_.error("return statement outside function", stmt.span(), "", "NV1002");
+        return;
+    }
     TypePtr ret_type = Type::make_void();
     if (stmt.value()) {
         ret_type = infer_expression(*stmt.value());
@@ -453,8 +481,12 @@ void TypeChecker::visit_return_stmt(const ReturnStmt& stmt) {
     }
 }
 
-void TypeChecker::visit_break_stmt(const BreakStmt&) {}
-void TypeChecker::visit_continue_stmt(const ContinueStmt&) {}
+void TypeChecker::visit_break_stmt(const BreakStmt& stmt) {
+    if (!loop_depth_) diagnostics_.error("break statement outside loop", stmt.span(), "", "NV1002");
+}
+void TypeChecker::visit_continue_stmt(const ContinueStmt& stmt) {
+    if (!loop_depth_) diagnostics_.error("continue statement outside loop", stmt.span(), "", "NV1002");
+}
 
 void TypeChecker::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     std::vector<TypePtr> param_types;
@@ -484,6 +516,8 @@ void TypeChecker::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     auto prev_ret = current_function_return_type_;
     current_env_ = fn_env;
     current_function_return_type_ = return_type;
+    auto previous_loop_depth = loop_depth_;
+    loop_depth_ = 0;
 
     if (stmt.is_arrow_body()) {
         TypePtr body_type = infer_expression(*stmt.expr_body());
@@ -500,6 +534,7 @@ void TypeChecker::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
 
     current_env_ = prev_env;
     current_function_return_type_ = prev_ret;
+    loop_depth_ = previous_loop_depth;
 }
 
 void TypeChecker::visit_import_stmt(const ImportStmt& stmt) {

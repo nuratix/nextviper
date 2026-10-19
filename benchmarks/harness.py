@@ -57,7 +57,7 @@ def main():
         print(f"    • NextViper Interpreter: {interp_res['median']:.2f} ms" if interp_res else "    • NextViper Interpreter: N/A")
 
         # 2. NextViper Bytecode VM
-        vm_res = measure_cmd([NEXTVIPER_BIN, "run", nv_file])
+        vm_res = measure_cmd([NEXTVIPER_BIN, "run", nv_file, "--vm"])
         print(f"    • NextViper VM:          {vm_res['median']:.2f} ms" if vm_res else "    • NextViper VM: N/A")
 
         # 3. NextViper Native Compiled Binary
@@ -78,7 +78,7 @@ def main():
 
         # 4. Python 3
         py_res = measure_cmd(["python3", py_file])
-        print(f"    • Python 3.14:           {py_res['median']:.2f} ms\n" if py_res else "    • Python 3: N/A\n")
+        print(f"    • Python:           {py_res['median']:.2f} ms\n" if py_res else "    • Python 3: N/A\n")
 
         results.append({
             "id": name,

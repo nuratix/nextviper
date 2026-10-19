@@ -2,6 +2,10 @@
 #include "nextviper/compiled_function.hpp"
 #include <sstream>
 #include <iomanip>
+#include <set>
+#include <cctype>
+#include <stdexcept>
+#include <algorithm>
 
 namespace nextviper {
 
@@ -19,6 +23,19 @@ Value Value::make_native_fn(std::string name, int arity, NativeFn func) {
     nfn->arity = arity;
     nfn->func = std::move(func);
     return Value(std::move(nfn));
+}
+
+bool Value::matches_annotation(std::string annotation) const {
+    std::transform(annotation.begin(), annotation.end(), annotation.begin(), [](unsigned char c) { return std::tolower(c); });
+    if (annotation.empty() || annotation == "any") return true;
+    if (annotation == "int") return is_int();
+    if (annotation == "float" || annotation == "number") return is_number();
+    if (annotation == "string" || annotation == "str") return is_string();
+    if (annotation == "bool") return is_bool();
+    if (annotation == "list" || annotation == "array" || annotation.starts_with("list[")) return is_array();
+    if (annotation == "map" || annotation == "object" || annotation.starts_with("map[")) return is_object();
+    if (annotation == "nil" || annotation == "null" || annotation == "void" || annotation == "none") return is_nil();
+    return true; // Named/custom annotations are not runtime-enforced yet.
 }
 
 bool Value::is_truthy() const {
@@ -54,6 +71,16 @@ std::string Value::type_name() const {
 }
 
 std::string Value::to_string() const {
+    static thread_local std::set<const void*> active;
+    const void* identity = is_array() ? static_cast<const void*>(array_val_.get()) :
+                           is_object() ? static_cast<const void*>(object_val_.get()) : nullptr;
+    if (identity && active.count(identity)) return "<cycle>";
+    if (active.size() >= 256) return "<depth-limit>";
+    struct Guard {
+        std::set<const void*>& active; const void* identity;
+        ~Guard() { if (identity) active.erase(identity); }
+    } guard{active, identity};
+    if (identity) active.insert(identity);
     switch (type_) {
         case ValueType::NIL: return "nil";
         case ValueType::BOOL: return bool_val_ ? "true" : "false";
@@ -118,6 +145,17 @@ std::string Value::inspect() const {
 }
 
 bool Value::operator==(const Value& other) const {
+    using Pair = std::pair<const void*, const void*>;
+    static thread_local std::set<Pair> active;
+    Pair identity{is_array() ? static_cast<const void*>(array_val_.get()) : static_cast<const void*>(object_val_.get()),
+                  other.is_array() ? static_cast<const void*>(other.array_val_.get()) : static_cast<const void*>(other.object_val_.get())};
+    bool collection = (is_array() && other.is_array()) || (is_object() && other.is_object());
+    if (collection && active.count(identity)) return true;
+    if (active.size() >= 256) throw std::runtime_error("collection equality nesting limit exceeded");
+    struct Guard { std::set<Pair>& active; Pair identity; bool collection;
+        ~Guard() { if (collection) active.erase(identity); }
+    } guard{active, identity, collection};
+    if (collection) active.insert(identity);
     if (type_ != other.type_) {
         if (is_number() && other.is_number()) {
             return as_float() == other.as_float();

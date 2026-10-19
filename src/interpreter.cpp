@@ -512,6 +512,9 @@ bool Interpreter::execute(const Program& program) {
     } catch (const RuntimeError& e) {
         diagnostics_.error(e.message(), e.span(), e.help(), "NV100");
         return false;
+    } catch (const std::exception& error) {
+        diagnostics_.error(error.what(), SourceSpan{}, "", "NV4005");
+        return false;
     } catch (const ReturnSignal&) {
         diagnostics_.error("return statement outside function", SourceSpan{});
         return false;
@@ -753,16 +756,7 @@ void Interpreter::visit_call(const CallExpr& expr) {
 }
 
 static bool check_type_compat(const Value& val, const std::string& type_name) {
-    if (type_name.empty() || type_name == "any" || type_name == "Any") return true;
-    if (type_name == "int" || type_name == "Int") return val.is_int();
-    if (type_name == "float" || type_name == "Float") return val.is_float();
-    if (type_name == "number" || type_name == "Number") return val.is_number();
-    if (type_name == "string" || type_name == "str" || type_name == "String") return val.is_string();
-    if (type_name == "bool" || type_name == "Bool") return val.is_bool();
-    if (type_name == "array" || type_name == "Array" || type_name == "list") return val.is_array();
-    if (type_name == "object" || type_name == "Object" || type_name == "map") return val.is_object();
-    if (type_name == "nil" || type_name == "null" || type_name == "void" || type_name == "None") return val.is_nil();
-    return true; // Extensible for future type system
+    return val.matches_annotation(type_name);
 }
 
 Value Interpreter::call_function(const Value& callee, const std::vector<Value>& args, SourceSpan span) {
@@ -1307,6 +1301,13 @@ void Interpreter::visit_assign(const AssignExpr& expr) {
             } else {
                 runtime_error("invalid operands for '/='", expr.span());
             }
+        } else if (expr.op() == TokenType::PERCENT_ASSIGN) {
+            if (!current_val->is_int() || !val.is_int()) type_error("operator '%=' requires integers", expr.span());
+            if (val.as_int() == 0) division_by_zero_error(expr.span());
+            if (current_val->as_int() == INT64_MIN && val.as_int() == -1) val = Value::make_int(0);
+            else val = Value::make_int(current_val->as_int() % val.as_int());
+        } else {
+            runtime_error("unsupported compound assignment", expr.span());
         }
     }
 
@@ -1359,6 +1360,8 @@ void Interpreter::visit_let_stmt(const LetStmt& stmt) {
     if (stmt.initializer()) {
         init_val = evaluate(*stmt.initializer());
     }
+    if (!init_val.matches_annotation(stmt.type_annotation()))
+        type_error("initializer does not match type annotation '" + stmt.type_annotation() + "'", stmt.span());
     environment_->define(stmt.name(), init_val, stmt.is_mut(), stmt.type_annotation());
 }
 

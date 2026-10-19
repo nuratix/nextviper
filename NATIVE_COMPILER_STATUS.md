@@ -1,48 +1,9 @@
-# NextViper Native AOT Compiler Status
+# Native compiler status
 
-## Architecture
-The NextViper Native Compiler implements Ahead-Of-Time (AOT) machine code compilation through a 3-stage pipeline:
-1. **Frontend**: Lexical analysis and AST parsing into `nextviper::Program`.
-2. **Intermediate Representation (Typed IR)**: `IRGenerator` lowers AST nodes into an SSA-style register-based IR with explicit types (`INT64`, `FLOAT64`, `PTR`, `STRING`, `BOOL`, `VOID`). `IROptimizer` applies constant folding and dead code elimination.
-3. **C Code Emission & Linking**: `NativeCompiler` emits optimized, self-contained C code incorporating the minimal NextViper runtime and invokes the host C compiler (`gcc` or `clang` with `-O3`) to produce standalone native binaries.
+The experimental native pipeline is AST → register IR → generated C++20 → host compiler → executable. Runtime values have explicit type tags; function calls preserve dynamic values and captured variable cells. The generated program uses the C++ standard library.
 
----
+Supported regression cases include fractional function calls, primitive math, strings, heterogeneous arrays/maps, recursion, closures, collection cycles in printing, ordinary loops, range calls with steps, and short-circuit logical operators. Run the tests to validate your checkout; this list is not a complete equivalence guarantee.
 
-## Supported Features in Native AOT Compilation
+Native libraries are a subset of interpreter libraries. Unsupported modules, builtins, slicing, indexed compound assignments and closure declarations inside loops must fail with a diagnostic. C++20 tooling and Linux/POSIX assumptions remain. Reference cycles can retain memory. There is no general performance or production-readiness guarantee.
 
-| Feature | Interpreter | Native Compiler | Output Equivalence |
-| :--- | :--- | :--- | :--- |
-| **Variables & Scopes** | Supported | Supported (`alloca`, `store`, `load`) | 100% Identical |
-| **Arithmetic & Bitwise** | Supported | Supported (`+`, `-`, `*`, `/`, `%`, `&`, `\|`, `^`) | 100% Identical |
-| **Compound Assignments** | Supported | Supported (`+=`, `-=`, `*=`, `/=`, `%=`) | 100% Identical |
-| **Control Flow** | Supported | Supported (`if/else`, `while`, `for..in`, `break`, `continue`) | 100% Identical |
-| **Recursive Functions** | Supported | Supported (e.g. recursive Fibonacci, factorial) | 100% Identical |
-| **Arrow Functions** | Supported | Supported (`fn f(x) => x * x`) | 100% Identical |
-| **Higher-Order Functions** | Supported | Supported (function pointer passing & invocation) | 100% Identical |
-| **Dynamic Arrays** | Supported | Supported (`NVArray` runtime with `.push()`, `.len()`, `.pop()`) | 100% Identical |
-| **Maps & Objects** | Supported | Supported (`NVMap` runtime with dynamic key/value indexing) | 100% Identical |
-| **Timing & Clock Primitives** | Supported | Supported (`clock()`, `time.now()`, `time.now_ms()`) | 100% Identical |
-| **Print Formatter** | Supported | Supported (polymorphic printing for arrays, maps, strings, numbers) | 100% Identical |
-
----
-
-## Benchmark Comparison: Interpreter vs Native AOT
-
-Benchmark: Recursive Fibonacci `fib(28)`
-- **NextViper Interpreter**: ~220 ms
-- **NextViper Native AOT (`-O3`)**: **5.69 ms** (~38.6x speedup)
-
-Benchmark: 1,000,000 Loop Accumulations (`bench_basic_ops.nv`)
-- **NextViper Interpreter**: ~180 ms
-- **NextViper Native AOT (`-O3`)**: **5.34 ms** (~33.7x speedup)
-
----
-
-## Commands
-```bash
-# Build standalone native executable
-nextviper build --native input.nv -o output_bin
-
-# Run native executable directly
-./output_bin
-```
+`build` produces a native executable by default. `--bytecode` explicitly fails because artifact serialization/loading is unfinished. The separate VM can still run in-memory bytecode with `run --vm`.

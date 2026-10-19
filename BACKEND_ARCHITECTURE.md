@@ -46,7 +46,7 @@ NextViper is an industrial-grade, general-purpose programming language designed 
 
 ## 2. Multi-Threaded HTTP Networking Engine
 
-NextViper's `std.http` and `std.net` modules provide native POSIX/Windows socket server engines built in C++20 with zero third-party dependencies:
+NextViper's `std.http` and `std.net` modules provide native POSIX/Windows socket server engines built in C++20 with external platform dependencies:
 
 - **Socket Multiplexing**: Non-blocking TCP sockets utilizing `SO_REUSEADDR` and connection queue pools.
 - **Request Parsing**: Zero-copy header extraction, dynamic URL parameter tokenization (`/api/users/:id`), query string deserialization (`?sort=desc&limit=25`), and automated CORS preflight resolution (`OPTIONS 204`).

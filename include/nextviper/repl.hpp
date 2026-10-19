@@ -18,6 +18,7 @@ private:
 
     SourceManager source_manager_;
     DiagnosticEngine diagnostics_;
+    std::vector<std::unique_ptr<Program>> programs_;
     Interpreter interpreter_;
     size_t line_counter_ = 1;
 };

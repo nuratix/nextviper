@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-BIN="./bin/nextviper"
-LSP_BIN="./bin/nextviper-lsp"
+BIN="${NEXTVIPER_BIN:-./bin/nextviper}"
+LSP_BIN="${NEXTVIPER_LSP_BIN:-./bin/nextviper-lsp}"
 
 if [ ! -f "$BIN" ]; then
     echo "Binary $BIN not found! Compile first."
@@ -89,9 +89,19 @@ echo "  ✓ PASS: fmt --check passed on clean code"
 
 # Test 9: Build command
 echo "9. Checking build command"
-BUILD_OUT=$($BIN build examples/modules_example.nv -o build/test_cli_build.nvc)
-if [[ "$BUILD_OUT" != *"Built bytecode package"* ]] && [[ "$BUILD_OUT" != *"Successfully compiled and built"* ]]; then
-    echo "FAIL: build command failed: $BUILD_OUT"
+BUILD_TARGET="/tmp/nv_cli_build_$$"
+BUILD_OUT=$($BIN build examples/hello_world.nv -o "$BUILD_TARGET")
+if [[ "$BUILD_OUT" != *"Built native binary"* ]]; then
+    echo "FAIL: native build failed: $BUILD_OUT"
+    exit 1
+fi
+if [[ "$("$BUILD_TARGET")" != *"Hello, World! Welcome to NextViper."* ]]; then
+    echo "FAIL: built program did not execute correctly"
+    exit 1
+fi
+rm -f "$BUILD_TARGET"
+if $BIN build examples/hello_world.nv --bytecode > /dev/null 2>&1; then
+    echo "FAIL: unsupported bytecode artifacts must not report success"
     exit 1
 fi
 echo "  ✓ PASS: build command succeeded"

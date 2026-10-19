@@ -95,5 +95,5 @@ jobs:
             artifacts/**/*.tar.gz
             artifacts/**/*.sha256
           draft: false
-          prerelease: false
+          prerelease: true
           generate_release_notes: true

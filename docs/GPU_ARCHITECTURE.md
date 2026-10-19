@@ -8,7 +8,7 @@ This document provides a technical overview of NextViper's GPU runtime, compute 
 
 1. **Syntactic Purity**: Existing NextViper user code requires zero GPU-specific keywords or syntax alterations. The same codebase runs on CPU or GPU by changing device configuration (`tensor.to("gpu")` or `device: "gpu"`).
 2. **GPU Data Residency**: Chained operations stay resident in GPU VRAM across consecutive kernels. intermediate results are not copied back to CPU memory between matrix multiplications, activations, or losses.
-3. **Hardware Transparency**: Tensors report their current physical device via `tensor.device()`. Device-to-device transfers are explicit and zero-overhead.
+3. **Hardware Transparency**: Tensors report their current physical device via `tensor.device()`. Device transfers are explicit; their overhead depends on the backend and workload.
 4. **Deterministic Autograd on GPU**: Reverse-mode automatic differentiation DAG backward nodes execute on GPU buffers without CPU roundtrips.
 
 ---
@@ -59,7 +59,7 @@ NextViper ships with precompiled SPIR-V binaries for all core deep learning and 
 - Workgroup tree reduction in local memory with `barrier()` synchronization.
 
 ### 4. GPU Optimizer Shader (`optimizer.comp`)
-- Parameter updates run 100% in-device without host roundtrips.
+- Parameter updates run on the device for supported operations; transfers require measurement.
 - Implements:
   - **SGD with Weight Decay**: $p \leftarrow p - \eta (g + \lambda p)$
   - **Momentum**: $v \leftarrow \beta v + g; p \leftarrow p - \eta v$

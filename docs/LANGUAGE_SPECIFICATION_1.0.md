@@ -2,7 +2,7 @@
 
 **Status:** Official Stable Specification  
 **Version:** 1.0.0  
-**Target Execution Engines:** Tree-Walk Interpreter, Stack Bytecode Virtual Machine, Native LLVM/C Backend  
+**Target Execution Engines:** Tree-Walk Interpreter, Stack Bytecode Virtual Machine, Experimental C++20 native backend
 
 ---
 

@@ -1,6 +1,6 @@
 # NextViper Developer Tooling Architecture
 
-NextViper provides a unified, zero-overhead developer tooling ecosystem built on top of the native C++20 compiler, lexer, recursive descent parser, and static type system.
+NextViper provides a unified, experimental developer tooling ecosystem built on top of the native C++20 compiler, lexer, recursive descent parser, and static type system.
 
 ---
 

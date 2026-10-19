@@ -139,6 +139,11 @@ NV_TEST(GPUSubsystem, GPUAutogradAndTrainingConvergence) {
     auto model = std::make_shared<Sequential>(std::vector<std::shared_ptr<Module>>{
         std::make_shared<Dense>(2, 1, false)
     });
+    // A fixed starting point makes this convergence test reproducible. The
+    // random initializer is tested separately; do not let it decide this result.
+    auto initial_weights = model->trainable_parameters().at(0);
+    initial_weights->data().set_flat(0, 0.0);
+    initial_weights->data().set_flat(1, 0.0);
     model->to(Device::GPU);
     NV_ASSERT_TRUE(model->device() == Device::GPU);
 

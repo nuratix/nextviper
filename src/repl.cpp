@@ -153,9 +153,12 @@ void REPL::run() {
                 continue;
             }
 
+            programs_.push_back(std::move(program));
+            const auto& retained_program = programs_.back();
+
             // Check if single expression statement to auto-print result
-            if (program->statements().size() == 1) {
-                if (auto* expr_stmt = dynamic_cast<ExprStmt*>(program->statements()[0].get())) {
+            if (retained_program->statements().size() == 1) {
+                if (auto* expr_stmt = dynamic_cast<ExprStmt*>(retained_program->statements()[0].get())) {
                     try {
                         Value val = interpreter_.evaluate(expr_stmt->expr());
                         if (!val.is_nil()) {
@@ -163,13 +166,15 @@ void REPL::run() {
                         }
                     } catch (const RuntimeError&) {
                         diagnostics_.render(std::cerr);
+                    } catch (const std::exception& error) {
+                        std::cerr << "error: " << error.what() << "\n";
                     }
                     continue;
                 }
             }
 
             // Execute general statements
-            if (!interpreter_.execute(*program)) {
+            if (!interpreter_.execute(*retained_program)) {
                 diagnostics_.render(std::cerr);
             }
         }

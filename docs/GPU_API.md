@@ -92,7 +92,7 @@ let u = tensor.uniform([1024, 1024], -1.0, 1.0, "gpu")
 
 ## 4. GPU-Accelerated Mathematical Operations
 
-When tensors reside on GPU, all arithmetic, matrix multiplications, activations, and reductions run 100% on GPU shader cores:
+When tensors reside on GPU, all arithmetic, matrix multiplications, activations, and reductions run on a supported GPU backend when that operation is implemented:
 
 ```nextviper
 import tensor

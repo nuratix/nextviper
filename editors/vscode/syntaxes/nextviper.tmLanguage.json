@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "NextViper",
   "scopeName": "source.nextviper",
+  "fileTypes": ["nv"],
   "patterns": [
     {
       "name": "comment.line.double-slash.nextviper",

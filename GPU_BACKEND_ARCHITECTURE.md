@@ -70,7 +70,7 @@ Vulkan Compute provides an open, modern, vendor-neutral compute pipeline capable
    NextViper embeds precompiled SPIR-V binary kernels directly into the runtime binary (`gpu_shaders_spirv.hpp`). No runtime compiler toolchain (`nvcc`, `hipcc`, or runtime GLSL parser) is required on end-user machines. The binary interacts directly with the system's Vulkan driver (`libvulkan.so.1`).
 
 3. **Performance & Predictability**:
-   Vulkan compute shaders provide explicit workgroup sizing, shared memory caching (`tileA`, `tileB`), barrier synchronizations, push constant uniforms, and zero-overhead Vulkan descriptor pipelines.
+   Vulkan compute shaders provide explicit workgroup sizing, shared memory caching (`tileA`, `tileB`), barrier synchronizations, push constant uniforms, and Vulkan descriptor pipelines whose overhead depends on the workload.
 
 4. **Future Extensibility**:
    The `GPUTensorBackend` class provides an extensible abstract interface. Future dedicated backends (such as direct CUDA or Metal) can be added as specialized modular drivers without altering NextViper language syntax or tensor APIs.
@@ -81,7 +81,7 @@ Vulkan Compute provides an open, modern, vendor-neutral compute pipeline capable
 
 NextViper uses unified `GPUBuffer` allocations:
 - **Zero-Copy Host Visible + Coherent Allocations**: When tensors require host inspection (`tensor.get()`, `tensor.to_string()`), memory is persistently mapped without expensive buffer recreation.
-- **In-Device Resident Operations**: When chaining operations (e.g., `let z = x.matmul(y).relu().add(bias)`), intermediate tensors remain 100% on GPU device memory. No CPU memory transfers occur until explicitly requested via `.to("cpu")` or `.to_list()`.
+- **In-Device Resident Operations**: When chaining operations (e.g., `let z = x.matmul(y).relu().add(bias)`), intermediate tensors may remain on GPU device memory for supported operations. No CPU memory transfers occur until explicitly requested via `.to("cpu")` or `.to_list()`.
 - **Automatic RAII Resource Deallocation**: GPU buffers and device memory allocations are bound to C++ `std::shared_ptr` custom deleters, automatically invoking `vkFreeMemory` and `vkDestroyBuffer` upon garbage collection.
 
 ---

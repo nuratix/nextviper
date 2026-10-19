@@ -120,6 +120,7 @@ test: directories $(TEST_TARGET) $(TARGET) $(LSP_TARGET)
 	@bash $(TEST_DIR)/test_cli.sh
 	@echo "\n\033[1;34m=== Running Error System Integration Tests ===\033[0m"
 	@bash $(TEST_DIR)/test_error_codes.sh
+	@python3 $(TEST_DIR)/test_regressions.py
 
 examples: $(TARGET)
 	@echo "\n\033[1;34m=== Running Hello World Example ===\033[0m"

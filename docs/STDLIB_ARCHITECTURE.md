@@ -8,7 +8,7 @@ NextViper’s standard library is designed as a **stable, modular, and high-perf
 
 1. **Separation of Concerns**: Core language grammar remains pure, minimal, and orthogonal. High-level capabilities (filesystem, network, JSON serialization, process control, cryptography) are provided as standard modules rather than built-in keywords.
 2. **Dual-Engine Consistency**: Every standard library function behaves identically whether executed via the tree-walk/VM interpreter or compiled through the AOT native backend.
-3. **Zero-Dependency Portability**: Built using Modern C++20 standard capabilities with self-contained cryptographic algorithms (FIPS 180-2 SHA-256, RFC 1321 MD5), recursive JSON engines, and standardized POSIX/Windows filesystem integrations.
+3. **Platform Dependencies**: Uses C++20, platform APIs, libpq and an external curl executable; Vulkan is a build dependency. Some components use standard library capabilities with self-contained cryptographic algorithms (FIPS 180-2 SHA-256, RFC 1321 MD5), recursive JSON engines, and standardized POSIX/Windows filesystem integrations.
 4. **Resilient Error Handling**: Failures (e.g. non-existent files, malformed JSON, network errors) trigger structured runtime diagnostics with exact source spans rather than unhandled native crashes.
 
 ---

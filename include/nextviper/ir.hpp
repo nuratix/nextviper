@@ -49,6 +49,7 @@ enum class IROpcode {
     MUL,
     DIV,
     MOD,
+    POW,
     NEG,
     NOT,
     EQ,
@@ -80,6 +81,7 @@ inline std::string ir_opcode_to_string(IROpcode op) {
         case IROpcode::MUL: return "mul";
         case IROpcode::DIV: return "div";
         case IROpcode::MOD: return "mod";
+        case IROpcode::POW: return "pow";
         case IROpcode::NEG: return "neg";
         case IROpcode::NOT: return "not";
         case IROpcode::EQ: return "eq";
@@ -189,6 +191,8 @@ struct IRFunction {
     std::string name;
     IRTypeKind return_type = IRTypeKind::VOID;
     std::vector<std::pair<std::string, IRTypeKind>> params;
+    std::vector<std::string> param_annotations;
+    std::string return_annotation;
     std::vector<std::unique_ptr<IRBasicBlock>> blocks;
 
     IRBasicBlock* create_block(std::string label);
@@ -253,6 +257,8 @@ private:
     std::map<std::string, IRTypeKind> var_types_;
     std::map<std::string, IRTypeKind> func_return_types_;
     std::vector<std::pair<std::string, std::string>> loop_stack_;
+
+    std::map<std::string, std::string> module_aliases_;
 
     int alloc_reg();
     std::string new_block_label(const std::string& prefix = "bb");

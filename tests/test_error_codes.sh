@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-BIN="./bin/nextviper"
+BIN="${NEXTVIPER_BIN:-./bin/nextviper}"
 
 if [ ! -f "$BIN" ]; then
     echo "Binary $BIN not found! Compile first."

@@ -74,10 +74,10 @@ nextviper test tests/main_test.nv
 
 ### `nextviper build [file.nv] [options]`
 Compiles a NextViper file or project into an executable artifact.
-- `--native`: Compile directly to native machine code (ELF/Mach-O/PE).
-- `--release`: Enable `-O3` compiler optimizations for maximum performance.
+- `--native`: Default build mode: generate C++20 and invoke the host compiler. Target platform support requires validation.
+- `--release`: Enable `-O2` compiler optimizations for the native build.
 - `--debug`: Enable `-g -O0` debug symbols for GDB/LLDB debugging.
-- `--bytecode`: Generate portable `.nvc` bytecode package.
+- `--bytecode`: Unavailable; reports an error until persistent serialization/loading is implemented.
 - `-o <path>`: Specify custom output binary destination.
 
 ```bash

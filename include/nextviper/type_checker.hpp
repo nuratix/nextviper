@@ -32,7 +32,7 @@ public:
     bool assign(const std::string& name, TypePtr type, std::string& error_msg) {
         auto it = symbols_.find(name);
         if (it != symbols_.end()) {
-            if (!it->second.is_mut && parent_ != nullptr) { // local immutable
+            if (!it->second.is_mut) { // local immutable
                 error_msg = "cannot reassign to immutable variable '" + name + "'";
                 return false;
             }
@@ -115,12 +115,15 @@ public:
 
 private:
     void init_builtins();
+    TypePtr check_call(const Expr& callee, const std::vector<TypePtr>& arguments, SourceSpan span);
+    std::unordered_map<std::string, TypePtr> variable_arity_builtins_;
 
     DiagnosticEngine& diagnostics_;
     std::shared_ptr<TypeEnvironment> globals_;
     std::shared_ptr<TypeEnvironment> current_env_;
     TypePtr current_function_return_type_ = nullptr;
     TypePtr last_inferred_type_ = nullptr;
+    size_t loop_depth_ = 0;
 };
 
 } // namespace nextviper

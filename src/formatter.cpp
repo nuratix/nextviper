@@ -1,4 +1,5 @@
 #include "nextviper/formatter.hpp"
+#include "nextviper/lexer.hpp"
 #include <sstream>
 #include <vector>
 #include <cctype>
@@ -62,7 +63,8 @@ static std::string format_line_tokens(const std::string& line) {
             std::string op2 = line.substr(i, 2);
             if (op2 == "==" || op2 == "!=" || op2 == "<=" || op2 == ">=" ||
                 op2 == "+=" || op2 == "-=" || op2 == "*=" || op2 == "/=" ||
-                op2 == "&&" || op2 == "||" || op2 == "|>" || op2 == "->") {
+                op2 == "&&" || op2 == "||" || op2 == "|>" || op2 == "->" ||
+                op2 == "=>" || op2 == "**" || op2 == "%=") {
                 // Ensure spaces around 2-char operators
                 if (!result.empty() && result.back() != ' ') result += ' ';
                 result += op2;
@@ -173,7 +175,6 @@ std::string Formatter::format_source(const std::string& source) {
     std::istringstream stream(source);
     std::string raw_line;
     std::vector<std::string> lines;
-    int current_indent = 0;
     bool prev_was_empty = false;
 
     while (std::getline(stream, raw_line)) {
@@ -187,33 +188,11 @@ std::string Formatter::format_source(const std::string& source) {
         }
         prev_was_empty = false;
 
-        // Check for dedents
-        if (trimmed[0] == '}' || trimmed[0] == ']' || trimmed[0] == ')') {
-            current_indent = std::max(0, current_indent - 1);
-        } else if (trimmed.rfind("else:", 0) == 0 || trimmed.rfind("elif ", 0) == 0) {
-            int temp_indent = std::max(0, current_indent - 1);
-            std::string formatted_line = format_line_tokens(trimmed);
-            lines.push_back(std::string(temp_indent * 4, ' ') + formatted_line);
-            continue;
-        }
+        // Whitespace defines scope. Keep the exact leading whitespace rather
+        // than guessing where a colon-based block ends.
+        size_t prefix = raw_line.find_first_not_of(" \t");
+        lines.push_back(raw_line.substr(0, prefix) + format_line_tokens(trimmed));
 
-        // Format line content
-        std::string formatted_line = format_line_tokens(trimmed);
-        lines.push_back(std::string(current_indent * 4, ' ') + formatted_line);
-
-        // Check if line opens a new block
-        std::string code_no_comment = formatted_line;
-        size_t c_idx = code_no_comment.find("//");
-        if (c_idx != std::string::npos) {
-            code_no_comment = trim_right(code_no_comment.substr(0, c_idx));
-        }
-
-        if (!code_no_comment.empty()) {
-            char last_c = code_no_comment.back();
-            if (last_c == ':' || last_c == '{' || last_c == '[') {
-                current_indent++;
-            }
-        }
     }
 
     std::ostringstream result;
@@ -228,7 +207,19 @@ std::string Formatter::format_source(const std::string& source) {
     if (res.empty() || res.back() != '\n') {
         res.push_back('\n');
     }
-    return res;
+    SourceManager manager;
+    DiagnosticEngine before_diag(manager, false), after_diag(manager, false);
+    auto before = Lexer(source, "<format>", before_diag).tokenize();
+    auto after = Lexer(res, "<format>", after_diag).tokenize();
+    if (before_diag.has_errors() || after_diag.has_errors()) return source;
+    // Blank lines may change, but tokens and indentation must not.
+    auto significant = [](const std::vector<Token>& tokens) {
+        std::vector<std::pair<TokenType, std::string>> result;
+        for (const auto& token : tokens)
+            if (token.type != TokenType::NEWLINE) result.emplace_back(token.type, token.text);
+        return result;
+    };
+    return significant(before) == significant(after) ? res : source;
 }
 
 bool Formatter::is_formatted(const std::string& source) {

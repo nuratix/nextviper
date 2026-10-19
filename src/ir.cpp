@@ -135,6 +135,7 @@ std::unique_ptr<IRModule> IRGenerator::generate(const Program& program) {
         emit(IROpcode::RET, -1, IRTypeKind::VOID, {IROperand::make_reg(r)});
     }
 
+    if (diag_.has_errors()) return nullptr;
     return std::move(module_);
 }
 
@@ -161,9 +162,13 @@ void IRGenerator::visit_expr_stmt(const ExprStmt& stmt) {
 }
 
 void IRGenerator::visit_block_stmt(const BlockStmt& stmt) {
+    auto saved_allocas = var_allocas_;
+    auto saved_types = var_types_;
     for (const auto& s : stmt.statements()) {
         if (s) s->accept(*this);
     }
+    var_allocas_ = std::move(saved_allocas);
+    var_types_ = std::move(saved_types);
 }
 
 void IRGenerator::visit_if_stmt(const IfStmt& stmt) {
@@ -212,6 +217,8 @@ void IRGenerator::visit_while_stmt(const WhileStmt& stmt) {
 }
 
 void IRGenerator::visit_for_in_stmt(const ForInStmt& stmt) {
+    auto saved_allocas = var_allocas_;
+    auto saved_types = var_types_;
     int var_reg = alloc_reg();
     var_allocas_[stmt.variable_name()] = var_reg;
     var_types_[stmt.variable_name()] = IRTypeKind::INT64;
@@ -226,7 +233,10 @@ void IRGenerator::visit_for_in_stmt(const ForInStmt& stmt) {
         }
     }
 
-    if (range_expr || is_range_call) {
+    // Range calls, including negative and non-unit steps, use the same
+    // checked range implementation as ordinary collection iteration.
+    (void)is_range_call;
+    if (range_expr) {
         IROperand start_op = IROperand::make_int(0);
         IROperand end_op = IROperand::make_int(0);
         bool inclusive = false;
@@ -333,9 +343,15 @@ void IRGenerator::visit_for_in_stmt(const ForInStmt& stmt) {
 
         current_block_ = current_func_->create_block(exit_lbl);
     }
+    var_allocas_ = std::move(saved_allocas);
+    var_types_ = std::move(saved_types);
 }
 
 void IRGenerator::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
+    if (!loop_stack_.empty()) {
+        diag_.error("native closure declarations inside loops are not supported", stmt.span(), "run with the interpreter");
+        return;
+    }
     auto saved_func = current_func_;
     auto saved_block = current_block_;
     auto saved_allocas = var_allocas_;
@@ -343,9 +359,11 @@ void IRGenerator::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
 
     current_func_ = module_->create_function(stmt.name(), IRTypeKind::INT64);
     current_block_ = current_func_->create_block("entry");
+    current_func_->return_annotation = stmt.return_type();
 
     for (const auto& p : stmt.params()) {
         current_func_->params.push_back({p.name, IRTypeKind::INT64});
+        current_func_->param_annotations.push_back(p.type_annotation);
         int reg = alloc_reg();
         emit(IROpcode::ALLOCA, reg, IRTypeKind::INT64, {IROperand::make_symbol(p.name)}, stmt.span());
         emit(IROpcode::STORE, -1, IRTypeKind::INT64, {IROperand::make_reg(reg), IROperand::make_symbol(p.name)}, stmt.span());
@@ -362,7 +380,7 @@ void IRGenerator::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
 
     if (current_block_ && (current_block_->instructions.empty() || current_block_->instructions.back().opcode != IROpcode::RET)) {
         int r = alloc_reg();
-        emit(IROpcode::CONST_INT, r, IRTypeKind::INT64, {IROperand::make_int(0)});
+        emit(IROpcode::CONST_NIL, r, IRTypeKind::PTR, {});
         emit(IROpcode::RET, -1, IRTypeKind::VOID, {IROperand::make_reg(r)});
     }
 
@@ -389,7 +407,7 @@ void IRGenerator::visit_return_stmt(const ReturnStmt& stmt) {
         emit(IROpcode::RET, -1, last_type_, {last_operand_}, stmt.span());
     } else {
         int r = alloc_reg();
-        emit(IROpcode::CONST_INT, r, IRTypeKind::INT64, {IROperand::make_int(0)});
+        emit(IROpcode::CONST_NIL, r, IRTypeKind::PTR, {});
         emit(IROpcode::RET, -1, IRTypeKind::VOID, {IROperand::make_reg(r)}, stmt.span());
     }
 }
@@ -406,7 +424,20 @@ void IRGenerator::visit_continue_stmt(const ContinueStmt& stmt) {
     }
 }
 
-void IRGenerator::visit_import_stmt(const ImportStmt&) {}
+void IRGenerator::visit_import_stmt(const ImportStmt& stmt) {
+    auto module = stmt.module_name();
+    if (module.starts_with("std.")) module = module.substr(4);
+    if (module != "math" && module != "io" && module != "time") {
+        diag_.error("module is not supported by native compilation: " + module, stmt.span(),
+                    "run this program with the interpreter");
+        return;
+    }
+    if (stmt.is_from_import()) {
+        diag_.error("from-import is not supported by native compilation", stmt.span(), "use a module import");
+        return;
+    }
+    module_aliases_[stmt.alias().empty() ? module : stmt.alias()] = module;
+}
 void IRGenerator::visit_export_stmt(const ExportStmt& stmt) {
     stmt.inner_stmt().accept(*this);
 }
@@ -458,6 +489,10 @@ void IRGenerator::visit_identifier(const IdentifierExpr& expr) {
 
 void IRGenerator::visit_assign(const AssignExpr& expr) {
     if (expr.is_index_assign() && expr.index_target()) {
+        if (expr.op() != TokenType::ASSIGN) {
+            diag_.error("native indexed compound assignment is not supported", expr.span(), "use an explicit indexed assignment");
+            return;
+        }
         expr.index_target()->target().accept(*this);
         IROperand target_op = last_operand_;
         expr.index_target()->index().accept(*this);
@@ -501,6 +536,27 @@ void IRGenerator::visit_assign(const AssignExpr& expr) {
 }
 
 void IRGenerator::visit_binary(const BinaryExpr& expr) {
+    bool logical_and = expr.op() == TokenType::AMP_AMP || expr.op() == TokenType::KEYWORD_AND;
+    bool logical_or = expr.op() == TokenType::PIPE_PIPE || expr.op() == TokenType::KEYWORD_OR;
+    if (logical_and || logical_or) {
+        int slot = alloc_reg();
+        emit(IROpcode::ALLOCA, slot, IRTypeKind::BOOL, {IROperand::make_symbol("logical")});
+        expr.left().accept(*this);
+        auto rhs = new_block_label("logic_rhs"), done = new_block_label("logic_done");
+        emit(IROpcode::STORE, -1, IRTypeKind::ANY, {IROperand::make_reg(slot), last_operand_});
+        emit(logical_and ? IROpcode::JMP_IF_FALSE : IROpcode::JMP_IF_TRUE, -1, IRTypeKind::VOID,
+             {last_operand_, IROperand::make_label(done)});
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(rhs)});
+        current_block_ = current_func_->create_block(rhs);
+        expr.right().accept(*this);
+        emit(IROpcode::STORE, -1, IRTypeKind::ANY, {IROperand::make_reg(slot), last_operand_});
+        emit(IROpcode::JMP, -1, IRTypeKind::VOID, {IROperand::make_label(done)});
+        current_block_ = current_func_->create_block(done);
+        int result = alloc_reg();
+        emit(IROpcode::LOAD, result, IRTypeKind::BOOL, {IROperand::make_reg(slot)});
+        last_operand_ = IROperand::make_reg(result); last_type_ = IRTypeKind::BOOL;
+        return;
+    }
     expr.left().accept(*this);
     IROperand left_op = last_operand_;
     IRTypeKind left_t = last_type_;
@@ -517,13 +573,14 @@ void IRGenerator::visit_binary(const BinaryExpr& expr) {
         case TokenType::STAR: op = IROpcode::MUL; break;
         case TokenType::SLASH: op = IROpcode::DIV; break;
         case TokenType::PERCENT: op = IROpcode::MOD; break;
+        case TokenType::POWER: op = IROpcode::POW; break;
         case TokenType::EQUAL_EQUAL: op = IROpcode::EQ; break;
         case TokenType::BANG_EQUAL: op = IROpcode::NE; break;
         case TokenType::LESS: op = IROpcode::LT; break;
         case TokenType::LESS_EQUAL: op = IROpcode::LE; break;
         case TokenType::GREATER: op = IROpcode::GT; break;
         case TokenType::GREATER_EQUAL: op = IROpcode::GE; break;
-        default: op = IROpcode::ADD; break;
+        default: diag_.error("operator is not supported by native compilation", expr.span()); return;
     }
 
     if (expr.op() == TokenType::SLASH) {
@@ -556,7 +613,9 @@ void IRGenerator::visit_call(const CallExpr& expr) {
                 print_args.push_back(last_operand_);
             }
             emit(IROpcode::PRINT, -1, IRTypeKind::VOID, std::move(print_args), expr.span());
-            last_operand_ = IROperand::make_int(0);
+            int nil = alloc_reg();
+            emit(IROpcode::CONST_NIL, nil, IRTypeKind::PTR, {});
+            last_operand_ = IROperand::make_reg(nil);
             last_type_ = IRTypeKind::VOID;
             return;
         }
@@ -575,9 +634,14 @@ void IRGenerator::visit_call(const CallExpr& expr) {
     } else if (auto idx_expr = dynamic_cast<const IndexExpr*>(&expr.callee())) {
         if (auto mem_lit = dynamic_cast<const LiteralExpr*>(&idx_expr->index())) {
             std::string method_name = mem_lit->string_value();
-            call_args.push_back(IROperand::make_symbol(method_name));
-            idx_expr->target().accept(*this);
-            call_args.push_back(last_operand_);
+            const auto* module = dynamic_cast<const IdentifierExpr*>(&idx_expr->target());
+            if (module && module_aliases_.count(module->name())) {
+                call_args.push_back(IROperand::make_symbol(module_aliases_[module->name()] + "_" + method_name));
+            } else {
+                call_args.push_back(IROperand::make_symbol(method_name));
+                idx_expr->target().accept(*this);
+                call_args.push_back(last_operand_);
+            }
         } else {
             expr.callee().accept(*this);
             call_args.push_back(last_operand_);
@@ -629,7 +693,9 @@ void IRGenerator::visit_index(const IndexExpr& expr) {
     last_type_ = res_type;
 }
 
-void IRGenerator::visit_slice(const SliceExpr&) {}
+void IRGenerator::visit_slice(const SliceExpr& expr) {
+    diag_.error("slicing is not supported by native compilation", expr.span(), "run with the interpreter");
+}
 
 void IRGenerator::visit_array(const ArrayExpr& expr) {
     int arr_reg = alloc_reg();
@@ -659,7 +725,21 @@ void IRGenerator::visit_object(const ObjectExpr& expr) {
     last_operand_ = IROperand::make_reg(obj_reg);
     last_type_ = IRTypeKind::PTR;
 }
-void IRGenerator::visit_pipe(const PipeExpr&) {}
+void IRGenerator::visit_pipe(const PipeExpr& expr) {
+    expr.left().accept(*this);
+    auto input = last_operand_;
+    const auto* call = dynamic_cast<const CallExpr*>(&expr.right());
+    const Expr& callee = call ? call->callee() : expr.right();
+    std::vector<IROperand> args;
+    if (const auto* id = dynamic_cast<const IdentifierExpr*>(&callee); id && !var_allocas_.count(id->name()))
+        args.push_back(IROperand::make_symbol(id->name()));
+    else { callee.accept(*this); args.push_back(last_operand_); }
+    args.push_back(input);
+    if (call) for (const auto& arg : call->args()) { arg->accept(*this); args.push_back(last_operand_); }
+    int result = alloc_reg();
+    emit(IROpcode::CALL, result, IRTypeKind::ANY, std::move(args), expr.span());
+    last_operand_ = IROperand::make_reg(result); last_type_ = IRTypeKind::ANY;
+}
 
 void IRGenerator::visit_range(const RangeExpr& expr) {
     IROperand start_op = IROperand::make_int(0);
@@ -679,6 +759,10 @@ void IRGenerator::visit_range(const RangeExpr& expr) {
 }
 
 void IRGenerator::visit_lambda(const LambdaExpr& expr) {
+    if (!loop_stack_.empty()) {
+        diag_.error("native closure declarations inside loops are not supported", expr.span(), "run with the interpreter");
+        return;
+    }
     static int lambda_id = 0;
     std::string lambda_name = "lambda_" + std::to_string(++lambda_id);
     
@@ -708,7 +792,7 @@ void IRGenerator::visit_lambda(const LambdaExpr& expr) {
 
     if (current_block_ && (current_block_->instructions.empty() || current_block_->instructions.back().opcode != IROpcode::RET)) {
         int r = alloc_reg();
-        emit(IROpcode::CONST_INT, r, IRTypeKind::INT64, {IROperand::make_int(0)});
+        emit(IROpcode::CONST_NIL, r, IRTypeKind::PTR, {});
         emit(IROpcode::RET, -1, IRTypeKind::VOID, {IROperand::make_reg(r)});
     }
 
@@ -759,16 +843,9 @@ bool IROptimizer::run_constant_folding(IRFunction& func) {
                     bool fold = true;
 
                     switch (inst.opcode) {
-                        case IROpcode::ADD: res = v1 + v2; break;
-                        case IROpcode::SUB: res = v1 - v2; break;
-                        case IROpcode::MUL: res = v1 * v2; break;
-                        case IROpcode::DIV: res = (v2 != 0) ? v1 / v2 : 0; break;
-                        case IROpcode::EQ: res = (v1 == v2); break;
-                        case IROpcode::NE: res = (v1 != v2); break;
-                        case IROpcode::LT: res = (v1 < v2); break;
-                        case IROpcode::LE: res = (v1 <= v2); break;
-                        case IROpcode::GT: res = (v1 > v2); break;
-                        case IROpcode::GE: res = (v1 >= v2); break;
+                        case IROpcode::ADD: fold = !__builtin_add_overflow(v1, v2, &res); break;
+                        case IROpcode::SUB: fold = !__builtin_sub_overflow(v1, v2, &res); break;
+                        case IROpcode::MUL: fold = !__builtin_mul_overflow(v1, v2, &res); break;
                         default: fold = false; break;
                     }
 
@@ -804,8 +881,7 @@ bool IROptimizer::run_dead_code_elimination(IRFunction& func) {
         while (it != bb->instructions.end()) {
             if (it->dest_reg >= 0 && used_regs.find(it->dest_reg) == used_regs.end()) {
                 if (it->opcode == IROpcode::CONST_INT || it->opcode == IROpcode::CONST_FLOAT ||
-                    it->opcode == IROpcode::ADD || it->opcode == IROpcode::SUB ||
-                    it->opcode == IROpcode::MUL || it->opcode == IROpcode::LOAD) {
+                    it->opcode == IROpcode::LOAD) {
                     it = bb->instructions.erase(it);
                     changed = true;
                     continue;

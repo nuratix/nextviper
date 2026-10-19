@@ -8,9 +8,9 @@ NV_TEST(Formatter, DeterministicAndIdempotent) {
         "let x=10+20\n"
         "let y =  x * 2\n"
         "if y>30:\n"
-        "print(\"Large\")\n"
+        "    print(\"Large\")\n"
         "else:\n"
-        "print(\"Small\")\n";
+        "    print(\"Small\")\n";
 
     std::string formatted_1 = Formatter::format_source(unformatted);
     std::string formatted_2 = Formatter::format_source(formatted_1);
@@ -34,8 +34,8 @@ NV_TEST(Formatter, BinaryOperatorsAndDelimiters) {
 NV_TEST(Formatter, FunctionsAndBlocks) {
     std::string code = 
         "fn calculate(a:int,b:int)->int:\n"
-        "let sum=a+b\n"
-        "return sum\n";
+        "    let sum=a+b\n"
+        "    return sum\n";
 
     std::string formatted = Formatter::format_source(code);
     NV_ASSERT_TRUE(formatted.find("fn calculate(a: int, b: int) -> int:") != std::string::npos);

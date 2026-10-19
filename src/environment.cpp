@@ -13,6 +13,10 @@ bool Environment::assign(const std::string& name, Value value, std::string& erro
             error_msg = "cannot reassign to immutable variable '" + name + "' (use 'let mut " + name + "' to make it mutable)";
             return false;
         }
+        if (!value.matches_annotation(it->second.type_annotation)) {
+            error_msg = "assignment does not match type annotation '" + it->second.type_annotation + "'";
+            return false;
+        }
         it->second.value = std::move(value);
         return true;
     }

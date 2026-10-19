@@ -1,0 +1,41 @@
+name: Source checks
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libvulkan-dev libpq-dev python3 curl
+      - name: Make build and regression tests
+        run: make -j2 test
+      - name: Existing native equivalence checks
+        run: python3 tests/native_verify/run_all.py
+      - name: Embedded native runtime sanitizers
+        run: python3 tests/test_native_runtime_sanitizers.py
+      - name: CMake build and CTest
+        run: |
+          cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-cmake -j2
+          ctest --test-dir build-cmake --output-on-failure
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libvulkan-dev libpq-dev python3 curl
+      - name: Build with memory and undefined behavior instrumentation
+        run: |
+          cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug -DNEXTVIPER_SANITIZERS=ON
+          cmake --build build-sanitize -j2
+      - name: Run checks (reference-cycle leaks are a documented limitation)
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1
+        run: ctest --test-dir build-sanitize --output-on-failure

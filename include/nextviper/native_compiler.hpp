@@ -23,11 +23,11 @@ class NativeCompiler {
 public:
     explicit NativeCompiler(DiagnosticEngine& diag);
 
-    // Converts IR to portable native C/machine code source
+    // Converts IR to a standalone C++20 translation unit
     std::string emit_native_source(const IRModule& module) const;
 
     // Compiles IRModule or AST Program to native machine code binary
-    bool compile_to_binary(const IRModule& module, const std::string& output_binary_path);
+    bool compile_to_binary(const IRModule& module, const std::string& output_binary_path, bool debug = false);
     bool compile_program(const Program& program, const std::string& output_binary_path, bool optimize = true);
 
     // Compiles and runs directly, returning stdout

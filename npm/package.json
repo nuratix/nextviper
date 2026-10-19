@@ -1,7 +1,7 @@
 {
   "name": "nextviper",
   "version": "1.0.0",
-  "description": "NextViper Programming Language — High-performance language for Data, Tensor, AI, and Vulkan GPU Compute",
+  "description": "NextViper Programming Language — Experimental language with interpreter, compiler, data, tensor, AI and Vulkan components",
   "main": "index.js",
   "types": "index.d.ts",
   "bin": {

@@ -26,8 +26,10 @@ std::string run_script(const std::string& source) {
     Interpreter interp(diag);
     std::stringstream ss;
     auto* old_buf = std::cout.rdbuf(ss.rdbuf());
-    interp.execute(*program);
+    bool success = interp.execute(*program);
     std::cout.rdbuf(old_buf);
+    if (!success) throw std::runtime_error(diag.render_to_string());
+    if (ss.str().find("FAIL_") != std::string::npos) throw std::runtime_error(ss.str());
     return ss.str();
 }
 
@@ -178,7 +180,7 @@ NV_TEST(StdLib, StdMathOperations) {
         if (math.abs(-42) != 42) { print("FAIL_ABS_INT"); }
         if (math.abs(-3.14) != 3.14) { print("FAIL_ABS_FLOAT"); }
         if (math.sqrt(100) != 10.0) { print("FAIL_SQRT"); }
-        if (math.cbrt(27) != 3.0) { print("FAIL_CBRT"); }
+        if (math.abs(math.cbrt(27) - 3.0) > 0.000000000001) { print("FAIL_CBRT"); }
         if (math.pow(2, 8) != 256.0) { print("FAIL_POW"); }
         if (math.floor(3.7) != 3) { print("FAIL_FLOOR"); }
         if (math.ceil(3.2) != 4) { print("FAIL_CEIL"); }

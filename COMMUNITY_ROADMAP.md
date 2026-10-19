@@ -25,7 +25,7 @@ graph LR
 
 ### Horizon 1: Ecosystem Maturity & Packaging (Current Focus)
 - **Official POSIX Installer**: Automated script (`install.sh`) for macOS and Linux.
-- **Error Documentation**: 100% real documentation routes for all diagnostic codes.
+- **Error Documentation**: Documentation routes need link checks for each diagnostic code.
 - **Language Server Protocol**: Enhanced autocomplete, go-to-definition, and hover hints.
 - **Public Package Registry**: Web portal and CLI for publishing verified packages.
 

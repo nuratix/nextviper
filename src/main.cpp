@@ -1,4 +1,5 @@
 #include "nextviper/version.hpp"
+#include "nextviper/process.hpp"
 #include "nextviper/diagnostic.hpp"
 #include "nextviper/lexer.hpp"
 #include "nextviper/parser.hpp"
@@ -86,7 +87,7 @@ std::string read_file(const std::string& path) {
     return buffer.str();
 }
 
-int run_file(const std::string& path, bool use_tree_walk = false) {
+int run_file(const std::string& path, bool use_tree_walk = true) {
     std::string source = read_file(path);
     if (source.empty()) {
         std::ifstream check(path);
@@ -114,6 +115,14 @@ int run_file(const std::string& path, bool use_tree_walk = false) {
         return 1;
     }
 
+    if (!use_tree_walk) {
+        VM vm(diagnostics);
+        if (vm.execute(*program) != VMResult::OK) {
+            diagnostics.render(std::cerr);
+            return 1;
+        }
+        return 0;
+    }
     Interpreter interpreter(diagnostics);
     interpreter.set_current_file(path);
     if (!interpreter.execute(*program)) {
@@ -286,10 +295,13 @@ int check_command(int argc, char* argv[]) {
     DiagnosticEngine diagnostics(source_manager, !no_color && isatty(fileno(stderr)));
 
     for (const auto& path : files) {
-        std::string source = read_file(path);
-        if (source.empty()) {
+        std::ifstream input(path);
+        if (!input.is_open()) {
+            diagnostics.error("could not open file '" + path + "'", SourceSpan{}, "", "NV2002");
             continue;
         }
+        std::ostringstream buffer; buffer << input.rdbuf();
+        std::string source = buffer.str();
         source_manager.add_file(path, source);
 
         Lexer lexer(source, path, diagnostics);
@@ -560,7 +572,7 @@ int dev_command(int argc, char* argv[]) {
 int build_command(int argc, char* argv[]) {
     std::string path = "";
     std::string out_path = "";
-    bool build_native = false;
+    bool build_native = true;
     bool is_release = false;
     bool is_debug = false;
 
@@ -568,6 +580,9 @@ int build_command(int argc, char* argv[]) {
         std::string arg = argv[i];
         if (arg == "-o" && i + 1 < argc) {
             out_path = argv[++i];
+        } else if (arg == "--bytecode") {
+            std::cerr << "error: bytecode artifact serialization is not implemented; use a native build or run the source file\n";
+            return 1;
         } else if (arg == "--native") {
             build_native = true;
         } else if (arg == "--release") {
@@ -643,35 +658,18 @@ int build_command(int argc, char* argv[]) {
         }
 
         NativeCompiler native_compiler(diagnostics);
-        if (!native_compiler.compile_to_binary(*ir_mod, final_out)) {
+        if (!native_compiler.compile_to_binary(*ir_mod, final_out, is_debug)) {
             std::cerr << "error: native machine code compilation failed\n";
             return 1;
         }
 
-        std::string mode_str = is_release ? " [release -O3]" : (is_debug ? " [debug -g -O0]" : "");
+        std::string mode_str = is_release ? " [release -O2]" : (is_debug ? " [debug -g -O0]" : "");
         std::cout << "\033[1;32m✓ Built native binary:\033[0m " << final_out << mode_str << "\n";
         return 0;
     }
 
-    // Default: Bytecode artifact
-    BytecodeCompiler compiler(diagnostics);
-    auto fn = compiler.compile(*program);
-    if (!fn) {
-        diagnostics.render(std::cerr);
-        return 1;
-    }
-
-    std::string final_out = out_path.empty() ? (path + "c") : out_path;
-    std::ofstream out(final_out, std::ios::binary);
-    if (out.is_open()) {
-        out << "NVBC\x01\x00"; // Magic Header
-        out << fn->name() << "\n";
-        out.close();
-    }
-
-    std::cout << "\033[1;32m✓ Built bytecode package:\033[0m " << final_out
-              << " (" << fn->chunk().count() << " bytecode instructions)\n";
-    return 0;
+    std::cerr << "error: unsupported build mode\n";
+    return 1;
 }
 
 int compile_file(const std::string& path, const std::string& out_path, bool emit_ir, bool run_after) {
@@ -695,6 +693,9 @@ int compile_file(const std::string& path, const std::string& out_path, bool emit
         diagnostics.render(std::cerr);
         return 1;
     }
+
+    TypeChecker checker(diagnostics);
+    if (!checker.check(*program)) { diagnostics.render(std::cerr); return 1; }
 
     IRGenerator gen(diagnostics);
     auto ir_mod = gen.generate(*program);
@@ -731,8 +732,13 @@ int compile_file(const std::string& path, const std::string& out_path, bool emit
     if (run_after) {
         std::string cmd = final_out;
         if (!cmd.starts_with("./") && !cmd.starts_with("/")) cmd = "./" + cmd;
-        int ret = std::system(cmd.c_str());
-        return ret;
+        try {
+            auto result = capture_process(cmd, {});
+            std::cout << result.output;
+            return result.exit_code == 0 ? 0 : 1;
+        } catch (const std::exception& error) {
+            std::cerr << "error: " << error.what() << "\n"; return 1;
+        }
     }
     return 0;
 }
@@ -1236,10 +1242,12 @@ int main(int argc, char* argv[]) {
         }
         std::string query = argv[2];
         std::cout << "\033[1;36mSearching NextViper Package Registry for:\033[0m '" << query << "'...\n\n";
-        std::string cmd = "curl -s \"https://nextviper.nuratix.com/api/search?q=" + query + "\"";
-        int res = std::system(cmd.c_str());
-        std::cout << "\n";
-        return (res == 0) ? 0 : 1;
+        try {
+            auto result = nextviper::capture_process("curl", {"-q", "--silent", "--show-error", "--max-time", "30",
+                "--get", "--data-urlencode", "q=" + query, "--url", "https://nextviper.nuratix.com/api/search"});
+            std::cout << result.output << "\n";
+            return result.exit_code == 0 ? 0 : 1;
+        } catch (const std::exception& error) { std::cerr << "error: " << error.what() << "\n"; return 1; }
     }
 
     if (first_arg == "repl") {
@@ -1304,13 +1312,15 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         bool watch = false;
-        bool use_tree = false;
+        bool use_tree = true;
         std::string target_file = "";
 
         for (int i = 2; i < argc; ++i) {
             std::string arg = argv[i];
             if (arg == "--watch" || arg == "-w") {
                 watch = true;
+            } else if (arg == "--vm") {
+                use_tree = false;
             } else if (arg == "--tree") {
                 use_tree = true;
             } else if (target_file.empty() && !arg.starts_with("-")) {

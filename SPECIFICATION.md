@@ -15,7 +15,7 @@ NextViper is a modern, high-performance, general-purpose programming language en
 1. **Ergonomic Simplicity without Python Cloning**: Readability inspired by modern language developments (concise keywords, clean block structures, clear expression syntax) while avoiding Python's legacy pain points (no mandatory indentation, no GIL limitations, no ambiguous variable declarations).
 2. **Explicit Mutability**: Variables are immutable by default (`let`), requiring explicit intent (`let mut`) to enable mutation, eliminating entire classes of concurrency and state bugs.
 3. **Data & AI First-Class Primitives**: Native pipeline operator (`|>`), vectorized array operations, concise lambda expressions, and extensible tensor abstractions.
-4. **Zero-Overhead Native Evolution**: An extensible AST and intermediate representation (IR) designed from day one to compile to high-speed bytecode VM instructions and direct LLVM native machine code.
+4. **Execution Backends**: An AST, in-memory bytecode VM and experimental register IR to C++20 native compiler. There is no implemented LLVM or JIT backend.
 5. **Aesthetic & Actionable Diagnostics**: Compiler errors provide visual source snippets, exact column underlines, and helpful suggestions.
 
 ---
@@ -53,7 +53,7 @@ import   and      or       not
 ## 3. Variables and Scoping
 
 ### 3.1 Immutable Variable Declaration (`let`)
-Variables declared with `let` are immutable and cannot be rebound or mutated:
+Variables declared with `let` are immutable and cannot be rebound; collection contents can still be mutated:
 ```nextviper
 let name = "NextViper"
 let max_threads: Int = 16

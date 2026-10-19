@@ -1,6 +1,6 @@
 # NextViper Cross-Platform Build & Installation Guide (v1.0.0)
 
-NextViper is written in standard modern C++20 with zero heavy third-party dependencies, making it portable and easy to build across Linux, macOS, and Windows.
+NextViper is experimental C++20 software. Linux builds require Vulkan and PostgreSQL development libraries, Python 3 for regression tests, and curl for HTTP clients. Windows/macOS instructions below are historical starting points and are not verified by Linux CI. Some paths are POSIX-only.
 
 ---
 
@@ -22,14 +22,14 @@ NextViper is written in standard modern C++20 with zero heavy third-party depend
 ```bash
 # Ubuntu / Debian
 sudo apt update
-sudo apt install -y build-essential cmake git
+sudo apt install -y build-essential cmake git libvulkan-dev libpq-dev python3 curl
 
 # Fedora / RHEL
 sudo dnf groupinstall -y "Development Tools"
-sudo dnf install -y gcc-c++ cmake
+sudo dnf install -y gcc-c++ cmake vulkan-headers vulkan-loader-devel libpq-devel python3 curl
 
 # Arch Linux
-sudo pacman -S base-devel cmake git
+sudo pacman -S base-devel cmake git vulkan-headers vulkan-icd-loader postgresql-libs python curl
 ```
 
 ### 2.2 Compiling with GNU Make
@@ -118,7 +118,7 @@ A minimal, multi-stage Docker build:
 
 ```dockerfile
 FROM ubuntu:22.04 AS builder
-RUN apt-get update && apt-get install -y build-essential cmake git
+RUN apt-get update && apt-get install -y build-essential cmake git libvulkan-dev libpq-dev python3 curl
 WORKDIR /build
 COPY . .
 RUN make clean && make -j$(nproc) && make test

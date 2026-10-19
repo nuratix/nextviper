@@ -1,69 +1,52 @@
-# NextViper Automated Testing Framework
+# Testing NextViper
 
-NextViper includes an integrated test runner (`nextviper test`) for unit tests, integration tests, and regression suites.
-
----
-
-## 1. Test Discovery Convention
-
-By convention, test files are placed in the `tests/` directory and named with a `_test.nv` suffix or `test_*.nv` prefix:
-
-```
-my_project/
-├── src/
-│   ├── math.nv
-│   └── server.nv
-└── tests/
-    ├── math_test.nv
-    └── server_test.nv
+```sh
+make test
+# Or:
+cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build-cmake -j2
+ctest --test-dir build-cmake --output-on-failure
 ```
 
----
+The suite includes C++ unit tests, CLI/error checks, and Python subprocess regressions (`tests/test_regressions.py`). Existing native and HTTP server suites can also be run:
 
-## 2. Writing Tests
+```sh
+python3 tests/native_verify/run_all.py
+python3 tests/test_native_security.py
+python3 tests/test_http_hardening.py
+```
 
-A NextViper test file imports the target module, executes logic, and asserts invariants:
+## Writing .nv tests
+
+A test must assert or fail with a nonzero exit status. Printing the word FAIL alone does not fail a test.
 
 ```nextviper
-// tests/math_test.nv
-import std.io
-
-fn test_addition():
-    let res = 10 + 20
-    if res != 30:
-        io.print("FAIL: Expected 30, got " + string(res))
-
-fn test_array_operations():
-    let arr = [1, 2, 3]
-    if len(arr) != 3:
-        io.print("FAIL: Array length mismatch")
-
-test_addition()
-test_array_operations()
+fn add(a, b) => a + b
+assert(add(10, 20) == 30, "addition returned an unexpected result")
 ```
 
----
+Save this as `tests/test_add.nv` and run `nextviper test tests/test_add.nv`. Directory discovery currently includes all `.nv` files, not only filenames with a test prefix/suffix. Some repository `.nv` examples require an external service or hardware; `make test` is the primary source validation command.
 
-## 3. Running Tests
+Tests should assert outcomes and error behavior, not just successful parsing or a success message. Standard-library helpers check execution errors and failure markers. Regressions compare direct/native outputs, isolate crash cases in subprocesses, and use fake local curl for shell-injection checks.
 
-```bash
-# Discover and run all tests in tests/
-nextviper test
+## Sanitizer builds
 
-# Run a specific test file
-nextviper test tests/math_test.nv
+On a supported GCC/Clang Linux toolchain:
+
+```sh
+cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug -DNEXTVIPER_SANITIZERS=ON
+cmake --build build-sanitize -j2
+ASAN_OPTIONS=detect_leaks=0 ctest --test-dir build-sanitize --output-on-failure
 ```
 
-### Output Format
-```
-====================================================
-  NextViper Test Runner (2 test file(s))
-====================================================
+Leak detection is disabled in this example because reference cycles are a known unresolved limitation; this command does not claim leak-free execution. Native generated executables need their own sanitizer flags when investigating native runtime code. Test results are scoped to the cases, platform and compiler actually exercised.
 
-  ✓ PASS: tests/math_test.nv (1.14 ms)
-  ✓ PASS: tests/server_test.nv (2.45 ms)
+The embedded native runtime can also be checked independently:
 
-----------------------------------------------------
-Tests Summary: 2 total | 2 passed | 0 failed (3.59 ms)
-====================================================
+```sh
+python3 tests/test_native_runtime_sanitizers.py
+# If AddressSanitizer cannot initialize in your environment:
+NV_SANITIZERS=undefined python3 tests/test_native_runtime_sanitizers.py
 ```
+
+A sanitizer startup failure is an environment limitation, not a passing memory-safety test. The second command exercises undefined-behavior instrumentation only.

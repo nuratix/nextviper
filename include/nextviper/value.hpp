@@ -120,6 +120,7 @@ public:
 
     // Semantics
     bool is_truthy() const;
+    bool matches_annotation(std::string annotation) const;
     std::string type_name() const;
     std::string to_string() const;
     std::string inspect() const;

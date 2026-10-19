@@ -58,7 +58,7 @@ test = "nextviper test"
 
 ## 3. Lockfile: `nextviper.lock`
 
-The lockfile records exact versions, source locations, dependency trees, and cryptographic SHA-256 tree hashes for 100% reproducible builds.
+The lockfile records exact versions, source locations, dependency trees, and cryptographic SHA-256 tree hashes for more reproducible dependency resolution (not a build reproducibility guarantee).
 
 ### Example `nextviper.lock`:
 
@@ -194,4 +194,4 @@ The runtime `ModuleManager` resolves `import math_lib` by searching:
 4. `nextviper_modules/math_lib/mod.nv`
 5. `.nextviper/packages/math_lib/...`
 
-This provides zero-overhead, modular package consumption for all NextViper programs.
+This provides modular package consumption with runtime overhead for all NextViper programs.

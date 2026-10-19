@@ -48,9 +48,9 @@ nextviper fmt --check src/
 
 ### `nextviper build <file.nv> [-o output] [--native|--bytecode] [--release]`
 Compiles a NextViper program into an artifact:
-- `--native`: Ahead-Of-Time native binary compilation.
-- `--bytecode`: High-speed virtual machine chunk (`.nvc`).
-- `--release`: Compiles with `-O3` optimizations.
+- `--native`: Default: generate C++20 and compile it with the host compiler.
+- `--bytecode`: Unavailable: persistent bytecode serialization/loading is unfinished.
+- `--release`: Compiles with `-O2` optimizations.
 
 ```bash
 nextviper build src/main.nv -o app --native

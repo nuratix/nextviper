@@ -1,29 +1,17 @@
-# Security Policy
+# Security status and reporting
 
-NextViper is maintained by **Nuratix LLC** ([nuratix.com](https://nuratix.com)). We take the security and integrity of our compiler, runtime, package manager, and registry infrastructure seriously.
+NextViper is experimental. It has not undergone a comprehensive independent security audit and is not a sandbox for untrusted source or packages. Programs inherit the host process's filesystem, process, and network permissions.
 
----
+Please report suspected vulnerabilities privately through the repository owner's GitHub security reporting channel if available. Avoid publishing credentials or private application data in issues.
 
-## 1. Supported Versions
+## Current defenses and limits
 
-Security updates are actively provided for the following release branches:
+- HTTP client calls use separate subprocess arguments instead of a shell. Methods, header names/values, and HTTP/HTTPS URL schemes are validated. curl timeouts and a response-size limit apply to this client path.
+- Collection printing detects cycles and limits nesting. DataFrame wrappers validate column/row argument shapes.
+- The REPL retains declarations for as long as its session can call them.
+- Native values carry explicit tags instead of treating large integers as pointers. Native collection access performs type/bounds checks.
+- Some parser, call-stack and allocation limits exist. They do not bound every execution path, memory allocation or external operation.
 
-| Version | Supported | Security Maintenance Status |
-| :--- | :--- | :--- |
-| `1.0.x` | Yes | Active Security Fixes & Patch Releases |
-| `< 1.0.0` | No | Pre-release development versions (Upgrade to 1.0.x) |
+Untrusted URLs still require an application-level SSRF policy. Process execution APIs intentionally execute commands. Package/archive handling, native resource management, reference cycles, runtime arithmetic, and concurrency need further review. Do not interpret these targeted fixes as a general security guarantee.
 
----
-
-## 2. Reporting a Vulnerability (Responsible Disclosure)
-
-If you discover a security vulnerability in the NextViper compiler, runtime engine, LSP, or official package registry:
-
-1. **Do NOT Open a Public Issue**: Please do not file public GitHub issues, forum posts, or public pull requests containing zero-day exploit information.
-2. **Private Security Advisory / Email**:
-   - Use GitHub's [Private Vulnerability Reporting](https://github.com/nuratix/nextviper/security/advisories/new) feature on the repository.
-   - Alternatively, email **`security@nuratix.com`** with full vulnerability details, reproduction steps, and potential remediation.
-3. **Response Timelines**:
-   - **Initial Acknowledgement**: Within 24–48 hours.
-   - **Assessment & Triage**: Within 5 business days.
-   - **Patch Release & Advisory**: Disclosed cooperatively after fix validation.
+See [CURRENT_STATUS.md](CURRENT_STATUS.md), [HARDENING.md](HARDENING.md), and the regression tests for the supported scope. Sanitizers can help find bugs but do not prove their absence.

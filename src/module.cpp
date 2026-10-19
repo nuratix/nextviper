@@ -8,6 +8,7 @@
 #include "nextviper/ai_model.hpp"
 #include "nextviper/ai_subsystem.hpp"
 #include "nextviper/version.hpp"
+#include "nextviper/process.hpp"
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -1293,33 +1294,31 @@ Value ModuleManager::create_http_module() {
     };
 
     auto execute_http = [make_response](const std::string& method, const std::string& url, const std::string& body, const Value& headers_val, SourceSpan span) -> Value {
-        (void)span;
-        // Construct curl command for high compatibility
-        std::string header_flags;
-        if (headers_val.is_object()) {
-            for (const auto& [k, v] : *headers_val.as_object()) {
-                header_flags += " -H \"" + k + ": " + v.as_string() + "\"";
-            }
+        auto invalid = [&](const std::string& message) { throw RuntimeError(message, span); };
+        if (method.empty() || method.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ") != std::string::npos)
+            invalid("HTTP method must contain uppercase letters only");
+        if (!(url.starts_with("http://") || url.starts_with("https://")) || url.find('\0') != std::string::npos)
+            invalid("HTTP URL must use http:// or https:// and contain no NUL bytes");
+        if (!headers_val.is_object()) invalid("HTTP headers must be an object of strings");
+        std::vector<std::string> arguments = {"-q", "--silent", "--show-error", "--globoff",
+            "--proto", "=http,https", "--connect-timeout", "10", "--max-time", "30",
+            "--max-filesize", "16777216", "--write-out", "\n__NV_STATUS__:%{http_code}",
+            "--request", method};
+        for (const auto& [key, value] : *headers_val.as_object()) {
+            if (key.empty() || key.find_first_not_of("!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") != std::string::npos)
+                invalid("invalid HTTP header name");
+            if (!value.is_string() || value.as_string().find_first_of("\r\n") != std::string::npos || value.as_string().find('\0') != std::string::npos)
+                invalid("HTTP header values must be strings without CR, LF or NUL bytes");
+            arguments.insert(arguments.end(), {"--header", key + ": " + value.as_string()});
         }
-
-        std::string temp_out = "/tmp/nv_http_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-        std::string cmd = "curl -s -w \"\\n__NV_STATUS__:%{http_code}\" -X " + method + header_flags;
-        if (!body.empty()) {
-            cmd += " -d " + json_escape_string(body);
-        }
-        cmd += " \"" + url + "\" > " + temp_out + " 2>&1";
-
-        int res = std::system(cmd.c_str());
-        if (res != 0) {
-            std::remove(temp_out.c_str());
-            // Return 500 error response if network or curl fails
-            return make_response(500, "{\"error\": \"HTTP request execution failed\"}", {{"content-type", Value::make_string("application/json")}});
-        }
-
-        std::ifstream in(temp_out);
-        std::string full_out((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        in.close();
-        std::remove(temp_out.c_str());
+        if (!body.empty()) arguments.insert(arguments.end(), {"--data-raw", body});
+        arguments.insert(arguments.end(), {"--url", url});
+        ProcessOutput response;
+        try { response = capture_process("curl", arguments); }
+        catch (const std::exception& error) { throw RuntimeError(error.what(), span); }
+        if (response.exit_code != 0)
+            throw RuntimeError("HTTP request failed: " + response.output, span);
+        std::string full_out = std::move(response.output);
 
         int status = 200;
         std::string resp_body = full_out;
@@ -1883,11 +1882,20 @@ Value ModuleManager::create_data_module() {
 
     // Backward-compatible extensions
     exports["from_csv"] = exports["read_csv"];
-    exports["from_rows"] = Value::make_native_fn("from_rows", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+    exports["from_rows"] = Value::make_native_fn("from_rows", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
+        if (!args[0].is_array() || !args[1].is_array())
+            throw RuntimeError("data.from_rows requires a column list and a row list", span);
         std::vector<std::string> cols;
-        for (const auto& c : *args[0].as_array()) cols.push_back(c.as_string());
+        for (const auto& c : *args[0].as_array()) {
+            if (!c.is_string()) throw RuntimeError("column names must be strings", span);
+            cols.push_back(c.as_string());
+        }
         std::vector<std::vector<Value>> rows;
-        for (const auto& r : *args[1].as_array()) rows.push_back(*r.as_array());
+        for (const auto& r : *args[1].as_array()) {
+            if (!r.is_array()) throw RuntimeError("each DataFrame row must be a list", span);
+            if (r.as_array()->size() != cols.size()) throw RuntimeError("DataFrame row width does not match columns", span);
+            rows.push_back(*r.as_array());
+        }
         return DataFrame(std::move(cols), std::move(rows)).to_value();
     });
 
