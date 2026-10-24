@@ -19,7 +19,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libvulkan-dev libpq-dev vulkan-tools
+          sudo apt-get install -y build-essential libvulkan-dev libpq-dev libcurl4-openssl-dev vulkan-tools
 
       - name: Compile NextViper
         run: |
@@ -52,7 +52,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libvulkan-dev libpq-dev
+          sudo apt-get install -y build-essential libvulkan-dev libpq-dev libcurl4-openssl-dev
 
       - name: Compile NextViper
         run: |

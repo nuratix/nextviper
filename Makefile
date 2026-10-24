@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -std=c++20 -O3 -Wall -Wextra -Iinclude -I/usr/include/postgresql -pthread -MMD -MP
-LDFLAGS = -lvulkan -lpq
+LDFLAGS = -lvulkan -lpq -lcurl
 
 SRC_DIR = src
 INC_DIR = include
@@ -21,6 +21,8 @@ CORE_SRCS = $(SRC_DIR)/token.cpp \
             $(SRC_DIR)/environment.cpp \
             $(SRC_DIR)/interpreter.cpp \
             $(SRC_DIR)/module.cpp \
+            $(SRC_DIR)/http_transport.cpp \
+            $(SRC_DIR)/interactive_process.cpp \
             $(SRC_DIR)/tensor.cpp \
             $(SRC_DIR)/gpu_backend.cpp \
             $(SRC_DIR)/gpu_kernels.cpp \
@@ -121,6 +123,7 @@ test: directories $(TEST_TARGET) $(TARGET) $(LSP_TARGET)
 	@echo "\n\033[1;34m=== Running Error System Integration Tests ===\033[0m"
 	@bash $(TEST_DIR)/test_error_codes.sh
 	@python3 $(TEST_DIR)/test_regressions.py
+	@python3 $(TEST_DIR)/test_transport.py
 
 examples: $(TARGET)
 	@echo "\n\033[1;34m=== Running Hello World Example ===\033[0m"

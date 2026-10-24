@@ -112,6 +112,8 @@ public:
     static constexpr size_t MAX_STRING_BYTES = 64 * 1024 * 1024;
     static constexpr size_t MAX_ARRAY_ELEMENTS = 10'000'000;
 
+    // Native callbacks are invoked on the current interpreter thread.
+    static Interpreter* active();
     size_t call_stack_depth() const { return call_stack_depth_; }
     Value call_function(const Value& callee, const std::vector<Value>& args, SourceSpan span);
 

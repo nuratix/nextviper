@@ -6,6 +6,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Threads REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(PostgreSQL REQUIRED)
+find_package(CURL 7.85 REQUIRED)
 option(NEXTVIPER_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 if(MSVC)
     add_compile_options(/W4 /EHsc)
@@ -29,6 +30,8 @@ set(CORE_SOURCES
     src/environment.cpp
     src/interpreter.cpp
     src/module.cpp
+    src/http_transport.cpp
+    src/interactive_process.cpp
     src/tensor.cpp
     src/gpu_backend.cpp
     src/gpu_kernels.cpp
@@ -55,7 +58,7 @@ set(CORE_SOURCES
 )
 add_library(nextviper_core STATIC ${CORE_SOURCES})
 target_include_directories(nextviper_core PUBLIC include)
-target_link_libraries(nextviper_core PUBLIC Threads::Threads Vulkan::Vulkan PostgreSQL::PostgreSQL)
+target_link_libraries(nextviper_core PUBLIC Threads::Threads Vulkan::Vulkan PostgreSQL::PostgreSQL CURL::libcurl)
 add_executable(nextviper src/main.cpp)
 target_link_libraries(nextviper PRIVATE nextviper_core)
 add_executable(nextviper-lsp src/lsp_main.cpp)
@@ -102,3 +105,8 @@ install(TARGETS nextviper nextviper-lsp RUNTIME DESTINATION bin)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME regressions COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/test_regressions.py")
 set_tests_properties(regressions PROPERTIES ENVIRONMENT "NEXTVIPER_BIN=$<TARGET_FILE:nextviper>")
+
+if(UNIX)
+    add_test(NAME transports COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/test_transport.py")
+    set_tests_properties(transports PROPERTIES ENVIRONMENT "NEXTVIPER_BIN=$<TARGET_FILE:nextviper>")
+endif()

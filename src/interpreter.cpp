@@ -7,6 +7,9 @@
 
 namespace nextviper {
 
+namespace { thread_local Interpreter* active_interpreter = nullptr; }
+Interpreter* Interpreter::active() { return active_interpreter; }
+
 struct ReturnSignal {
     Value value;
 };
@@ -781,6 +784,11 @@ Value Interpreter::call_function(const Value& callee, const std::vector<Value>& 
             runtime_error("native function '" + nfn->name + "' expects " + std::to_string(nfn->arity) +
                           " argument(s), got " + std::to_string(args.size()), span);
         }
+        struct ActiveGuard {
+            Interpreter* previous;
+            explicit ActiveGuard(Interpreter* current) : previous(active_interpreter) { active_interpreter = current; }
+            ~ActiveGuard() { active_interpreter = previous; }
+        } guard(this);
         return nfn->func(args, span);
     }
 

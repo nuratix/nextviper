@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libvulkan-dev libpq-dev python3 curl
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libvulkan-dev libpq-dev libcurl4-openssl-dev python3 curl openssl
       - name: Make build and regression tests
         run: make -j2 test
       - name: Existing native equivalence checks
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libvulkan-dev libpq-dev python3 curl
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libvulkan-dev libpq-dev libcurl4-openssl-dev python3 curl openssl
       - name: Build with memory and undefined behavior instrumentation
         run: |
           cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug -DNEXTVIPER_SANITIZERS=ON

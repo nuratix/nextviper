@@ -9,6 +9,7 @@
 #include "nextviper/ai_subsystem.hpp"
 #include "nextviper/version.hpp"
 #include "nextviper/process.hpp"
+#include "nextviper/transport.hpp"
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -1275,6 +1276,22 @@ Value ModuleManager::create_csv_module() {
 Value ModuleManager::create_http_module() {
     std::map<std::string, Value> exports;
 
+    exports["exchange"] = Value::make_native_fn("exchange", 1, [](const std::vector<Value>& args, SourceSpan span) {
+        auto* interpreter = Interpreter::active();
+        return http_exchange(args[0], Value::make_nil(), [interpreter](const Value& callback, const std::vector<Value>& values, SourceSpan location) {
+            if (!interpreter) throw RuntimeError("HTTP callback requires an interpreter", location);
+            return interpreter->call_function(callback, values, location);
+        }, span);
+    });
+    exports["stream"] = Value::make_native_fn("stream", 2, [](const std::vector<Value>& args, SourceSpan span) {
+        if (!args[1].is_callable()) return Value::make_object({{"ok", Value::make_bool(false)}, {"data", Value::make_nil()}, {"error", Value::make_object({{"kind", Value::make_string("config")}, {"message", Value::make_string("http.stream requires a callback")}, {"status", Value::make_int(0)}})}});
+        auto* interpreter = Interpreter::active();
+        if (!interpreter) throw RuntimeError("http.stream requires an interpreter callback context", span);
+        return http_exchange(args[0], args[1], [interpreter](const Value& callback, const std::vector<Value>& values, SourceSpan location) {
+            return interpreter->call_function(callback, values, location);
+        }, span);
+    });
+
     auto make_response = [](int status, const std::string& body, const std::map<std::string, Value>& headers) -> Value {
         std::map<std::string, Value> resp;
         resp["status"] = Value::make_int(status);
@@ -1396,6 +1413,10 @@ Value ModuleManager::create_http_module() {
 
 Value ModuleManager::create_process_module() {
     std::map<std::string, Value> exports;
+
+    exports["spawn"] = Value::make_native_fn("spawn", 1, [](const std::vector<Value>& args, SourceSpan span) {
+        return spawn_interactive(args[0], span);
+    });
 
     exports["exec"] = Value::make_native_fn("exec", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         std::string cmd = args[0].as_string();
@@ -1979,6 +2000,10 @@ Value ModuleManager::create_time_module() {
         auto now = std::chrono::system_clock::now().time_since_epoch();
         double sec = std::chrono::duration_cast<std::chrono::duration<double>>(now).count();
         return Value::make_float(sec);
+    });
+
+    exports["monotonic_ms"] = Value::make_native_fn("monotonic_ms", 0, [](const std::vector<Value>&, SourceSpan) {
+        return Value::make_int(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
     });
 
     exports["now_ms"] = Value::make_native_fn("now_ms", 0, [](const std::vector<Value>&, SourceSpan) -> Value {

@@ -61,3 +61,7 @@ Handlers can return:
        "headers": {"X-Custom-Header": "Value"}
    }
    ```
+
+## Incremental transport APIs
+
+`http.exchange`, `http.stream` and interactive `process.spawn` are described with their limits and result interfaces in [TRANSPORT_API.md](TRANSPORT_API.md). They support real streaming and MCP clients on the interpreter.
