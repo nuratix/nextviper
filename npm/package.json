@@ -1,7 +1,7 @@
 {
   "name": "nextviper",
   "version": "1.0.0",
-  "description": "NextViper Programming Language — Experimental language with interpreter, compiler, data, tensor, AI and Vulkan components",
+  "description": "NextViper Programming Language \u2014 Experimental language with interpreter, compiler, data, tensor, AI and Vulkan components",
   "main": "index.js",
   "types": "index.d.ts",
   "bin": {
@@ -41,6 +41,6 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=16.0.0"
+    "node": "^22.23.4 || ^24.22.1 || ^26.12.1"
   }
 }
