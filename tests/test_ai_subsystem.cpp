@@ -127,8 +127,17 @@ NV_TEST(AISubsystem, RealXORLearningAndConvergence) {
 
     // 2 -> 8 (ReLU) -> 1 (Sigmoid)
     auto seq = std::make_shared<Sequential>();
-    seq->add(std::make_shared<Dense>(2, 8, true, "relu"));
-    seq->add(std::make_shared<Dense>(8, 1, true, "sigmoid"));
+    auto hidden = std::make_shared<Dense>(2, 8, true, "relu");
+    auto output = std::make_shared<Dense>(8, 1, true, "sigmoid");
+    // Fixed, untrained initial parameters make this a reproducible optimizer
+    // regression. Random dead-ReLU starts can fail despite a working optimizer.
+    const double hidden_weights[] = {0.4, 0.7, -0.6, 0.2, 0.8, -0.3, -0.2, -0.7,
+                                     0.5, 0.5, -0.4, 0.9, 0.9, 0.1, -0.1, 0.3};
+    const double output_weights[] = {0.2, -0.3, 0.4, -0.1, -0.2, 0.3, -0.4, 0.1};
+    for (size_t i = 0; i < 16; ++i) hidden->weight_param()->data().set_flat(i, hidden_weights[i]);
+    for (size_t i = 0; i < 8; ++i) output->weight_param()->data().set_flat(i, output_weights[i]);
+    seq->add(hidden);
+    seq->add(output);
 
     auto opt = std::make_shared<Adam>(seq->trainable_parameters(), 0.05);
     auto loss_fn = std::make_shared<MSELoss>();

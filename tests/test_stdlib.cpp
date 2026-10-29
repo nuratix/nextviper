@@ -438,7 +438,8 @@ NV_TEST(StdLib, StdPostgresRealDriverAndErrorHandling) {
     NV_ASSERT_TRUE(diag.has_errors());
     bool found_expected_error = false;
     for (const auto& d : diag.diagnostics()) {
-        if (d.message.find("PostgreSQL Connection Error") != std::string::npos ||
+        if (d.message.find("PostgreSQL Connection Failed:") != std::string::npos ||
+            d.message.find("PostgreSQL Connection Error") != std::string::npos ||
             d.message.find("Connection refused") != std::string::npos ||
             d.message.find("could not connect") != std::string::npos) {
             found_expected_error = true;
