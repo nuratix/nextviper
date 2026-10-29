@@ -294,6 +294,10 @@ void BytecodeCompiler::visit_pipe(const PipeExpr& expr) {
     line_ = expr.span().start.line;
 
     if (auto* call = dynamic_cast<const CallExpr*>(&expr.right())) {
+        if (call->args().size() >= 255) {
+            diagnostics_.error("VM pipeline argument count exceeds limit (255); run with the interpreter", expr.span());
+            return;
+        }
         call->callee().accept(*this);
         expr.left().accept(*this); // First argument
         for (const auto& arg : call->args()) {
@@ -319,7 +323,7 @@ void BytecodeCompiler::visit_assign(const AssignExpr& expr) {
         idx->index().accept(*this);
         if (expr.op() != TokenType::ASSIGN) {
             emit_opcode(OpCode::OP_DUP_TWO);
-            emit_opcode(OpCode::OP_INDEX_GET);
+            emit_opcode(OpCode::OP_INDEX_GET_REQUIRED);
         }
         expr.value().accept(*this);
         switch (expr.op()) {
@@ -335,6 +339,15 @@ void BytecodeCompiler::visit_assign(const AssignExpr& expr) {
     }
 
     int local = resolve_local(current_ctx_, expr.name());
+
+    if (local == -1) {
+        for (auto* outer = current_ctx_->enclosing; outer; outer = outer->enclosing) {
+            if (resolve_local(outer, expr.name()) != -1) {
+                diagnostics_.error("VM lexical captures are unavailable; run this program with the interpreter", expr.span());
+                return;
+            }
+        }
+    }
 
     if (expr.op() != TokenType::ASSIGN) {
         // Load current value first

@@ -687,7 +687,8 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
                 break;
             }
 
-            case OpCode::OP_INDEX_GET: {
+            case OpCode::OP_INDEX_GET:
+            case OpCode::OP_INDEX_GET_REQUIRED: {
                 Value index = pop();
                 Value target = pop();
 
@@ -723,6 +724,8 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
                     auto obj = target.as_object();
                     if (!index.is_string()) throw std::invalid_argument("object key must be a string");
                     auto it = obj->find(index.as_string());
+                    if (it == obj->end() && op == OpCode::OP_INDEX_GET_REQUIRED)
+                        throw std::out_of_range("unknown object key in compound assignment");
                     push(it != obj->end() ? it->second : Value::make_nil());
                     break;
                 }

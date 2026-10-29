@@ -92,7 +92,7 @@ class LanguageContract(unittest.TestCase):
     def test_invalid_arithmetic_and_indices_are_errors(self):
         for source in ('print("x" / 2)', 'print(5.5 % 2)', 'print([1]["wrong"])',
                        'let a = [1]\na["wrong"] = 2', 'let a = {}\na[true] = 2',
-                       'let a = {}\na["missing"] += 1', 'print(int(1e100))'):
+                       'let a = {}\na["missing"] += 1', 'let a = {}\na["missing"] += "text"', 'print(int(1e100))'):
             for engine in ('tree', 'vm'):
                 with self.subTest(source=source, engine=engine):
                     result = self.execute(source, engine)
@@ -100,6 +100,7 @@ class LanguageContract(unittest.TestCase):
 
     def test_vm_limits_fail_explicitly(self):
         programs = ['let a = [' + ','.join('1' for _ in range(256)) + ']\n',
+                    'true |> print(' + ','.join('true' for _ in range(255)) + ')\n',
                     '\n'.join('let v' + str(i) + ' = 1' for i in range(200))]
         for source in programs:
             result = self.execute(source, 'vm')
@@ -108,6 +109,7 @@ class LanguageContract(unittest.TestCase):
 
     def test_vm_unsupported_features_are_diagnosed(self):
         for source in ('import math\nprint(math.sqrt(4))\n',
+                       'fn outer():\n    let mut x = 0\n    fn change():\n        x = 2\n    return change\nouter()()\n',
                        'fn outer(x):\n    return fn(y) => x + y\nprint(outer(1)(2))\n'):
             result = self.execute(source, 'vm')
             self.assertEqual(result.returncode, 1, result.stderr)
