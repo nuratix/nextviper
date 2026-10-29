@@ -1,0 +1,99 @@
+// A small, persistent, single-user task API. Run with the default interpreter.
+import http
+import db
+import env
+import string
+
+let token = env.require("API_TOKEN")
+assert(len(token) >= 16, "API_TOKEN must contain at least 16 characters")
+let database = db.postgres(env.require("DATABASE_URL"))
+database.execute("CREATE TABLE IF NOT EXISTS nextviper_tasks (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200), done BOOLEAN NOT NULL DEFAULT FALSE)")
+let app = http.server()
+
+fn authorized(req):
+    return has(req.headers, "authorization") and req.headers["authorization"] == "Bearer " + token
+
+fn unauthorized():
+    return {"status": 401, "body": {"error": "A valid bearer token is required"}}
+
+fn valid_id(value):
+    if len(value) == 0 or len(value) > 18:
+        return false
+    for character in value:
+        if character < "0" or character > "9":
+            return false
+    return true
+
+fn valid_task(body):
+    if typeof(body) != "Object" or not has(body, "title"):
+        return false
+    if typeof(body.title) != "String":
+        return false
+    return len(string.trim(body.title)) > 0 and len(body.title) <= 200
+
+fn task(row):
+    // libpq returns SQL text cells as strings; convert at the API boundary.
+    return {"id": int(row.id), "title": row.title, "done": row.done == "t"}
+
+fn health(req):
+    let result = database.query("SELECT 1 AS healthy")
+    return {"ok": result.count == 1}
+
+fn list_tasks(req):
+    if not authorized(req):
+        return unauthorized()
+    let result = database.query("SELECT id, title, done FROM nextviper_tasks ORDER BY id DESC LIMIT 100")
+    let tasks = []
+    for row in result.rows:
+        push(tasks, task(row))
+    return {"tasks": tasks}
+
+fn create_task(req):
+    if not authorized(req):
+        return unauthorized()
+    let body = req.json()
+    if not valid_task(body):
+        return {"status": 400, "body": {"error": "title must contain 1 to 200 characters"}}
+    let result = database.query("INSERT INTO nextviper_tasks (title) VALUES ($1) RETURNING id, title, done", [body.title])
+    return {"status": 201, "body": task(result.rows[0])}
+
+fn get_task(req):
+    if not authorized(req):
+        return unauthorized()
+    if not valid_id(req.params.id):
+        return {"status": 400, "body": {"error": "Invalid task id"}}
+    let result = database.query("SELECT id, title, done FROM nextviper_tasks WHERE id = $1", [req.params.id])
+    if result.count == 0:
+        return {"status": 404, "body": {"error": "Task not found"}}
+    return task(result.rows[0])
+
+fn update_task(req):
+    if not authorized(req):
+        return unauthorized()
+    if not valid_id(req.params.id):
+        return {"status": 400, "body": {"error": "Invalid task id"}}
+    let body = req.json()
+    if not valid_task(body) or not has(body, "done") or typeof(body.done) != "Bool":
+        return {"status": 400, "body": {"error": "Provide title (1 to 200 characters) and done (boolean)"}}
+    let result = database.query("UPDATE nextviper_tasks SET title = $1, done = $2 WHERE id = $3 RETURNING id, title, done", [body.title, body.done, req.params.id])
+    if result.count == 0:
+        return {"status": 404, "body": {"error": "Task not found"}}
+    return task(result.rows[0])
+
+fn delete_task(req):
+    if not authorized(req):
+        return unauthorized()
+    if not valid_id(req.params.id):
+        return {"status": 400, "body": {"error": "Invalid task id"}}
+    let result = database.execute("DELETE FROM nextviper_tasks WHERE id = $1", [req.params.id])
+    if result.affected_rows == 0:
+        return {"status": 404, "body": {"error": "Task not found"}}
+    return {"status": 204, "body": ""}
+
+app.get("/health", health)
+app.get("/tasks", list_tasks)
+app.post("/tasks", create_task)
+app.get("/tasks/:id", get_task)
+app.put("/tasks/:id", update_task)
+app.delete("/tasks/:id", delete_task)
+app.listen(int(env.get("PORT", "8080")), env.get("HOST", "127.0.0.1"))

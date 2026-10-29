@@ -8,7 +8,24 @@ permissions:
   contents: read
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: nextviper
+          POSTGRES_PASSWORD: nextviper-ci-only
+          POSTGRES_DB: nextviper_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U nextviper -d nextviper_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NEXTVIPER_TEST_DATABASE_URL: postgresql://nextviper:nextviper-ci-only@127.0.0.1:5432/nextviper_test?connect_timeout=5
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -24,8 +41,24 @@ jobs:
           cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
           cmake --build build-cmake -j2
           ctest --test-dir build-cmake --output-on-failure
+      - name: Verify packaged installation
+        run: |
+          NEXTVIPER_SKIP_BUILD=1 bash scripts/package_release.sh 1.0.0-preview
+          python3 tests/test_distribution.py --archive dist/nextviper-v1.0.0-preview-linux-$(uname -m).tar.gz
+  npm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test launchers and package contents
+        working-directory: npm
+        run: |
+          npm test
+          npm pack --dry-run
   sanitizers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

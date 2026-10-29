@@ -119,6 +119,7 @@ public:
 
 private:
     void init_builtins();
+    Value arithmetic(TokenType op, const Value& left, const Value& right, SourceSpan span);
     void execute_block(const std::vector<std::unique_ptr<Stmt>>& statements, std::shared_ptr<Environment> env);
 
     size_t call_stack_depth_ = 0;

@@ -1,5 +1,5 @@
 # Binaries & Build Output
-bin/
+/bin/
 build/
 *.o
 *.a
@@ -21,3 +21,5 @@ nextviper_modules/
 dist/
 __pycache__/
 install
+
+/build-*/

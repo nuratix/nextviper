@@ -65,3 +65,22 @@ Handlers can return:
 ## Incremental transport APIs
 
 `http.exchange`, `http.stream` and interactive `process.spawn` are described with their limits and result interfaces in [TRANSPORT_API.md](TRANSPORT_API.md). They support real streaming and MCP clients on the interpreter.
+
+## Server limits and validation
+
+The server handles one request at a time and closes each connection after the
+response. Request headers are limited to 16 KiB and bodies to 10 MiB, with socket
+read/write timeouts. HTTP/1.0 and HTTP/1.1 origin-form requests are supported.
+Duplicate/invalid Content-Length is rejected. Chunked request bodies return 501;
+Expect requests return 417. There is no HTTP/2, TLS, or WebSocket server support.
+
+Malformed `req.json()` input returns 400; JSON nesting is limited to 128 levels.
+Unicode escapes and surrogate pairs are decoded to UTF-8. Handler failures return
+a generic 500 without internal SQL/error messages. Response headers are validated
+and framing headers are managed by the server. Register routes before listening.
+`app.close()` shuts down the listener and joins a background server thread.
+Use foreground listening for ordinary backend apps.
+
+The [complete task API](examples/todo-api/README.md) includes validation,
+authentication, parameterized SQL, and a deployment guide. Authentication and
+application authorization remain the application's responsibility.

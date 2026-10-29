@@ -196,6 +196,7 @@ bool Value::operator==(const Value& other) const {
 }
 
 bool Value::operator<(const Value& other) const {
+    if (is_int() && other.is_int()) return as_int() < other.as_int();
     if (is_number() && other.is_number()) {
         return as_float() < other.as_float();
     }

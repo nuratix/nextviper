@@ -28,6 +28,7 @@
 #include <cstring>
 #include <cctype>
 #include <iomanip>
+#include <limits>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -57,6 +58,11 @@ namespace fs = std::filesystem;
 
 namespace {
 
+class HttpBadRequest : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 // Base64 Encoding / Decoding
 static const std::string BASE64_CHARS = 
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -65,7 +71,7 @@ static const std::string BASE64_CHARS =
 
 std::string base64_encode(const std::string& in) {
     std::string out;
-    int val = 0, valb = -6;
+    uint32_t val = 0; int valb = -6;
     for (uint8_t c : in) {
         val = (val << 8) + c;
         valb += 8;
@@ -84,7 +90,7 @@ std::string base64_decode(const std::string& in) {
     std::vector<int> T(256, -1);
     for (int i = 0; i < 64; i++) T[static_cast<uint8_t>(BASE64_CHARS[i])] = i;
 
-    int val = 0, valb = -8;
+    uint32_t val = 0; int valb = -8;
     for (uint8_t c : in) {
         if (T[c] == -1) break;
         val = (val << 6) + T[c];
@@ -437,6 +443,8 @@ std::string json_escape_string(const std::string& str) {
 }
 
 std::string json_stringify_val(const Value& val, int indent, int depth) {
+    if (depth > 128) throw std::runtime_error("JSON nesting limit exceeded (possible collection cycle)");
+    if (indent < 0 || indent > 16) throw std::runtime_error("JSON indentation must be between 0 and 16");
     std::string indent_str = (indent > 0) ? std::string(depth * indent, ' ') : "";
     std::string next_indent_str = (indent > 0) ? std::string((depth + 1) * indent, ' ') : "";
     std::string nl = (indent > 0) ? "\n" : "";
@@ -449,7 +457,7 @@ std::string json_stringify_val(const Value& val, int indent, int depth) {
         double d = val.as_float();
         if (std::isnan(d) || std::isinf(d)) return "null";
         std::ostringstream ss;
-        ss << std::setprecision(10) << d;
+        ss << std::setprecision(std::numeric_limits<double>::max_digits10) << d;
         std::string s = ss.str();
         if (s.find('.') == std::string::npos && s.find('e') == std::string::npos) s += ".0";
         return s;
@@ -496,12 +504,14 @@ public:
         if (pos_ >= src_.size()) throw std::runtime_error("Unexpected end of JSON input");
         Value v = parse_value();
         skip_whitespace();
+        if (pos_ != src_.size()) throw std::runtime_error("Trailing content after JSON value");
         return v;
     }
 
 private:
     const std::string& src_;
     size_t pos_;
+    size_t depth_ = 0;
 
     void skip_whitespace() {
         while (pos_ < src_.size() && (src_[pos_] == ' ' || src_[pos_] == '\t' || src_[pos_] == '\n' || src_[pos_] == '\r')) {
@@ -513,6 +523,12 @@ private:
     char get() { return pos_ < src_.size() ? src_[pos_++] : '\0'; }
 
     Value parse_value() {
+        if (depth_ >= 128) throw std::runtime_error("JSON nesting limit exceeded");
+        struct DepthGuard {
+            size_t& depth;
+            explicit DepthGuard(size_t& value) : depth(value) { ++depth; }
+            ~DepthGuard() { --depth; }
+        } guard(depth_);
         skip_whitespace();
         char c = peek();
         if (c == '{') return parse_object();
@@ -540,10 +556,10 @@ private:
             obj[key] = val;
             skip_whitespace();
             char next = get();
-            if (next == '}') break;
+            if (next == '}') return Value::make_object(std::move(obj));
             if (next != ',') throw std::runtime_error("Expected ',' or '}' in JSON object at pos " + std::to_string(pos_));
         }
-        return Value::make_object(std::move(obj));
+        throw std::runtime_error("Unterminated JSON object");
     }
 
     Value parse_array() {
@@ -556,10 +572,10 @@ private:
             arr.push_back(parse_value());
             skip_whitespace();
             char next = get();
-            if (next == ']') break;
+            if (next == ']') return Value::make_array(std::move(arr));
             if (next != ',') throw std::runtime_error("Expected ',' or ']' in JSON array at pos " + std::to_string(pos_));
         }
-        return Value::make_array(std::move(arr));
+        throw std::runtime_error("Unterminated JSON array");
     }
 
     std::string parse_raw_string() {
@@ -580,23 +596,70 @@ private:
                     case 'r': s += '\r'; break;
                     case 't': s += '\t'; break;
                     case 'u': {
-                        // Unicode 4-hex escape
-                        std::string hex_str;
-                        for (int i = 0; i < 4 && pos_ < src_.size(); ++i) hex_str += get();
-                        try {
-                            int code = std::stoi(hex_str, nullptr, 16);
-                            if (code < 128) s += static_cast<char>(code);
-                            else s += '?';
-                        } catch (...) { s += '?'; }
+                        uint32_t code = unicode_unit();
+                        if (code >= 0xD800 && code <= 0xDBFF) {
+                            if (get() != '\\' || get() != 'u') throw std::runtime_error("Missing low JSON surrogate");
+                            uint32_t low = unicode_unit();
+                            if (low < 0xDC00 || low > 0xDFFF) throw std::runtime_error("Invalid low JSON surrogate");
+                            code = 0x10000 + ((code - 0xD800) << 10) + low - 0xDC00;
+                        } else if (code >= 0xDC00 && code <= 0xDFFF) {
+                            throw std::runtime_error("Unpaired JSON surrogate");
+                        }
+                        if (code <= 0x7F) s += static_cast<char>(code);
+                        else if (code <= 0x7FF) {
+                            s += static_cast<char>(0xC0 | (code >> 6));
+                            s += static_cast<char>(0x80 | (code & 0x3F));
+                        } else if (code <= 0xFFFF) {
+                            s += static_cast<char>(0xE0 | (code >> 12));
+                            s += static_cast<char>(0x80 | ((code >> 6) & 0x3F));
+                            s += static_cast<char>(0x80 | (code & 0x3F));
+                        } else {
+                            s += static_cast<char>(0xF0 | (code >> 18));
+                            s += static_cast<char>(0x80 | ((code >> 12) & 0x3F));
+                            s += static_cast<char>(0x80 | ((code >> 6) & 0x3F));
+                            s += static_cast<char>(0x80 | (code & 0x3F));
+                        }
                         break;
                     }
-                    default: s += esc; break;
+                    default: throw std::runtime_error("Invalid JSON string escape");
                 }
             } else {
+                if (static_cast<unsigned char>(c) < 0x20) throw std::runtime_error("Unescaped control character in JSON string");
                 s += c;
+                if (static_cast<unsigned char>(c) >= 0x80) {
+                    const auto lead = static_cast<unsigned char>(c);
+                    int remaining = lead >= 0xC2 && lead <= 0xDF ? 1 :
+                                    lead >= 0xE0 && lead <= 0xEF ? 2 :
+                                    lead >= 0xF0 && lead <= 0xF4 ? 3 : 0;
+                    if (!remaining) throw std::runtime_error("Invalid UTF-8 in JSON string");
+                    uint32_t code = lead & ((1u << (6 - remaining)) - 1);
+                    for (int i = 0; i < remaining; ++i) {
+                        auto next = static_cast<unsigned char>(get());
+                        if ((next & 0xC0) != 0x80) throw std::runtime_error("Invalid UTF-8 continuation in JSON string");
+                        code = (code << 6) | (next & 0x3F);
+                        s += static_cast<char>(next);
+                    }
+                    if ((remaining == 2 && code < 0x800) || (remaining == 3 && code < 0x10000) ||
+                        code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF))
+                        throw std::runtime_error("Invalid UTF-8 code point in JSON string");
+                }
             }
         }
         throw std::runtime_error("Unterminated string in JSON");
+    }
+
+    uint32_t unicode_unit() {
+        uint32_t code = 0;
+        for (int i = 0; i < 4; ++i) {
+            char c = get();
+            uint32_t digit;
+            if (c >= '0' && c <= '9') digit = c - '0';
+            else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+            else throw std::runtime_error("Invalid JSON Unicode escape");
+            code = (code << 4) | digit;
+        }
+        return code;
     }
 
     Value parse_string() {
@@ -618,22 +681,29 @@ private:
         size_t start = pos_;
         bool is_float = false;
         if (peek() == '-') pos_++;
-        while (pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_]))) pos_++;
+        auto digit = [&]() { return peek() >= '0' && peek() <= '9'; };
+        if (!digit()) throw std::runtime_error("Invalid JSON number");
+        if (peek() == '0') ++pos_;
+        else while (digit()) ++pos_;
         if (pos_ < src_.size() && src_[pos_] == '.') {
             is_float = true;
             pos_++;
-            while (pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_]))) pos_++;
+            if (!digit()) throw std::runtime_error("Missing JSON fractional digits");
+            while (digit()) ++pos_;
         }
         if (pos_ < src_.size() && (src_[pos_] == 'e' || src_[pos_] == 'E')) {
             is_float = true;
             pos_++;
             if (pos_ < src_.size() && (src_[pos_] == '+' || src_[pos_] == '-')) pos_++;
-            while (pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_]))) pos_++;
+            if (!digit()) throw std::runtime_error("Missing JSON exponent digits");
+            while (digit()) ++pos_;
         }
 
         std::string num_str = src_.substr(start, pos_ - start);
         if (is_float) {
-            return Value::make_float(std::stod(num_str));
+            double number = std::stod(num_str);
+            if (!std::isfinite(number)) throw std::runtime_error("JSON number is out of range");
+            return Value::make_float(number);
         } else {
             return Value::make_int(std::stoll(num_str));
         }
@@ -2062,7 +2132,7 @@ Value ModuleManager::create_net_module() {
             std::vector<Value> middlewares;
             std::map<std::string, std::string> static_dirs;
             std::atomic<bool> running{false};
-            int server_fd = -1;
+            std::atomic<int> server_fd{-1};
             std::unique_ptr<std::thread> listener_thread;
         };
 
@@ -2071,6 +2141,9 @@ Value ModuleManager::create_net_module() {
 
         auto add_route = [state](const std::string& method, const std::vector<Value>& args, SourceSpan s) -> Value {
             if (args.size() < 2) throw RuntimeError("route registration requires path and handler function", s);
+            if (!args[0].is_string() || args[0].as_string().empty() || args[0].as_string()[0] != '/' || !args[1].is_callable())
+                throw RuntimeError("route requires an absolute path and a callable handler", s);
+            if (state->running) throw RuntimeError("register routes before starting the server", s);
             state->routes.push_back({method, args[0].as_string(), args[1]});
             return Value::make_nil();
         };
@@ -2127,21 +2200,28 @@ Value ModuleManager::create_net_module() {
 
         app["close"] = Value::make_native_fn("close", 0, [state](const std::vector<Value>&, SourceSpan) -> Value {
             state->running = false;
-            if (state->server_fd >= 0) {
+            int socket_fd = state->server_fd.exchange(-1);
+            if (socket_fd >= 0) {
 #if defined(_WIN32)
-                closesocket(state->server_fd);
+                shutdown(socket_fd, SD_BOTH);
+                closesocket(socket_fd);
 #else
-                close(state->server_fd);
+                shutdown(socket_fd, SHUT_RDWR);
+                close(socket_fd);
 #endif
-                state->server_fd = -1;
             }
             if (state->listener_thread && state->listener_thread->joinable()) {
-                state->listener_thread->detach();
+                if (state->listener_thread->get_id() == std::this_thread::get_id()) state->listener_thread->detach();
+                else state->listener_thread->join();
             }
             return Value::make_bool(true);
         });
 
         app["listen"] = Value::make_native_fn("listen", -1, [state, match_route, invoke_val_func](const std::vector<Value>& args, SourceSpan span) -> Value {
+            if (args.size() > 3 || (!args.empty() && (!args[0].is_int() || args[0].as_int() < 1 || args[0].as_int() > 65535)) ||
+                (args.size() > 1 && !args[1].is_string()) || (args.size() > 2 && !args[2].is_bool()))
+                throw RuntimeError("listen expects a port (1..65535), IPv4 host, and optional background flag", span);
+            if (state->running) throw RuntimeError("HTTP server is already listening", span);
             int port = args.empty() ? 8080 : static_cast<int>(args[0].as_int());
             std::string host = args.size() >= 2 ? args[1].as_string() : "0.0.0.0";
             bool background = args.size() >= 3 ? args[2].as_bool() : false;
@@ -2163,7 +2243,14 @@ Value ModuleManager::create_net_module() {
             sockaddr_in addr{};
             addr.sin_family = AF_INET;
             addr.sin_port = htons(static_cast<uint16_t>(port));
-            inet_pton(AF_INET, host.c_str(), &addr.sin_addr);
+            if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+#if defined(_WIN32)
+                closesocket(fd);
+#else
+                close(fd);
+#endif
+                throw RuntimeError("HTTP host must be an IPv4 address", span);
+            }
 
             if (bind(fd, (sockaddr*)&addr, sizeof(addr)) < 0) {
 #if defined(_WIN32)
@@ -2208,7 +2295,7 @@ Value ModuleManager::create_net_module() {
                 }
             };
 
-            auto url_decode = [](const std::string& in) -> std::string {
+            auto url_decode = [](const std::string& in, bool plus_as_space = true) -> std::string {
                 std::string out;
                 out.reserve(in.size());
                 for (size_t i = 0; i < in.size(); ++i) {
@@ -2222,7 +2309,7 @@ Value ModuleManager::create_net_module() {
                         int val = (from_hex(in[i+1]) << 4) | from_hex(in[i+2]);
                         out.push_back(static_cast<char>(val));
                         i += 2;
-                    } else if (in[i] == '+') {
+                    } else if (in[i] == '+' && plus_as_space) {
                         out.push_back(' ');
                     } else {
                         out.push_back(in[i]);
@@ -2234,7 +2321,13 @@ Value ModuleManager::create_net_module() {
             auto safe_send_all = [](int sfd, const std::string& data) -> bool {
                 size_t total_sent = 0;
                 while (total_sent < data.size()) {
-                    int n = send(sfd, data.data() + total_sent, static_cast<int>(data.size() - total_sent), 0);
+                    #if defined(MSG_NOSIGNAL)
+                    int flags = MSG_NOSIGNAL;
+#else
+                    int flags = 0;
+#endif
+                    int n = send(sfd, data.data() + total_sent, static_cast<int>(data.size() - total_sent), flags);
+                    if (n < 0 && errno == EINTR) continue;
                     if (n <= 0) return false;
                     total_sent += static_cast<size_t>(n);
                 }
@@ -2277,9 +2370,6 @@ Value ModuleManager::create_net_module() {
                         }
                         raw_req.append(buf, n);
                         header_end = raw_req.find("\r\n\r\n");
-                        if (header_end == std::string::npos) {
-                            header_end = raw_req.find("\n\n");
-                        }
                         if (header_end != std::string::npos) break;
                     }
 
@@ -2306,9 +2396,14 @@ Value ModuleManager::create_net_module() {
                         continue;
                     }
 
-                    std::istringstream req_stream(raw_req);
-                    std::string method, full_path, proto;
-                    if (!(req_stream >> method >> full_path >> proto) || method.empty() || full_path.empty()) {
+                    std::istringstream req_stream(raw_req.substr(0, header_end));
+                    std::string request_line;
+                    std::getline(req_stream, request_line);
+                    std::istringstream request_parts(request_line);
+                    std::string method, full_path, proto, extra;
+                    if (!(request_parts >> method >> full_path >> proto) || (request_parts >> extra) ||
+                        (proto != "HTTP/1.1" && proto != "HTTP/1.0") || full_path.empty() || full_path[0] != '/' ||
+                        method.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ") != std::string::npos) {
                         std::string resp = "HTTP/1.1 400 Bad Request\r\n"
                                            "Content-Type: application/json\r\n"
                                            "Connection: close\r\n\r\n"
@@ -2329,7 +2424,7 @@ Value ModuleManager::create_net_module() {
                         raw_path = full_path.substr(0, qpos);
                         query_str = full_path.substr(qpos + 1);
                     }
-                    std::string path = url_decode(raw_path);
+                    std::string path = url_decode(raw_path, false);
 
                     std::map<std::string, Value> query_map;
                     if (!query_str.empty()) {
@@ -2349,49 +2444,58 @@ Value ModuleManager::create_net_module() {
 
                     std::map<std::string, Value> headers_map;
                     std::string line;
-                    std::getline(req_stream, line);
-                    while (std::getline(req_stream, line) && line != "\r" && !line.empty()) {
+                    bool bad_headers = false;
+                    auto valid_header_name = [](const std::string& name) {
+                        return !name.empty() && name.find_first_not_of("!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") == std::string::npos;
+                    };
+                    while (std::getline(req_stream, line)) {
+                        if (!line.empty() && line.back() == '\r') line.pop_back();
                         size_t colon = line.find(':');
-                        if (colon != std::string::npos) {
-                            std::string k = line.substr(0, colon);
-                            std::string v = line.substr(colon + 1);
-                            size_t start = v.find_first_not_of(" \t");
-                            size_t end = v.find_last_not_of(" \t\r\n");
-                            if (start != std::string::npos && end != std::string::npos) {
-                                v = v.substr(start, end - start + 1);
-                            } else {
-                                v.clear();
-                            }
-                            std::transform(k.begin(), k.end(), k.begin(), ::tolower);
-                            headers_map[k] = Value::make_string(v);
+                        if (colon == std::string::npos || !valid_header_name(line.substr(0, colon))) { bad_headers = true; break; }
+                        std::string key = line.substr(0, colon), value = line.substr(colon + 1);
+                        std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
+                        if (std::any_of(value.begin(), value.end(), [](unsigned char c){ return (c < 32 && c != '\t') || c == 127; })) { bad_headers = true; break; }
+                        size_t first = value.find_first_not_of(" \t"), last = value.find_last_not_of(" \t");
+                        value = first == std::string::npos ? "" : value.substr(first, last - first + 1);
+                        if ((key == "content-length" || key == "host") && headers_map.count(key)) { bad_headers = true; break; }
+                        headers_map[key] = Value::make_string(value);
+                    }
+                    int request_error = bad_headers ? 400 : 0;
+                    if (std::any_of(path.begin(), path.end(), [](unsigned char c){ return c < 32 || c == 127; })) request_error = 400;
+                    if (proto == "HTTP/1.1" && (!headers_map.count("host") || headers_map["host"].as_string().empty())) request_error = 400;
+                    if (headers_map.count("transfer-encoding")) request_error = 501;
+                    size_t content_length = 0;
+                    if (headers_map.count("content-length")) {
+                        const auto& length_text = headers_map["content-length"].as_string();
+                        if (length_text.empty() || length_text.find_first_not_of("0123456789") != std::string::npos) request_error = 400;
+                        else {
+                            try { content_length = std::stoull(length_text); }
+                            catch (...) { request_error = 413; }
+                            if (content_length > MAX_BODY_BYTES) request_error = 413;
                         }
                     }
-
-                    size_t header_len = (header_end == raw_req.find("\r\n\r\n")) ? (header_end + 4) : (header_end + 2);
-                    std::string body = raw_req.substr(header_len);
-
-                    if (headers_map.count("content-length")) {
-                        try {
-                            size_t expected_content_len = std::stoull(headers_map["content-length"].as_string());
-                            if (expected_content_len > MAX_BODY_BYTES) {
-                                std::string resp = "HTTP/1.1 413 Payload Too Large\r\n"
-                                                   "Content-Type: application/json\r\n"
-                                                   "Connection: close\r\n\r\n"
-                                                   "{\"error\":\"Payload Too Large\",\"status\":413}";
-                                safe_send_all(client_fd, resp);
+                    if (headers_map.count("expect")) request_error = 417;
+                    std::string body = raw_req.substr(header_end + 4);
+                    if (!request_error) {
+                        while (body.size() < content_length) {
+                            int received = recv(client_fd, buf, std::min(sizeof(buf), content_length - body.size()), 0);
+                            if (received <= 0) { request_error = 400; break; }
+                            body.append(buf, static_cast<size_t>(received));
+                        }
+                        if (body.size() > content_length) body.resize(content_length);
+                    }
+                    if (request_error) {
+                        std::string phrase = request_error == 417 ? "Expectation Failed" : http_status_phrase(request_error);
+                        std::string payload = "{\"error\":" + json_escape_string(phrase) + "}";
+                        safe_send_all(client_fd, "HTTP/1.1 " + std::to_string(request_error) + " " + phrase +
+                                      "\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(payload.size()) +
+                                      "\r\nConnection: close\r\n\r\n" + payload);
 #if defined(_WIN32)
-                                closesocket(client_fd);
+                        closesocket(client_fd);
 #else
-                                close(client_fd);
+                        close(client_fd);
 #endif
-                                continue;
-                            }
-                            while (body.size() < expected_content_len) {
-                                int n2 = recv(client_fd, buf, sizeof(buf) - 1, 0);
-                                if (n2 <= 0) break;
-                                body.append(buf, n2);
-                            }
-                        } catch (...) {}
+                        continue;
                     }
 
                     if (method == "OPTIONS") {
@@ -2412,7 +2516,7 @@ Value ModuleManager::create_net_module() {
 
                     bool handled_static = false;
                     for (const auto& [prefix, dir] : state->static_dirs) {
-                        if (path.rfind(prefix, 0) == 0) {
+                        if (path == prefix || prefix == "/" || path.rfind(prefix + "/", 0) == 0) {
                             std::string rel_path = path.substr(prefix.size());
                             if (rel_path.empty() || rel_path == "/") rel_path = "/index.html";
                             
@@ -2481,7 +2585,8 @@ Value ModuleManager::create_net_module() {
                                         JsonParser parser(body);
                                         return parser.parse();
                                     } catch (const std::exception& e) {
-                                        throw RuntimeError(std::string("req.json() parsing failed: ") + e.what(), s);
+                                        (void)s;
+                                        throw HttpBadRequest(std::string("Invalid JSON: ") + e.what());
                                     }
                                 });
 
@@ -2501,6 +2606,8 @@ Value ModuleManager::create_net_module() {
 
                                     if (handler_res.is_object() && handler_res.as_object()->count("status") && handler_res.as_object()->count("body")) {
                                         auto robj = *handler_res.as_object();
+                                        if (!robj["status"].is_int() || robj["status"].as_int() < 200 || robj["status"].as_int() > 599)
+                                            throw std::runtime_error("invalid HTTP response status");
                                         status_code = static_cast<int>(robj["status"].as_int());
                                         if (robj["body"].is_string()) {
                                             resp_body = robj["body"].as_string();
@@ -2520,10 +2627,19 @@ Value ModuleManager::create_net_module() {
                                         resp_body = json_stringify_val(handler_res, 0, 0);
                                     }
 
+                                    if (ctype.find_first_of("\r\n") != std::string::npos) throw std::runtime_error("invalid response content type");
                                     std::string header_str;
                                     for (const auto& [hk, hv] : custom_headers) {
+                                        if (!valid_header_name(hk) || std::any_of(hv.begin(), hv.end(), [](unsigned char c){ return (c < 32 && c != '\t') || c == 127; }))
+                                            throw std::runtime_error("invalid response header");
+                                        std::string lower = hk;
+                                        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c){ return std::tolower(c); });
+                                        if (lower == "content-type") { ctype = hv; continue; }
+                                        if (lower == "content-length" || lower == "connection" || lower == "transfer-encoding")
+                                            throw std::runtime_error("response framing headers are managed by the server");
                                         header_str += hk + ": " + hv + "\r\n";
                                     }
+                                    if (status_code == 204 || status_code == 304) resp_body.clear();
 
                                     std::string phrase = http_status_phrase(status_code);
                                     std::string resp = "HTTP/1.1 " + std::to_string(status_code) + " " + phrase + "\r\n"
@@ -2533,14 +2649,15 @@ Value ModuleManager::create_net_module() {
                                                        header_str +
                                                        "Connection: close\r\n\r\n" + resp_body;
                                     safe_send_all(client_fd, resp);
-                                } catch (const std::exception& e) {
-                                    std::string err_json = "{\"error\":\"Internal Server Error\",\"status\":500,\"message\":\"" + std::string(e.what()) + "\"}";
-                                    std::string resp = "HTTP/1.1 500 Internal Server Error\r\n"
-                                                       "Content-Type: application/json\r\n"
-                                                       "Content-Length: " + std::to_string(err_json.size()) + "\r\n"
-                                                       "Access-Control-Allow-Origin: *\r\n"
-                                                       "Connection: close\r\n\r\n" + err_json;
-                                    safe_send_all(client_fd, resp);
+                                } catch (const std::exception& error) {
+                                    bool invalid_json = dynamic_cast<const HttpBadRequest*>(&error) != nullptr;
+                                    int status = invalid_json ? 400 : 500;
+                                    std::string phrase = http_status_phrase(status);
+                                    // Detailed handler/SQL failures stay out of HTTP responses.
+                                    std::string payload = "{\"error\":" + json_escape_string(phrase) + "}";
+                                    safe_send_all(client_fd, "HTTP/1.1 " + std::to_string(status) + " " + phrase +
+                                                  "\r\nContent-Type: application/json\r\nContent-Length: " + std::to_string(payload.size()) +
+                                                  "\r\nConnection: close\r\n\r\n" + payload);
                                 }
                                 break;
                             }
@@ -2548,7 +2665,7 @@ Value ModuleManager::create_net_module() {
                     }
 
                     if (!matched) {
-                        std::string nf_json = "{\"error\":\"Not Found\",\"status\":404,\"path\":\"" + path + "\"}";
+                        std::string nf_json = "{\"error\":\"Not Found\",\"status\":404,\"path\":" + json_escape_string(path) + "}";
                         std::string resp = "HTTP/1.1 404 Not Found\r\n"
                                            "Content-Type: application/json\r\n"
                                            "Content-Length: " + std::to_string(nf_json.size()) + "\r\n"
@@ -2589,9 +2706,11 @@ Value ModuleManager::create_db_module() {
     exports["postgres"] = Value::make_native_fn("postgres", -1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (args.empty()) throw RuntimeError("db.postgres requires connection string or configuration object", span);
 
-        std::string conninfo;
+        PGconn* conn = nullptr;
+        if (args.size() != 1) throw RuntimeError("db.postgres requires one connection argument", span);
         if (args[0].is_string()) {
-            conninfo = args[0].as_string();
+            if (args[0].as_string().find('\0') != std::string::npos) throw RuntimeError("database connection string contains NUL", span);
+            conn = PQconnectdb(args[0].as_string().c_str());
         } else if (args[0].is_object()) {
             auto cfg = *args[0].as_object();
             std::string host = cfg.count("host") ? cfg["host"].as_string() : "127.0.0.1";
@@ -2601,13 +2720,14 @@ Value ModuleManager::create_db_module() {
             std::string pass = cfg.count("password") ? cfg["password"].as_string() : "";
             int timeout = cfg.count("timeout") ? static_cast<int>(cfg["timeout"].as_int()) : 5;
 
-            conninfo = "host=" + host + " port=" + std::to_string(port) + " user=" + user + " dbname=" + dbname + " connect_timeout=" + std::to_string(timeout);
-            if (!pass.empty()) conninfo += " password=" + pass;
+            const char* keywords[] = {"host", "port", "user", "dbname", "password", "connect_timeout", nullptr};
+            const std::string port_text = std::to_string(port), timeout_text = std::to_string(timeout);
+            const char* values[] = {host.c_str(), port_text.c_str(), user.c_str(), dbname.c_str(), pass.c_str(), timeout_text.c_str(), nullptr};
+            conn = PQconnectdbParams(keywords, values, 0);
         } else {
             throw RuntimeError("db.postgres argument must be connection string or config object", span);
         }
 
-        PGconn* conn = PQconnectdb(conninfo.c_str());
         if (!conn || PQstatus(conn) != CONNECTION_OK) {
             std::string err = conn ? PQerrorMessage(conn) : "Failed to allocate PostgreSQL connection handle";
             while (!err.empty() && (err.back() == '\n' || err.back() == '\r')) err.pop_back();
@@ -2639,9 +2759,16 @@ Value ModuleManager::create_db_module() {
         // query(sql, [params]) -> {rows: [...], count: N, fields: [...], sql: "..."}
         client["query"] = Value::make_native_fn("query", -1, [state](const std::vector<Value>& a, SourceSpan s) -> Value {
             if (a.empty()) throw RuntimeError("db.query requires SQL query string", s);
+            if (a.size() > 2 || !a[0].is_string() || (a.size() == 2 && !a[1].is_array()))
+                throw RuntimeError("database operation requires SQL string and optional parameter array", s);
             std::string sql = a[0].as_string();
+            if (sql.find('\0') != std::string::npos) throw RuntimeError("SQL string contains NUL", s);
             std::vector<Value> params;
-            if (a.size() >= 2 && a[1].is_array()) params = *a[1].as_array();
+            if (a.size() == 2) params = *a[1].as_array();
+            if (params.size() > 65535) throw RuntimeError("too many PostgreSQL parameters", s);
+            for (const auto& parameter : params)
+                if (parameter.is_string() && parameter.as_string().find('\0') != std::string::npos)
+                    throw RuntimeError("PostgreSQL text parameter contains NUL", s);
 
             std::lock_guard<std::mutex> lock(state->mtx);
             if (state->closed || !state->conn) {
@@ -2731,9 +2858,16 @@ Value ModuleManager::create_db_module() {
         // execute(sql, [params]) -> {affected_rows: N, status: "OK"}
         client["execute"] = Value::make_native_fn("execute", -1, [state](const std::vector<Value>& a, SourceSpan s) -> Value {
             if (a.empty()) throw RuntimeError("db.execute requires SQL statement", s);
+            if (a.size() > 2 || !a[0].is_string() || (a.size() == 2 && !a[1].is_array()))
+                throw RuntimeError("database operation requires SQL string and optional parameter array", s);
             std::string sql = a[0].as_string();
+            if (sql.find('\0') != std::string::npos) throw RuntimeError("SQL string contains NUL", s);
             std::vector<Value> params;
-            if (a.size() >= 2 && a[1].is_array()) params = *a[1].as_array();
+            if (a.size() == 2) params = *a[1].as_array();
+            if (params.size() > 65535) throw RuntimeError("too many PostgreSQL parameters", s);
+            for (const auto& parameter : params)
+                if (parameter.is_string() && parameter.as_string().find('\0') != std::string::npos)
+                    throw RuntimeError("PostgreSQL text parameter contains NUL", s);
 
             std::lock_guard<std::mutex> lock(state->mtx);
             if (state->closed || !state->conn) {
@@ -2805,8 +2939,9 @@ Value ModuleManager::create_db_module() {
 
             {
                 std::lock_guard<std::mutex> lock(state->mtx);
+                if (state->closed || !state->conn) throw RuntimeError("transaction called on closed database connection", s);
                 PGresult* res = PQexec(state->conn, "BEGIN");
-                if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+                if (!res || PQresultStatus(res) != PGRES_COMMAND_OK) {
                     std::string err = PQerrorMessage(state->conn);
                     PQclear(res);
                     throw RuntimeError("PostgreSQL BEGIN Transaction Failed: " + err, s);
@@ -2831,8 +2966,9 @@ Value ModuleManager::create_db_module() {
             try {
                 result = invoke_val_func(cb, {Value::make_object(client)});
                 std::lock_guard<std::mutex> lock(state->mtx);
+                if (state->closed || !state->conn) throw RuntimeError("connection closed during transaction", s);
                 PGresult* res = PQexec(state->conn, "COMMIT");
-                if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+                if (!res || PQresultStatus(res) != PGRES_COMMAND_OK) {
                     std::string err = PQerrorMessage(state->conn);
                     PQclear(res);
                     throw RuntimeError("PostgreSQL COMMIT Failed: " + err, s);
@@ -2840,8 +2976,10 @@ Value ModuleManager::create_db_module() {
                 PQclear(res);
             } catch (const std::exception& e) {
                 std::lock_guard<std::mutex> lock(state->mtx);
-                PGresult* res = PQexec(state->conn, "ROLLBACK");
-                PQclear(res);
+                if (state->conn && !state->closed) {
+                    PGresult* res = PQexec(state->conn, "ROLLBACK");
+                    PQclear(res);
+                }
                 throw;
             }
 
@@ -3101,7 +3239,12 @@ std::optional<Value> ModuleManager::load_module(const std::string& module_spec, 
     interpreter.set_current_file(target_path);
 
     try {
-        interpreter.execute(loaded_program);
+        if (!interpreter.execute(loaded_program)) {
+            interpreter.set_environment(prev_env);
+            interpreter.set_current_file(prev_file);
+            loading_modules_.erase(target_path);
+            return std::nullopt;
+        }
     } catch (...) {
         interpreter.set_environment(prev_env);
         interpreter.set_current_file(prev_file);

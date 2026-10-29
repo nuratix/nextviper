@@ -1,159 +1,167 @@
 #!/usr/bin/env python3
-import socket
-import subprocess
-import time
+"""HTTP regression tests using real sockets and isolated fixtures."""
+import http.client
+import json
 import os
-import sys
-
-print("=== Starting NextViper HTTP Server Hardening Regression Tests ===")
-
-os.makedirs("/tmp/nv_static_test", exist_ok=True)
-with open("/tmp/nv_static_test/index.html", "w") as f:
-    f.write("<h1>Public Index</h1>")
-with open("/tmp/nv_static_test/secret.txt", "w") as f:
-    f.write("public secret")
-with open("/tmp/secret_outside.txt", "w") as f:
-    f.write("TOP_SECRET_CANNOT_ESCAPE")
-
-server_script = "/tmp/nv_harden_server.nv"
-with open(server_script, "w") as f:
-    f.write("""
-import http
+from pathlib import Path
+import socket
+import struct
+import subprocess
+import tempfile
 import time
+import unittest
 
-let app = http.server()
-app.static("/static", "/tmp/nv_static_test")
+ROOT = Path(__file__).resolve().parents[1]
+BIN = Path(os.environ.get('NEXTVIPER_BIN', ROOT / 'bin/nextviper')).resolve()
 
-app.get("/api/echo_query", fn(req) {
-    let q = req.query["search"]
-    return {
-        "status": 200,
-        "headers": {"content-type": "application/json"},
-        "body": {"received_search": q}
-    }
-})
 
-app.post("/api/echo_body", fn(req) {
-    let j = req.json()
-    return {
-        "status": 201,
-        "body": j
-    }
-})
+def available_port():
+    with socket.socket() as connection:
+        connection.bind(('127.0.0.1', 0))
+        return connection.getsockname()[1]
 
-app.listen(8990, "127.0.0.1", true)
-time.sleep(10000)
-""")
 
-proc = subprocess.Popen(["/root/nextviper/bin/nextviper", "run", server_script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-time.sleep(0.5)
+class HttpServerContract(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory(prefix='nv-http-')
+        cls.work = Path(cls.temp.name)
+        cls.port = available_port()
+        public = cls.work / 'public'
+        public.mkdir()
+        (public / 'index.html').write_text('public index')
+        (cls.work / 'secret.txt').write_text('PRIVATE_FILE_MARKER')
+        script = cls.work / 'server.nv'
+        script.write_text('import http\nlet app = http.server()\n'
+                          'app.static("/static", ' + json.dumps(str(public)) + ')\n'
+                          'app.get("/health", fn(req) => {"ok": true})\n'
+                          'app.get("/query", fn(req) => req.query)\n'
+                          'app.post("/echo", fn(req) => {"status": 201, "body": req.json()})\n'
+                          'app.get("/error", fn(req) { assert(false, "PRIVATE_ERROR_MARKER") })\n'
+                          'app.get("/header", fn(req) => {"status": 200, "body": "x", "headers": {"X-Test": "a\\r\\nInjected: yes"}})\n'
+                          f'app.listen({cls.port}, "127.0.0.1")\n')
+        cls.logs = (cls.work / 'server.log').open('w+')
+        cls.process = subprocess.Popen([str(BIN), 'run', str(script)], stdout=cls.logs, stderr=cls.logs)
+        cls.addClassCleanup(cls.cleanup)
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if cls.process.poll() is not None:
+                cls.logs.seek(0)
+                raise RuntimeError('HTTP fixture exited: ' + cls.logs.read())
+            try:
+                with socket.create_connection(('127.0.0.1', cls.port), timeout=0.2):
+                    return
+            except OSError:
+                time.sleep(0.05)
+        raise RuntimeError('HTTP fixture did not start')
 
-all_passed = True
+    @classmethod
+    def cleanup(cls):
+        if cls.process.poll() is None:
+            cls.process.terminate()
+            try:
+                cls.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                cls.process.kill()
+                cls.process.wait()
+        cls.logs.close()
+        cls.temp.cleanup()
 
-def send_raw(payload, timeout=2.0):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(timeout)
-    s.connect(("127.0.0.1", 8990))
-    try:
-        s.sendall(payload)
-    except Exception:
-        pass
-    resp = b""
-    try:
-        while True:
-            chunk = s.recv(4096)
-            if not chunk: break
-            resp += chunk
-    except Exception:
-        pass
-    s.close()
-    return resp.decode('utf-8', errors='ignore')
+    def request(self, method, path, body=None):
+        connection = http.client.HTTPConnection('127.0.0.1', self.port, timeout=10)
+        self.addCleanup(connection.close)
+        connection.request(method, path, body=body)
+        response = connection.getresponse()
+        return response.status, response.read()
 
-# 1. Path Traversal Test (plain ../../)
-try:
-    resp = send_raw(b"GET /static/../../secret_outside.txt HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-    assert "404 Not Found" in resp or "400 Bad Request" in resp or len(resp) == 0
-    assert "TOP_SECRET_CANNOT_ESCAPE" not in resp, "Leaked file outside static root!"
-    print("  ✓ PASS: Path Traversal (../../) Blocked")
-except Exception as e:
-    print(f"  ✗ FAIL: Path Traversal: {e}")
-    all_passed = False
+    def raw(self, payload, fragments=None):
+        with socket.create_connection(('127.0.0.1', self.port), timeout=10) as connection:
+            for fragment in fragments or [payload]:
+                connection.sendall(fragment)
+                if fragments:
+                    time.sleep(0.02)
+            connection.shutdown(socket.SHUT_WR)
+            result = b''
+            while True:
+                try:
+                    chunk = connection.recv(65536)
+                except ConnectionResetError:
+                    break
+                if not chunk:
+                    break
+                result += chunk
+            return result
 
-# 2. Encoded Traversal Test (%2e%2e%2f)
-try:
-    resp = send_raw(b"GET /static/%2e%2e/%2e%2e/secret_outside.txt HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-    assert "TOP_SECRET_CANNOT_ESCAPE" not in resp, "Encoded path traversal leaked secret!"
-    assert "404 Not Found" in resp or "400 Bad Request" in resp or len(resp) == 0
-    print("  ✓ PASS: Encoded Traversal (%2e%2e%2f) Blocked")
-except Exception as e:
-    print(f"  ✗ FAIL: Encoded Traversal: {e}")
-    all_passed = False
+    def test_static_files_and_traversal(self):
+        self.assertEqual(self.request('GET', '/static/index.html'), (200, b'public index'))
+        for path in ('/static/../secret.txt', '/static/%2e%2e/secret.txt'):
+            status, body = self.request('GET', path)
+            self.assertEqual(status, 404)
+            self.assertNotIn(b'PRIVATE_FILE_MARKER', body)
 
-# 3. URL-Decoded Query Parameters
-try:
-    resp = send_raw(b"GET /api/echo_query?search=Hello%20World%21 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-    assert "200 OK" in resp
-    assert "Hello World!" in resp
-    print("  ✓ PASS: URL-Decoded Query Parameters Handled")
-except Exception as e:
-    print(f"  ✗ FAIL: URL Decoding: {e}")
-    all_passed = False
+    def test_query_and_unicode_json(self):
+        status, body = self.request('GET', '/query?search=Hello%20World%21')
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {'search': 'Hello World!'})
+        status, body = self.request('POST', '/echo', b'{"text":"\\u00e9\\uD83D\\uDE80"}')
+        self.assertEqual(status, 201)
+        self.assertEqual(json.loads(body), {'text': 'é🚀'})
 
-# 4. Malformed HTTP Request Line
-try:
-    resp = send_raw(b"INVALID_PROTOCOL_JUNK\r\n\r\n")
-    assert "400 Bad Request" in resp or len(resp) == 0
-    print("  ✓ PASS: Malformed Request Line Handled (400 Bad Request / Closed)")
-except Exception as e:
-    print(f"  ✗ FAIL: Malformed Request: {e}")
-    all_passed = False
+    def test_fragmented_request(self):
+        body = b'{"msg":"ok"}'
+        response = self.raw(b'', fragments=[b'POST /echo HTTP/1.1\r\nHost: local\r\n',
+                                            f'Content-Length: {len(body)}\r\n\r\n'.encode(), body[:5], body[5:]])
+        self.assertIn(b'201 Created', response)
+        self.assertEqual(json.loads(response.split(b'\r\n\r\n', 1)[1]), {'msg': 'ok'})
 
-# 5. Oversized Header (>16KB)
-try:
-    huge_header = b"GET /api/echo_query HTTP/1.1\r\nX-Huge: " + (b"A" * (18 * 1024)) + b"\r\n\r\n"
-    resp = send_raw(huge_header)
-    assert "431" in resp or len(resp) == 0 or "Request Header Fields Too Large" in resp
-    print("  ✓ PASS: Oversized Headers Rejected (>16KB limit / 431)")
-except Exception as e:
-    print(f"  ✗ FAIL: Oversized Headers: {type(e)} {e}")
-    all_passed = False
+    def test_invalid_json_is_400(self):
+        for body in (b'{', b'[', b'{} garbage', b'{"x":1', b'[1,]', b'01', b'1.', b'1e+',
+                     b'"\\q"', b'"\\uD800"', b'"\\uDC00"', b'"line\nfeed"', b'"\xff"', b'"\xc0\x80"',
+                     b'"\xed\xa0\x80"', b'[' * 150 + b']' * 150):
+            with self.subTest(body=body[:40]):
+                status, payload = self.request('POST', '/echo', body)
+                self.assertEqual(status, 400)
+                self.assertEqual(json.loads(payload), {'error': 'Bad Request'})
 
-# 6. Fragmented TCP Request
-try:
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("127.0.0.1", 8990))
-    s.send(b"POST /api/echo_body HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 14\r\n")
-    time.sleep(0.05)
-    s.send(b"\r\n")
-    time.sleep(0.05)
-    s.send(b'{"msg":')
-    time.sleep(0.05)
-    s.send(b'"ok"}')
-    resp = s.recv(4096).decode('utf-8', errors='ignore')
-    s.close()
-    assert "201 Created" in resp
-    assert "ok" in resp
-    print("  ✓ PASS: Fragmented TCP Request Handled Correctly")
-except Exception as e:
-    print(f"  ✗ FAIL: Fragmented Request: {e}")
-    all_passed = False
+    def test_malformed_http_framing(self):
+        for headers, status in ((b'Content-Length: abc\r\n', 400), (b'Content-Length: -1\r\n', 400),
+                                (b'Content-Length: 0\r\nContent-Length: 1\r\n', 400),
+                                (b'Transfer-Encoding: chunked\r\n', 501), (b'Content-Length: 10485761\r\n', 413),
+                                (b'Content-Length: 10\r\n', 400), (b'Expect: 100-continue\r\n', 417)):
+            with self.subTest(headers=headers):
+                response = self.raw(b'POST /echo HTTP/1.1\r\nHost: local\r\n' + headers + b'\r\n')
+                self.assertTrue(response.startswith(f'HTTP/1.1 {status} '.encode()), response)
+        response = self.raw(b'GET /health HTTP/2.0\r\nHost: local\r\n\r\n')
+        self.assertTrue(response.startswith(b'HTTP/1.1 400 '), response)
 
-# 7. Reason Phrases Verification
-try:
-    resp_200 = send_raw(b"GET /static/index.html HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-    assert "HTTP/1.1 200 OK" in resp_200
-    resp_404 = send_raw(b"GET /not_found_route HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-    assert "HTTP/1.1 404 Not Found" in resp_404
-    print("  ✓ PASS: Standard HTTP Status Reason Phrases (200 OK, 404 Not Found)")
-except Exception as e:
-    print(f"  ✗ FAIL: Reason phrases: {e}")
-    all_passed = False
+    def test_oversized_header(self):
+        response = self.raw(b'GET /health HTTP/1.1\r\nHost: local\r\nX-Huge: ' + b'a' * 18000 + b'\r\n\r\n')
+        self.assertTrue(response.startswith(b'HTTP/1.1 431 '), response)
 
-proc.terminate()
+    def test_handler_errors_do_not_leak_or_split_responses(self):
+        for path in ('/error', '/header'):
+            status, body = self.request('GET', path)
+            self.assertEqual(status, 500)
+            self.assertEqual(json.loads(body), {'error': 'Internal Server Error'})
+        status, body = self.request('GET', '/missing%22path')
+        self.assertEqual(status, 404)
+        self.assertEqual(json.loads(body)['path'], '/missing"path')
 
-if all_passed:
-    print("🎉 ALL HTTP HARDENING REGRESSION TESTS PASSED!")
-    sys.exit(0)
-else:
-    print("❌ SOME HTTP HARDENING REGRESSION TESTS FAILED!")
-    sys.exit(1)
+    def test_disconnected_client_does_not_kill_server(self):
+        for _ in range(5):
+            with socket.create_connection(('127.0.0.1', self.port), timeout=5) as connection:
+                connection.sendall(b'GET /health HTTP/1.1\r\nHost: local\r\n\r\n')
+                connection.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+        self.assertEqual(self.request('GET', '/health'), (200, b'{"ok":true}'))
+
+    def test_background_server_can_close_cleanly(self):
+        script = self.work / 'close.nv'
+        script.write_text('import http\nlet app = http.server()\n'
+                          f'app.listen({available_port()}, "127.0.0.1", true)\napp.close()\nprint("closed")\n')
+        result = subprocess.run([str(BIN), 'run', str(script)], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'closed\n')
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

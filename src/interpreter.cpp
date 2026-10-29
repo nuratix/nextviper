@@ -1,5 +1,6 @@
 #include "nextviper/interpreter.hpp"
 #include "nextviper/module.hpp"
+#include "nextviper/arithmetic.hpp"
 #include <iostream>
 #include <chrono>
 #include <cmath>
@@ -129,28 +130,7 @@ void Interpreter::init_builtins() {
             if (step == 0) throw RuntimeError("range() step cannot be zero", span);
         }
 
-        int64_t count = 0;
-        if (step > 0 && end > start) {
-            count = (end - start + step - 1) / step;
-        } else if (step < 0 && start > end) {
-            count = (start - end - step - 1) / (-step);
-        }
-        if (count > static_cast<int64_t>(MAX_ARRAY_ELEMENTS)) {
-            throw RuntimeError("range() element count (" + std::to_string(count) + ") exceeds maximum allowed limit (10,000,000)", span);
-        }
-
-        std::vector<Value> result;
-        result.reserve(static_cast<size_t>(count));
-        if (step > 0) {
-            for (int64_t i = start; i < end; i += step) {
-                result.push_back(Value::make_int(i));
-            }
-        } else {
-            for (int64_t i = start; i > end; i += step) {
-                result.push_back(Value::make_int(i));
-            }
-        }
-        return Value::make_array(std::move(result));
+        return make_range_values(start, end, step);
     }));
 
     // push(array, val) / append(array, val)
@@ -429,7 +409,7 @@ void Interpreter::init_builtins() {
     globals_->define("int", Value::make_native_fn("int", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         const auto& v = args[0];
         if (v.is_int()) return v;
-        if (v.is_float()) return Value::make_int(static_cast<int64_t>(v.as_float()));
+        if (v.is_float()) return Value::make_int(checked_float_to_int(v.as_float()));
         if (v.is_bool()) return Value::make_int(v.as_bool() ? 1 : 0);
         if (v.is_string()) {
             try {
@@ -459,7 +439,7 @@ void Interpreter::init_builtins() {
 
     // Math functions
     globals_->define("abs", Value::make_native_fn("abs", 1, [](const std::vector<Value>& args, SourceSpan span) -> Value {
-        if (args[0].is_int()) return Value::make_int(std::abs(args[0].as_int()));
+        if (args[0].is_int()) return Value::make_int(args[0].as_int() < 0 ? checked_subtract(0, args[0].as_int()) : args[0].as_int());
         if (args[0].is_float()) return Value::make_float(std::abs(args[0].as_float()));
         throw RuntimeError("abs() requires a number, got " + args[0].type_name(), span);
     }));
@@ -473,14 +453,7 @@ void Interpreter::init_builtins() {
 
     globals_->define("pow", Value::make_native_fn("pow", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
         if (!args[0].is_number() || !args[1].is_number()) throw RuntimeError("pow() requires two numbers", span);
-        if (args[0].is_int() && args[1].is_int() && args[1].as_int() >= 0) {
-            int64_t base = args[0].as_int();
-            int64_t exp = args[1].as_int();
-            int64_t res = 1;
-            for (int64_t i = 0; i < exp; ++i) res *= base;
-            return Value::make_int(res);
-        }
-        return Value::make_float(std::pow(args[0].as_float(), args[1].as_float()));
+        return apply_arithmetic(TokenType::POWER, args[0], args[1]);
     }));
 
     globals_->define("min", Value::make_native_fn("min", 2, [](const std::vector<Value>& args, SourceSpan span) -> Value {
@@ -577,7 +550,7 @@ void Interpreter::visit_unary(const UnaryExpr& expr) {
             return;
         case TokenType::MINUS:
             if (right.is_int()) {
-                last_evaluated_value_ = Value::make_int(-right.as_int());
+                last_evaluated_value_ = arithmetic(TokenType::MINUS, Value::make_int(0), right, expr.span());
                 return;
             }
             if (right.is_float()) {
@@ -619,101 +592,12 @@ void Interpreter::visit_binary(const BinaryExpr& expr) {
 
     switch (expr.op()) {
         case TokenType::PLUS:
-            if (left.is_int() && right.is_int()) {
-                last_evaluated_value_ = Value::make_int(left.as_int() + right.as_int());
-                return;
-            }
-            if (left.is_number() && right.is_number()) {
-                last_evaluated_value_ = Value::make_float(left.as_float() + right.as_float());
-                return;
-            }
-            if (left.is_string() || right.is_string()) {
-                last_evaluated_value_ = Value::make_string(left.to_string() + right.to_string());
-                return;
-            }
-            if (left.is_array() && right.is_array()) {
-                auto new_arr = *left.as_array();
-                const auto& r_arr = *right.as_array();
-                new_arr.insert(new_arr.end(), r_arr.begin(), r_arr.end());
-                last_evaluated_value_ = Value::make_array(std::move(new_arr));
-                return;
-            }
-            type_error("operator '+' not supported between " + left.type_name() + " and " + right.type_name(), expr.span());
-            return;
-
         case TokenType::MINUS:
-            if (left.is_int() && right.is_int()) {
-                last_evaluated_value_ = Value::make_int(left.as_int() - right.as_int());
-                return;
-            }
-            if (left.is_number() && right.is_number()) {
-                last_evaluated_value_ = Value::make_float(left.as_float() - right.as_float());
-                return;
-            }
-            type_error("operator '-' requires numbers, got " + left.type_name() + " and " + right.type_name(), expr.span());
-            return;
-
         case TokenType::STAR:
-            if (left.is_int() && right.is_int()) {
-                last_evaluated_value_ = Value::make_int(left.as_int() * right.as_int());
-                return;
-            }
-            if (left.is_number() && right.is_number()) {
-                last_evaluated_value_ = Value::make_float(left.as_float() * right.as_float());
-                return;
-            }
-            if (left.is_string() && right.is_int()) {
-                std::string res;
-                int64_t count = right.as_int();
-                for (int64_t i = 0; i < count; ++i) res += left.as_string();
-                last_evaluated_value_ = Value::make_string(res);
-                return;
-            }
-            type_error("operator '*' not supported between " + left.type_name() + " and " + right.type_name(), expr.span());
-            return;
-
         case TokenType::SLASH:
-            if (left.is_number() && right.is_number()) {
-                double r = right.as_float();
-                if (r == 0.0) {
-                    division_by_zero_error(expr.span(), "cannot divide by zero");
-                }
-                if (left.is_int() && right.is_int() && left.as_int() % right.as_int() == 0) {
-                    last_evaluated_value_ = Value::make_int(left.as_int() / right.as_int());
-                } else {
-                    last_evaluated_value_ = Value::make_float(left.as_float() / r);
-                }
-                return;
-            }
-            type_error("operator '/' requires numbers, got " + left.type_name() + " and " + right.type_name(), expr.span());
-            return;
-
         case TokenType::PERCENT:
-            if (left.is_int() && right.is_int()) {
-                int64_t r = right.as_int();
-                if (r == 0) {
-                    division_by_zero_error(expr.span(), "modulo by zero is not allowed");
-                }
-                last_evaluated_value_ = Value::make_int(left.as_int() % r);
-                return;
-            }
-            type_error("operator '%' requires integers, got " + left.type_name() + " and " + right.type_name(), expr.span());
-            return;
-
         case TokenType::POWER:
-            if (left.is_number() && right.is_number()) {
-                if (left.is_int() && right.is_int() && right.as_int() >= 0) {
-                    int64_t base = left.as_int();
-                    int64_t exp = right.as_int();
-                    int64_t res = 1;
-                    for (int64_t i = 0; i < exp; ++i) res *= base;
-                    last_evaluated_value_ = Value::make_int(res);
-                } else {
-                    last_evaluated_value_ = Value::make_float(std::pow(left.as_float(), right.as_float()));
-                }
-                return;
-            }
-            type_error("power operator '**' requires numbers, got " + left.type_name() + " and " + right.type_name(), expr.span());
+            last_evaluated_value_ = arithmetic(expr.op(), left, right, expr.span());
             return;
 
         case TokenType::EQUAL_EQUAL:
@@ -839,6 +723,15 @@ Value Interpreter::call_function(const Value& callee, const std::vector<Value>& 
             }
         } catch (const ReturnSignal& sig) {
             return_val = sig.value;
+        } catch (const BreakSignal&) {
+            environment_ = previous_env;
+            runtime_error("break statement outside loop in function", span);
+        } catch (const ContinueSignal&) {
+            environment_ = previous_env;
+            runtime_error("continue statement outside loop in function", span);
+        } catch (...) {
+            environment_ = previous_env;
+            throw;
         }
 
         environment_ = previous_env;
@@ -1219,111 +1112,68 @@ void Interpreter::visit_pipe(const PipeExpr& expr) {
     last_evaluated_value_ = call_function(callee, {input}, expr.span());
 }
 
-void Interpreter::visit_assign(const AssignExpr& expr) {
-    Value val = evaluate(expr.value());
+Value Interpreter::arithmetic(TokenType op, const Value& left, const Value& right, SourceSpan span) {
+    try {
+        return apply_arithmetic(op, left, right);
+    } catch (const std::domain_error&) {
+        division_by_zero_error(span);
+    } catch (const std::invalid_argument& error) {
+        type_error(error.what(), span);
+    } catch (const std::exception& error) {
+        runtime_error(error.what(), span);
+    }
+}
 
+void Interpreter::visit_assign(const AssignExpr& expr) {
+    // Evaluate a collection target and its index once, before the RHS. Keep the
+    // current value by copy: evaluating the RHS can mutate or resize the target.
     if (expr.is_index_assign()) {
         const auto* idx = expr.index_target();
         Value target = evaluate(idx->target());
-        Value index_val = evaluate(idx->index());
-
+        Value index = evaluate(idx->index());
+        Value current;
+        int64_t position = 0;
+        std::string key;
         if (target.is_array()) {
-            auto arr = target.as_array();
-            if (!index_val.is_int()) {
-                runtime_error("array index must be an integer", expr.span());
-            }
-            int64_t i = index_val.as_int();
-            if (i < 0) i += static_cast<int64_t>(arr->size());
-            if (i < 0 || static_cast<size_t>(i) >= arr->size()) {
-                runtime_error("array index out of bounds on assignment", expr.span());
-            }
-
-            if (expr.op() == TokenType::ASSIGN) {
-                (*arr)[static_cast<size_t>(i)] = val;
-            } else {
-                // Compound assignment
-                Value cur = (*arr)[static_cast<size_t>(i)];
-                if (expr.op() == TokenType::PLUS_ASSIGN && cur.is_int() && val.is_int()) {
-                    (*arr)[static_cast<size_t>(i)] = Value::make_int(cur.as_int() + val.as_int());
-                } else if (expr.op() == TokenType::MINUS_ASSIGN && cur.is_int() && val.is_int()) {
-                    (*arr)[static_cast<size_t>(i)] = Value::make_int(cur.as_int() - val.as_int());
-                } else {
-                    runtime_error("compound assignment unsupported on array element", expr.span());
-                }
-            }
-            last_evaluated_value_ = val;
-            return;
+            if (!index.is_int()) type_error("array index must be an integer", expr.span());
+            position = index.as_int();
+            if (position < 0) position += static_cast<int64_t>(target.as_array()->size());
+            if (position < 0 || static_cast<size_t>(position) >= target.as_array()->size())
+                index_error("array index out of bounds on assignment", expr.span());
+            current = target.as_array()->at(static_cast<size_t>(position));
+        } else if (target.is_object()) {
+            if (!index.is_string()) type_error("object key must be a string", expr.span());
+            key = index.as_string();
+            auto found = target.as_object()->find(key);
+            if (expr.op() != TokenType::ASSIGN && found == target.as_object()->end())
+                index_error("unknown object key in compound assignment", expr.span());
+            if (found != target.as_object()->end()) current = found->second;
+        } else {
+            type_error("cannot assign index to type " + target.type_name(), expr.span());
         }
-
-        if (target.is_object()) {
-            auto obj = target.as_object();
-            if (!index_val.is_string()) {
-                runtime_error("object key must be a string", expr.span());
-            }
-            (*obj)[index_val.as_string()] = val;
-            last_evaluated_value_ = val;
-            return;
+        Value value = evaluate(expr.value());
+        if (expr.op() != TokenType::ASSIGN)
+            value = arithmetic(compound_operator(expr.op()), current, value, expr.span());
+        if (target.is_array()) {
+            if (static_cast<size_t>(position) >= target.as_array()->size())
+                index_error("assignment target was removed while evaluating the value", expr.span());
+            target.as_array()->at(static_cast<size_t>(position)) = value;
+        } else {
+            (*target.as_object())[key] = value;
         }
-
-        runtime_error("cannot assign index to type " + target.type_name(), expr.span());
+        last_evaluated_value_ = value;
         return;
     }
 
-    // Variable assignment
-    if (expr.op() != TokenType::ASSIGN) {
-        auto current_val = environment_->get(expr.name());
-        if (!current_val) {
-            runtime_error("undefined variable '" + expr.name() + "'", expr.span());
-        }
-        if (expr.op() == TokenType::PLUS_ASSIGN) {
-            if (current_val->is_int() && val.is_int()) {
-                val = Value::make_int(current_val->as_int() + val.as_int());
-            } else if (current_val->is_number() && val.is_number()) {
-                val = Value::make_float(current_val->as_float() + val.as_float());
-            } else if (current_val->is_string() || val.is_string()) {
-                val = Value::make_string(current_val->to_string() + val.to_string());
-            } else {
-                runtime_error("invalid operands for '+='", expr.span());
-            }
-        } else if (expr.op() == TokenType::MINUS_ASSIGN) {
-            if (current_val->is_int() && val.is_int()) {
-                val = Value::make_int(current_val->as_int() - val.as_int());
-            } else if (current_val->is_number() && val.is_number()) {
-                val = Value::make_float(current_val->as_float() - val.as_float());
-            } else {
-                runtime_error("invalid operands for '-='", expr.span());
-            }
-        } else if (expr.op() == TokenType::STAR_ASSIGN) {
-            if (current_val->is_int() && val.is_int()) {
-                val = Value::make_int(current_val->as_int() * val.as_int());
-            } else if (current_val->is_number() && val.is_number()) {
-                val = Value::make_float(current_val->as_float() * val.as_float());
-            } else {
-                runtime_error("invalid operands for '*='", expr.span());
-            }
-        } else if (expr.op() == TokenType::SLASH_ASSIGN) {
-            if (current_val->is_number() && val.is_number()) {
-                double r = val.as_float();
-                if (r == 0.0) runtime_error("division by zero in '/='", expr.span());
-                val = Value::make_float(current_val->as_float() / r);
-            } else {
-                runtime_error("invalid operands for '/='", expr.span());
-            }
-        } else if (expr.op() == TokenType::PERCENT_ASSIGN) {
-            if (!current_val->is_int() || !val.is_int()) type_error("operator '%=' requires integers", expr.span());
-            if (val.as_int() == 0) division_by_zero_error(expr.span());
-            if (current_val->as_int() == INT64_MIN && val.as_int() == -1) val = Value::make_int(0);
-            else val = Value::make_int(current_val->as_int() % val.as_int());
-        } else {
-            runtime_error("unsupported compound assignment", expr.span());
-        }
-    }
-
-    std::string err;
-    if (!environment_->assign(expr.name(), val, err)) {
-        runtime_error(err, expr.span());
-    }
-    last_evaluated_value_ = val;
+    auto current = environment_->get(expr.name());
+    if (!current && expr.op() != TokenType::ASSIGN)
+        name_error("undefined variable '" + expr.name() + "'", expr.span());
+    Value value = evaluate(expr.value());
+    if (expr.op() != TokenType::ASSIGN)
+        value = arithmetic(compound_operator(expr.op()), *current, value, expr.span());
+    std::string error;
+    if (!environment_->assign(expr.name(), value, error)) runtime_error(error, expr.span());
+    last_evaluated_value_ = value;
 }
 
 void Interpreter::visit_range(const RangeExpr& expr) {
@@ -1340,13 +1190,7 @@ void Interpreter::visit_range(const RangeExpr& expr) {
         end = ev.as_int();
     }
 
-    std::vector<Value> elements;
-    if (expr.inclusive()) {
-        for (int64_t i = start; i <= end; ++i) elements.push_back(Value::make_int(i));
-    } else {
-        for (int64_t i = start; i < end; ++i) elements.push_back(Value::make_int(i));
-    }
-    last_evaluated_value_ = Value::make_array(std::move(elements));
+    last_evaluated_value_ = make_range_values(start, end, 1, expr.inclusive());
 }
 
 void Interpreter::visit_lambda(const LambdaExpr& expr) {
@@ -1416,105 +1260,53 @@ void Interpreter::visit_while_stmt(const WhileStmt& stmt) {
 }
 
 void Interpreter::visit_for_in_stmt(const ForInStmt& stmt) {
-    if (const auto* range_expr = dynamic_cast<const RangeExpr*>(&stmt.iterable())) {
-        int64_t start = 0;
-        int64_t end = 0;
-        if (range_expr->start()) {
-            Value sv = evaluate(*range_expr->start());
-            if (!sv.is_int()) runtime_error("range start must be an integer", range_expr->start()->span());
-            start = sv.as_int();
+    auto iteration = [&](const Value& value) {
+        auto previous = environment_;
+        environment_ = Environment::create(previous);
+        environment_->define(stmt.variable_name(), value, true);
+        struct Restore {
+            std::shared_ptr<Environment>& current;
+            std::shared_ptr<Environment> previous;
+            ~Restore() { current = std::move(previous); }
+        } restore{environment_, previous};
+        try {
+            execute_statement(stmt.body());
+        } catch (const BreakSignal&) {
+            return false;
+        } catch (const ContinueSignal&) {
+            return true;
         }
-        if (range_expr->end()) {
-            Value ev = evaluate(*range_expr->end());
-            if (!ev.is_int()) runtime_error("range end must be an integer", range_expr->end()->span());
-            end = ev.as_int();
-        }
-        bool inclusive = range_expr->inclusive();
-        for (int64_t i = start; inclusive ? (i <= end) : (i < end); ++i) {
-            auto loop_env = Environment::create(environment_);
-            loop_env->define(stmt.variable_name(), Value::make_int(i), true);
-            auto prev_env = environment_;
-            environment_ = loop_env;
-            try {
-                execute_statement(stmt.body());
-            } catch (const BreakSignal&) {
-                environment_ = prev_env;
-                break;
-            } catch (const ContinueSignal&) {
-                environment_ = prev_env;
-                continue;
-            }
-            environment_ = prev_env;
+        return true;
+    };
+    if (const auto* range = dynamic_cast<const RangeExpr*>(&stmt.iterable())) {
+        Value first = range->start() ? evaluate(*range->start()) : Value::make_int(0);
+        Value last = range->end() ? evaluate(*range->end()) : Value::make_int(0);
+        if (!first.is_int() || !last.is_int()) type_error("range bounds must be integers", stmt.span());
+        int64_t value = first.as_int();
+        const int64_t end = last.as_int();
+        while (range->inclusive() ? value <= end : value < end) {
+            if (!iteration(Value::make_int(value)) || value == INT64_MAX) break;
+            ++value;
         }
         return;
     }
-
-    Value iter = evaluate(stmt.iterable());
-
-    if (iter.is_array()) {
-        auto arr = iter.as_array();
-        for (const auto& item : *arr) {
-            auto loop_env = Environment::create(environment_);
-            loop_env->define(stmt.variable_name(), item, true);
-            auto prev_env = environment_;
-            environment_ = loop_env;
-            try {
-                execute_statement(stmt.body());
-            } catch (const BreakSignal&) {
-                environment_ = prev_env;
-                break;
-            } catch (const ContinueSignal&) {
-                environment_ = prev_env;
-                continue;
-            }
-            environment_ = prev_env;
-        }
-        return;
+    Value iterable = evaluate(stmt.iterable());
+    // Iteration visits a snapshot. Resizing a collection from a handler or loop
+    // body must not invalidate C++ iterators or make the loop unbounded.
+    if (iterable.is_array()) {
+        const auto values = *iterable.as_array();
+        for (const auto& value : values) if (!iteration(value)) break;
+    } else if (iterable.is_string()) {
+        const auto text = iterable.as_string();
+        for (char character : text)
+            if (!iteration(Value::make_string(std::string(1, character)))) break;
+    } else if (iterable.is_object()) {
+        std::vector<std::string> keys;
+        for (const auto& [key, value] : *iterable.as_object()) { (void)value; keys.push_back(key); }
+        for (const auto& key : keys) if (!iteration(Value::make_string(key))) break;
+    } else {
+        type_error("for..in requires iterable (Array, Map, or String), got " + iterable.type_name(), stmt.span());
     }
-
-    if (iter.is_string()) {
-        const std::string& str = iter.as_string();
-        for (char c : str) {
-            auto loop_env = Environment::create(environment_);
-            loop_env->define(stmt.variable_name(), Value::make_string(std::string(1, c)), true);
-            auto prev_env = environment_;
-            environment_ = loop_env;
-            try {
-                execute_statement(stmt.body());
-            } catch (const BreakSignal&) {
-                environment_ = prev_env;
-                break;
-            } catch (const ContinueSignal&) {
-                environment_ = prev_env;
-                continue;
-            }
-            environment_ = prev_env;
-        }
-        return;
-    }
-
-    if (iter.is_object()) {
-        auto obj = iter.as_object();
-        for (const auto& [key, val] : *obj) {
-            auto loop_env = Environment::create(environment_);
-            loop_env->define(stmt.variable_name(), Value::make_string(key), true);
-            auto prev_env = environment_;
-            environment_ = loop_env;
-            try {
-                execute_statement(stmt.body());
-            } catch (const BreakSignal&) {
-                environment_ = prev_env;
-                break;
-            } catch (const ContinueSignal&) {
-                environment_ = prev_env;
-                continue;
-            }
-            environment_ = prev_env;
-        }
-        return;
-    }
-
-    runtime_error("for..in requires iterable (Array, Map, or String), got " + iter.type_name(), stmt.span());
 }
 
 void Interpreter::visit_return_stmt(const ReturnStmt& stmt) {

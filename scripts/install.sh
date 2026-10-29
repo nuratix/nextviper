@@ -1,84 +1,46 @@
 #!/usr/bin/env bash
-# ==============================================================================
-# NextViper Official Installation Script
-# https://nextviper.nuratix.com
-# ==============================================================================
 set -euo pipefail
 
-VERSION="1.0.0"
+SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_DIR="${NEXTVIPER_INSTALL_DIR:-$HOME/.local/bin}"
-REPO_URL="https://github.com/nuratix/nextviper"
 
-echo "=================================================="
-echo "      NextViper Installer v${VERSION}"
-echo "=================================================="
-
-# 1. Detect Operating System and Architecture
-OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
-
-case "$ARCH" in
-    x86_64|amd64)
-        ARCH="x86_64"
-        ;;
-    aarch64|arm64)
-        ARCH="aarch64"
-        ;;
-    armv7l|armv8l)
-        ARCH="arm"
-        ;;
-    *)
-        echo "Warning: Architecture '$ARCH' may require compilation from source."
-        ;;
-esac
-
-echo "Detected OS:           ${OS}"
-echo "Detected Architecture: ${ARCH}"
-echo "Target Directory:      ${INSTALL_DIR}"
-echo ""
-
-mkdir -p "${INSTALL_DIR}"
-
-# 2. Check if local repository build is present
-if [ -f "./bin/nextviper" ]; then
-    echo "Found local binary build. Installing..."
-    cp -f ./bin/nextviper "${INSTALL_DIR}/nextviper"
-    chmod +x "${INSTALL_DIR}/nextviper"
-    if [ -f "./bin/nextviper-lsp" ]; then
-        cp -f ./bin/nextviper-lsp "${INSTALL_DIR}/nextviper-lsp"
-        chmod +x "${INSTALL_DIR}/nextviper-lsp"
-    fi
-    echo "✓ Installed local NextViper binaries to ${INSTALL_DIR}"
-elif command -v make >/dev/null 2>&1 && command -v g++ >/dev/null 2>&1 && [ -f "./Makefile" ]; then
-    echo "Building NextViper from source..."
-    make -j"$(nproc 2>/dev/null || echo 2)"
-    cp -f ./bin/nextviper "${INSTALL_DIR}/nextviper"
-    chmod +x "${INSTALL_DIR}/nextviper"
-    if [ -f "./bin/nextviper-lsp" ]; then
-        cp -f ./bin/nextviper-lsp "${INSTALL_DIR}/nextviper-lsp"
-        chmod +x "${INSTALL_DIR}/nextviper-lsp"
-    fi
-    echo "✓ Built and installed NextViper to ${INSTALL_DIR}"
-else
-    echo "Note: Remote release artifact distribution is managed via GitHub Releases."
-    echo "To build and install from source:"
-    echo "  git clone ${REPO_URL}.git"
-    echo "  cd nextviper && make -j4 && ./scripts/install.sh"
+if [[ "${1:-}" == "--help" ]]; then
+    echo "Usage: bash scripts/install.sh [--uninstall]"
+    echo "NEXTVIPER_INSTALL_DIR sets the binary destination (default: ~/.local/bin)."
+    echo "NEXTVIPER_BUILD_DIR selects an existing CMake build directory."
+    exit 0
+fi
+if [[ "${1:-}" == "--uninstall" && $# == 1 ]]; then
+    rm -f -- "$INSTALL_DIR/nextviper" "$INSTALL_DIR/nextviper-lsp"
+    echo "Removed NextViper binaries from $INSTALL_DIR"
+    exit 0
+fi
+if [[ $# != 0 ]]; then
+    echo "Unknown installer argument. Use --help." >&2
+    exit 1
 fi
 
-# 3. Verify PATH
-if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
-    echo ""
-    echo "=================================================="
-    echo "Notice: ${INSTALL_DIR} is not currently in your PATH."
-    echo "Add the following line to your shell configuration profile (~/.bashrc or ~/.zshrc):"
-    echo ""
-    echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
-    echo "=================================================="
+if [[ -n "${NEXTVIPER_BUILD_DIR:-}" ]]; then
+    BINARY_DIR="$NEXTVIPER_BUILD_DIR/bin"
+elif [[ -f "$SOURCE_DIR/Makefile" ]]; then
+    make -C "$SOURCE_DIR" -j"${NEXTVIPER_BUILD_JOBS:-2}" all
+    BINARY_DIR="$SOURCE_DIR/bin"
 else
-    echo ""
-    echo "✓ ${INSTALL_DIR} is already in your PATH."
+    BINARY_DIR="$SOURCE_DIR/bin"
 fi
-
-echo ""
-echo "NextViper installation step completed."
+for name in nextviper nextviper-lsp; do
+    if [[ ! -x "$BINARY_DIR/$name" ]]; then
+        echo "Missing executable: $BINARY_DIR/$name. Build NextViper first." >&2
+        exit 1
+    fi
+done
+"$BINARY_DIR/nextviper" --version
+mkdir -p -- "$INSTALL_DIR"
+for name in nextviper nextviper-lsp; do
+    install -m 755 -- "$BINARY_DIR/$name" "$INSTALL_DIR/.$name.installing.$$"
+    mv -f -- "$INSTALL_DIR/.$name.installing.$$" "$INSTALL_DIR/$name"
+done
+echo "Installed NextViper and its language server into $INSTALL_DIR"
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo "Add this directory to PATH in your shell configuration: $INSTALL_DIR"
+fi

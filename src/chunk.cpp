@@ -12,6 +12,7 @@ std::string_view opcode_to_string(OpCode op) {
         case OpCode::OP_FALSE: return "OP_FALSE";
         case OpCode::OP_POP: return "OP_POP";
         case OpCode::OP_DUP: return "OP_DUP";
+        case OpCode::OP_DUP_TWO: return "OP_DUP_TWO";
         case OpCode::OP_GET_LOCAL: return "OP_GET_LOCAL";
         case OpCode::OP_SET_LOCAL: return "OP_SET_LOCAL";
         case OpCode::OP_GET_GLOBAL: return "OP_GET_GLOBAL";

@@ -115,7 +115,7 @@ static NV nv_binary(const std::string& op,const NV& a,const NV& b) {
         NV v;v.kind=NV::Array;v.a=std::make_shared<NVArgs>(*a.a);v.a->insert(v.a->end(),b.a->begin(),b.a->end());return v;
     }
     if(op=="mul" && a.kind==NV::String && b.kind==NV::Int) {
-        if(b.i<0)return nv_s("");if(!a.s.empty() && static_cast<uint64_t>(b.i)>67108864/a.s.size())nv_error("string size limit exceeded");
+        if(b.i<=0||a.s.empty())return nv_s("");if(!a.s.empty() && static_cast<uint64_t>(b.i)>67108864/a.s.size())nv_error("string size limit exceeded");
         std::string s;for(int64_t j=0;j<b.i;++j)s+=a.s;return nv_s(std::move(s));
     }
     if(op=="lt"||op=="le"||op=="gt"||op=="ge") {
@@ -128,7 +128,10 @@ static NV nv_binary(const std::string& op,const NV& a,const NV& b) {
     if(op=="mod") { auto x=nv_int(a),y=nv_int(b);if(!y)nv_error("division by zero");return nv_i(x==INT64_MIN&&y==-1?0:x%y); }
     if(op=="div") {
         double y=nv_num(b);if(y==0)nv_error("division by zero");
-        if(a.kind==NV::Int&&b.kind==NV::Int&&!(a.i==INT64_MIN&&b.i==-1)&&a.i%b.i==0)return nv_i(a.i/b.i);
+        if(a.kind==NV::Int&&b.kind==NV::Int) {
+            if(a.i==INT64_MIN&&b.i==-1)nv_error("integer overflow");
+            if(a.i%b.i==0)return nv_i(a.i/b.i);
+        }
         return nv_f(nv_num(a)/y);
     }
     if(a.kind==NV::Int&&b.kind==NV::Int&&(op=="add"||op=="sub"||op=="mul")) {
@@ -152,6 +155,7 @@ static NV nv_call(const NV& function,const NVArgs& args) {
 }
 static NV nv_builtin(std::string name,const NVArgs& args) {
     auto arity=[&](size_t n){if(args.size()!=n)nv_error(name+" argument count mismatch");};
+    bool math_module = name.starts_with("math_");
     if(name.starts_with("math_"))name=name.substr(5);
     if(name=="array_new") { arity(0);NV v;v.kind=NV::Array;v.a=std::make_shared<NVArgs>();return v; }
     if(name=="object_new") { arity(0);NV v;v.kind=NV::Map;v.m=std::make_shared<std::map<std::string,NV>>();return v; }
@@ -184,12 +188,12 @@ static NV nv_builtin(std::string name,const NVArgs& args) {
     if(name=="time_now"||name=="time_now_ms") { arity(0);auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();return nv_i(name=="time_now"?ms/1000:ms); }
     if(name=="time_sleep") {arity(1);auto n=nv_int(args[0]);if(n<0)nv_error("negative sleep duration");std::this_thread::sleep_for(std::chrono::milliseconds(n));return {};}
     if(name=="sqrt"||name=="cbrt"||name=="floor"||name=="ceil"||name=="round"||name=="abs"||name=="sin"||name=="cos") {
-        arity(1);double x=nv_num(args[0]);if(name=="sqrt")return nv_f(std::sqrt(x));if(name=="cbrt")return nv_f(std::cbrt(x));
+        arity(1);double x=nv_num(args[0]);if(name=="sqrt"){if(x<0)nv_error("cannot take sqrt of negative number");return nv_f(std::sqrt(x));}if(name=="cbrt")return nv_f(std::cbrt(x));
         if(name=="floor")return nv_f(std::floor(x));if(name=="ceil")return nv_f(std::ceil(x));if(name=="round")return nv_f(std::round(x));
         if(name=="sin")return nv_f(std::sin(x));if(name=="cos")return nv_f(std::cos(x));
         if(args[0].kind==NV::Int) {if(args[0].i==INT64_MIN)nv_error("integer overflow");return nv_i(args[0].i<0?-args[0].i:args[0].i);}return nv_f(std::abs(x));
     }
-    if(name=="pow") {arity(2);return nv_f(std::pow(nv_num(args[0]),nv_num(args[1])));}
+    if(name=="pow") {arity(2);return math_module?nv_f(std::pow(nv_num(args[0]),nv_num(args[1]))):nv_binary("pow",args[0],args[1]);}
     if(name=="min"||name=="max") {arity(2);bool less=nv_truth(nv_binary("lt",args[0],args[1]));return args[(name=="min"?less:!less)?0:1];}
     if(name=="str") {arity(1);return nv_s(nv_text(args[0]));}
     if(name=="assert") {if(args.empty()||args.size()>2)nv_error("assert argument count mismatch");if(!nv_truth(args[0]))nv_error(args.size()==2?nv_text(args[1]):"assertion failed");return nv_b(true);}

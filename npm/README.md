@@ -1,88 +1,34 @@
-<p align="center">
-  <a href="https://nextviper.nuratix.com">
-    <img src="https://nextviper.nuratix.com/logo-black.png" alt="NextViper Logo" width="180" height="auto" />
-  </a>
-</p>
+# NextViper npm launcher
 
-<p align="center">
-  <a href="https://nuratix.com">
-    <img src="https://www.nuratix.com/nuratix-logo-light.png" alt="By Nuratix" width="140" height="auto" />
-  </a>
-</p>
+This package launches an **already installed NextViper native toolchain**. It
+does not bundle, build, or download the compiler. NextViper remains experimental;
+see the [project status](https://github.com/nuratix/nextviper/blob/main/CURRENT_STATUS.md).
 
-# nextviper
+Build and install the toolchain using the repository README, then set explicit
+paths to the executables:
 
-Official npm distribution and CLI runner for the **NextViper** programming language, developed and maintained by **Nuratix** ([https://nuratix.com](https://nuratix.com)).
-
-NextViper is a modern, compiled, high-performance programming language designed for columnar Data, N-dimensional Tensors, AI/ML, and Khronos Vulkan GPU acceleration.
-
-- **Website**: [https://nextviper.nuratix.com](https://nextviper.nuratix.com)
-- **Documentation**: [https://nextviper.nuratix.com/docs](https://nextviper.nuratix.com/docs)
-- **6-Day Master Course**: [https://nextviper.nuratix.com/learn](https://nextviper.nuratix.com/learn)
-- **GitHub**: [https://github.com/nuratix/nextviper](https://github.com/nuratix/nextviper)
-
----
-
-## 🚀 Quick Usage with `npx`
-
-Execute NextViper programs directly without manual setup:
-
-```bash
-# Run a script
-npx nextviper run script.nv
-
-# Check syntax & types with JSON output
-npx nextviper check script.nv --format=json
-
-# Format code in-place
-npx nextviper fmt src/
-
-# Launch the interactive REPL
-npx nextviper repl
-
-# Initialize a package workspace
-npx nextviper init my_project
+```sh
+export NEXTVIPER_BIN="$HOME/.local/bin/nextviper"
+export NEXTVIPER_LSP_BIN="$HOME/.local/bin/nextviper-lsp"
+npx nextviper run hello.nv
 ```
 
----
+The launcher also searches `NEXTVIPER_HOME/bin` (default `~/.nextviper/bin`) and
+PATH. It skips its own npm executable links to prevent recursive invocation.
+Missing binaries produce an installation error. Arguments are forwarded without
+a shell, and the native process exit code is preserved.
 
-## 📦 Global Installation
+For Node.js:
 
-```bash
-npm install -g nextviper
+```js
+const nextviper = require('nextviper');
+const result = nextviper.eval('print("Hello")');
+if (result.status !== 0) throw new Error(result.stderr);
+console.log(result.stdout);
+
+const diagnostics = nextviper.check('hello.nv');
+console.log(diagnostics.success, diagnostics.diagnostics);
 ```
 
-Then run `nextviper` directly:
-
-```bash
-nextviper --version
-nextviper info
-```
-
----
-
-## 💻 Programmatic Node.js API
-
-```typescript
-import { run, check, eval as evaluate } from "nextviper";
-
-// Evaluate code inline
-const evalResult = evaluate('print("Hello from NextViper via npm!")');
-console.log(evalResult.stdout);
-
-// Type check source file
-const checkResult = check("src/main.nv");
-if (!checkResult.success) {
-  console.error("Diagnostics:", checkResult.diagnostics);
-}
-
-// Run a NextViper script
-const runResult = run("src/main.nv");
-console.log(runResult.stdout);
-```
-
----
-
-## 📜 License
-
-Apache-2.0 © 2026 Nuratix.
+`run`, `eval`, and `check` are synchronous. The native runtime must be installed
+on the same supported Linux machine. Apache-2.0, developed by Nuratix.

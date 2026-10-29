@@ -1,29 +1,11 @@
-const { spawnSync, execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const { spawnSync } = require('node:child_process');
+const { resolveBinary } = require('./launcher');
 
-const HOME = os.homedir();
-const NEXTVIPER_HOME = process.env.NEXTVIPER_HOME || path.join(HOME, '.nextviper');
-const BIN_PATH = path.join(NEXTVIPER_HOME, 'bin', 'nextviper');
-
-function getBinaryPath() {
-  if (process.env.NEXTVIPER_BIN && fs.existsSync(process.env.NEXTVIPER_BIN)) {
-    return process.env.NEXTVIPER_BIN;
-  }
-  if (fs.existsSync(BIN_PATH)) {
-    return BIN_PATH;
-  }
-  try {
-    const which = execSync('which nextviper 2>/dev/null', { encoding: 'utf-8' }).trim();
-    if (which && fs.existsSync(which)) return which;
-  } catch (e) {}
-  return null;
-}
+function getBinaryPath() { return resolveBinary('nextviper'); }
 
 function run(filePath, args = [], options = {}) {
   const bin = getBinaryPath();
-  if (!bin) throw new Error("NextViper binary not found. Run 'npx nextviper' to initialize toolchain.");
+  if (!bin) throw new Error("NextViper native binary not found. Install the toolchain and set NEXTVIPER_BIN.");
   return spawnSync(bin, ['run', filePath, ...args], {
     encoding: 'utf-8',
     ...options
@@ -37,10 +19,13 @@ function check(filePath, options = {}) {
     encoding: 'utf-8',
     ...options
   });
+  if (res.error) throw res.error;
   try {
-    return JSON.parse(res.stdout || '{}');
-  } catch (e) {
-    return { raw: res.stdout, error: res.stderr };
+    const diagnostics = JSON.parse(res.stdout || '[]');
+    if (!Array.isArray(diagnostics)) throw new Error('Expected a diagnostic array');
+    return { success: res.status === 0, diagnostics };
+  } catch (error) {
+    return { success: false, diagnostics: [], raw: res.stdout, error: res.stderr || error.message };
   }
 }
 

@@ -59,6 +59,7 @@ private:
         std::vector<size_t> loop_starts;
         std::vector<std::vector<size_t>> break_jumps;
         std::vector<std::vector<size_t>> continue_jumps;
+        std::vector<size_t> loop_local_counts;
     };
 
     Chunk& current_chunk();
@@ -68,6 +69,7 @@ private:
     void emit_opcode(OpCode op);
     void emit_bytes(uint8_t byte1, uint8_t byte2);
     void emit_constant(Value value);
+    uint8_t constant_index(Value value);
     size_t emit_jump(OpCode op);
     void patch_jump(size_t offset);
     void emit_loop(size_t loop_start);

@@ -1,5 +1,7 @@
 #include "nextviper/vm.hpp"
 #include "nextviper/compiler.hpp"
+#include "nextviper/arithmetic.hpp"
+#include "nextviper/type_checker.hpp"
 #include <iostream>
 #include <cmath>
 #include <chrono>
@@ -19,21 +21,21 @@ void VM::reset_stack() {
 
 void VM::push(Value value) {
     if (stack_top_ >= stack_.data() + STACK_MAX) {
-        runtime_error("stack overflow");
-        return;
+        throw std::runtime_error("VM stack overflow");
     }
     *stack_top_++ = std::move(value);
 }
 
 Value VM::pop() {
     if (stack_top_ == stack_.data()) {
-        runtime_error("stack underflow");
-        return Value::make_nil();
+        throw std::runtime_error("VM stack underflow");
     }
     return *(--stack_top_);
 }
 
 Value VM::peek(int distance) const {
+    if (distance < 0 || static_cast<size_t>(stack_top_ - stack_.data()) <= static_cast<size_t>(distance))
+        throw std::runtime_error("VM stack underflow");
     return *(stack_top_ - 1 - distance);
 }
 
@@ -86,25 +88,25 @@ void VM::init_builtins() {
     });
 
     define_native("range", -1, [](const std::vector<Value>& args, SourceSpan) -> Value {
-        int64_t start = 0, end = 0, step = 1;
-        if (args.size() == 1) {
-            end = args[0].as_int();
-        } else if (args.size() == 2) {
-            start = args[0].as_int();
-            end = args[1].as_int();
-        } else if (args.size() >= 3) {
-            start = args[0].as_int();
-            end = args[1].as_int();
-            step = args[2].as_int();
-            if (step == 0) step = 1;
+        if (args.empty() || args.size() > 3) throw std::invalid_argument("range requires 1 to 3 arguments");
+        for (const auto& arg : args) if (!arg.is_int()) throw std::invalid_argument("range arguments must be integers");
+        return make_range_values(args.size() == 1 ? 0 : args[0].as_int(),
+                                 args[args.size() == 1 ? 0 : 1].as_int(),
+                                 args.size() == 3 ? args[2].as_int() : 1);
+    });
+    define_native("$range_inclusive", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (!args[0].is_int() || !args[1].is_int()) throw std::invalid_argument("range bounds must be integers");
+        return make_range_values(args[0].as_int(), args[1].as_int(), 1, true);
+    });
+    define_native("$iter_snapshot", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
+        if (args[0].is_array()) return Value::make_array(*args[0].as_array());
+        if (args[0].is_string()) return args[0];
+        if (args[0].is_object()) {
+            std::vector<Value> keys;
+            for (const auto& [key, value] : *args[0].as_object()) { (void)value; keys.push_back(Value::make_string(key)); }
+            return Value::make_array(std::move(keys));
         }
-        std::vector<Value> res;
-        if (step > 0) {
-            for (int64_t i = start; i < end; i += step) res.push_back(Value::make_int(i));
-        } else {
-            for (int64_t i = start; i > end; i += step) res.push_back(Value::make_int(i));
-        }
-        return Value::make_array(std::move(res));
+        throw std::invalid_argument("for..in requires an iterable");
     });
 
     define_native("push", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
@@ -320,7 +322,7 @@ void VM::init_builtins() {
     });
 
     define_native("abs", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
-        if (args[0].is_int()) return Value::make_int(std::abs(args[0].as_int()));
+        if (args[0].is_int()) return Value::make_int(args[0].as_int() < 0 ? checked_subtract(0, args[0].as_int()) : args[0].as_int());
         if (args[0].is_float()) return Value::make_float(std::abs(args[0].as_float()));
         return args[0];
     });
@@ -334,12 +336,7 @@ void VM::init_builtins() {
     });
 
     define_native("pow", 2, [](const std::vector<Value>& args, SourceSpan) -> Value {
-        if (args[0].is_int() && args[1].is_int() && args[1].as_int() >= 0) {
-            int64_t base = args[0].as_int(), exp = args[1].as_int(), res = 1;
-            for (int64_t i = 0; i < exp; ++i) res *= base;
-            return Value::make_int(res);
-        }
-        return Value::make_float(std::pow(args[0].as_float(), args[1].as_float()));
+        return apply_arithmetic(TokenType::POWER, args[0], args[1]);
     });
 
     define_native("sqrt", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
@@ -353,7 +350,7 @@ void VM::init_builtins() {
     define_native("int", 1, [](const std::vector<Value>& args, SourceSpan) -> Value {
         const auto& v = args[0];
         if (v.is_int()) return v;
-        if (v.is_float()) return Value::make_int(static_cast<int64_t>(v.as_float()));
+        if (v.is_float()) return Value::make_int(checked_float_to_int(v.as_float()));
         if (v.is_string()) {
             try { return Value::make_int(std::stoll(v.as_string())); } catch (...) {}
         }
@@ -376,6 +373,8 @@ void VM::runtime_error(const std::string& message) {
 }
 
 VMResult VM::execute(const Program& program) {
+    TypeChecker checker(diagnostics_);
+    if (!checker.check(program)) return VMResult::COMPILE_ERROR;
     BytecodeCompiler compiler(diagnostics_);
     auto fn = compiler.compile(program);
     if (diagnostics_.has_errors() || !fn) {
@@ -393,16 +392,26 @@ VMResult VM::run(std::shared_ptr<CompiledFunction> function) {
     frame->ip = function->chunk().code().data();
     frame->slots = stack_.data();
 
-    return run_interpreter();
+    try {
+        return run_interpreter();
+    } catch (const std::exception& error) {
+        runtime_error(error.what());
+        reset_stack();
+        return VMResult::RUNTIME_ERROR;
+    }
 }
 
 Value VM::call_value(Value callee, const std::vector<Value>& args) {
     if (callee.type() == ValueType::NATIVE_FUNCTION) {
         auto nfn = callee.as_native_fn();
+        if (nfn->arity >= 0 && args.size() != static_cast<size_t>(nfn->arity))
+            throw std::invalid_argument("native function argument count mismatch");
         return nfn->func(args, SourceSpan{});
     }
     if (callee.type() == ValueType::COMPILED_FUNCTION) {
         auto fn = callee.as_compiled_fn();
+        if (args.size() != fn->arity()) throw std::invalid_argument("function argument count mismatch");
+        if (frame_count_ >= FRAMES_MAX) throw std::runtime_error("VM call stack overflow");
         size_t base_frame = frame_count_;
         push(callee);
         for (const auto& a : args) push(a);
@@ -416,9 +425,9 @@ Value VM::call_value(Value callee, const std::vector<Value>& args) {
         if (res == VMResult::OK) {
             return pop();
         }
-        return Value::make_nil();
+        throw std::runtime_error("VM callback execution failed");
     }
-    return Value::make_nil();
+    throw std::invalid_argument("cannot call a non-function");
 }
 
 VMResult VM::run_interpreter(size_t target_frame_count) {
@@ -444,6 +453,12 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
             case OpCode::OP_FALSE: push(Value::make_bool(false)); break;
             case OpCode::OP_POP: pop(); break;
             case OpCode::OP_DUP: push(peek(0)); break;
+            case OpCode::OP_DUP_TWO: {
+                Value target = peek(1), index = peek(0);
+                push(target);
+                push(index);
+                break;
+            }
 
             case OpCode::OP_GET_LOCAL: {
                 uint8_t slot = READ_BYTE();
@@ -535,101 +550,26 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
                 break;
             }
 
-            case OpCode::OP_ADD: {
-                Value& a = *(stack_top_ - 2);
-                Value& b = *(stack_top_ - 1);
-                if (a.is_int() && b.is_int()) {
-                    a = Value::make_int(a.as_int() + b.as_int());
-                } else if (a.is_number() && b.is_number()) {
-                    a = Value::make_float(a.as_float() + b.as_float());
-                } else if (a.is_string() || b.is_string()) {
-                    a = Value::make_string(a.to_string() + b.to_string());
-                } else if (a.is_array() && b.is_array()) {
-                    auto new_arr = *a.as_array();
-                    const auto& r = *b.as_array();
-                    new_arr.insert(new_arr.end(), r.begin(), r.end());
-                    a = Value::make_array(std::move(new_arr));
-                } else {
-                    runtime_error("operands must be numbers, strings, or arrays");
-                    return VMResult::RUNTIME_ERROR;
-                }
-                stack_top_--;
-                break;
-            }
-            case OpCode::OP_SUBTRACT: {
-                Value& a = *(stack_top_ - 2);
-                Value& b = *(stack_top_ - 1);
-                if (a.is_int() && b.is_int()) {
-                    a = Value::make_int(a.as_int() - b.as_int());
-                } else if (a.is_number() && b.is_number()) {
-                    a = Value::make_float(a.as_float() - b.as_float());
-                } else {
-                    runtime_error("operands must be numbers for '-'");
-                    return VMResult::RUNTIME_ERROR;
-                }
-                stack_top_--;
-                break;
-            }
-            case OpCode::OP_MULTIPLY: {
-                Value& a = *(stack_top_ - 2);
-                Value& b = *(stack_top_ - 1);
-                if (a.is_int() && b.is_int()) {
-                    a = Value::make_int(a.as_int() * b.as_int());
-                } else if (a.is_number() && b.is_number()) {
-                    a = Value::make_float(a.as_float() * b.as_float());
-                } else {
-                    runtime_error("operands must be numbers for '*'");
-                    return VMResult::RUNTIME_ERROR;
-                }
-                stack_top_--;
-                break;
-            }
-            case OpCode::OP_DIVIDE: {
-                Value& a = *(stack_top_ - 2);
-                Value& b = *(stack_top_ - 1);
-                if (b.as_float() == 0.0) {
-                    runtime_error("division by zero");
-                    return VMResult::RUNTIME_ERROR;
-                }
-                if (a.is_int() && b.is_int() && a.as_int() % b.as_int() == 0) {
-                    a = Value::make_int(a.as_int() / b.as_int());
-                } else {
-                    a = Value::make_float(a.as_float() / b.as_float());
-                }
-                stack_top_--;
-                break;
-            }
-            case OpCode::OP_MODULO: {
-                Value& a = *(stack_top_ - 2);
-                Value& b = *(stack_top_ - 1);
-                if (b.as_int() == 0) {
-                    runtime_error("modulo by zero");
-                    return VMResult::RUNTIME_ERROR;
-                }
-                a = Value::make_int(a.as_int() % b.as_int());
-                stack_top_--;
-                break;
-            }
+            case OpCode::OP_ADD:
+            case OpCode::OP_SUBTRACT:
+            case OpCode::OP_MULTIPLY:
+            case OpCode::OP_DIVIDE:
+            case OpCode::OP_MODULO:
             case OpCode::OP_POWER: {
-                Value b = pop();
-                Value a = pop();
-                if (a.is_int() && b.is_int() && b.as_int() >= 0) {
-                    int64_t base = a.as_int(), exp = b.as_int(), res = 1;
-                    for (int64_t i = 0; i < exp; ++i) res *= base;
-                    push(Value::make_int(res));
-                } else {
-                    push(Value::make_float(std::pow(a.as_float(), b.as_float())));
-                }
+                Value right = pop(), left = pop();
+                TokenType token = op == OpCode::OP_ADD ? TokenType::PLUS :
+                                  op == OpCode::OP_SUBTRACT ? TokenType::MINUS :
+                                  op == OpCode::OP_MULTIPLY ? TokenType::STAR :
+                                  op == OpCode::OP_DIVIDE ? TokenType::SLASH :
+                                  op == OpCode::OP_MODULO ? TokenType::PERCENT : TokenType::POWER;
+                push(apply_arithmetic(token, left, right));
                 break;
             }
             case OpCode::OP_NEGATE: {
-                Value a = pop();
-                if (a.is_int()) push(Value::make_int(-a.as_int()));
-                else if (a.is_float()) push(Value::make_float(-a.as_float()));
-                else {
-                    runtime_error("operand must be a number for '-'");
-                    return VMResult::RUNTIME_ERROR;
-                }
+                Value value = pop();
+                if (value.is_int()) push(Value::make_int(checked_subtract(0, value.as_int())));
+                else if (value.is_float()) push(Value::make_float(-value.as_float()));
+                else throw std::invalid_argument("unary '-' requires a number");
                 break;
             }
             case OpCode::OP_NOT: {
@@ -752,6 +692,7 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
                 Value target = pop();
 
                 if (target.is_array()) {
+                    if (!index.is_int()) throw std::invalid_argument("array index must be an integer");
                     auto arr = target.as_array();
                     int64_t idx = index.as_int();
                     int64_t sz = static_cast<int64_t>(arr->size());
@@ -765,6 +706,7 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
                 }
 
                 if (target.is_string()) {
+                    if (!index.is_int()) throw std::invalid_argument("string index must be an integer");
                     const auto& str = target.as_string();
                     int64_t idx = index.as_int();
                     int64_t sz = static_cast<int64_t>(str.size());
@@ -779,17 +721,7 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
 
                 if (target.is_object()) {
                     auto obj = target.as_object();
-                    if (index.is_int()) {
-                        int64_t idx = index.as_int();
-                        if (idx >= 0 && static_cast<size_t>(idx) < obj->size()) {
-                            auto it = obj->begin();
-                            std::advance(it, idx);
-                            push(Value::make_string(it->first));
-                            break;
-                        }
-                        push(Value::make_nil());
-                        break;
-                    }
+                    if (!index.is_string()) throw std::invalid_argument("object key must be a string");
                     auto it = obj->find(index.as_string());
                     push(it != obj->end() ? it->second : Value::make_nil());
                     break;
@@ -805,6 +737,7 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
                 Value target = pop();
 
                 if (target.is_array()) {
+                    if (!index.is_int()) throw std::invalid_argument("array index must be an integer");
                     auto arr = target.as_array();
                     int64_t idx = index.as_int();
                     if (idx < 0) idx += static_cast<int64_t>(arr->size());
@@ -818,6 +751,7 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
                 }
 
                 if (target.is_object()) {
+                    if (!index.is_string()) throw std::invalid_argument("object key must be a string");
                     (*target.as_object())[index.as_string()] = val;
                     push(val);
                     break;

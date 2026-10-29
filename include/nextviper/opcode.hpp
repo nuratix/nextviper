@@ -12,6 +12,7 @@ enum class OpCode : uint8_t {
     OP_FALSE,
     OP_POP,
     OP_DUP,
+    OP_DUP_TWO,
 
     // Variables
     OP_GET_LOCAL,

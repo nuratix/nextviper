@@ -7,6 +7,8 @@
 #include "nextviper/parser.hpp"
 #include "nextviper/interpreter.hpp"
 #include <cmath>
+#include <filesystem>
+#include <unistd.h>
 
 using namespace nextviper;
 
@@ -133,7 +135,15 @@ NV_TEST(AIData, AIModelTrainingInferenceAndSerialization) {
     NV_ASSERT_TRUE(final_loss <= initial_loss);
 
     // 3. Serialization and Deserialization
-    std::string model_file = "build/test_ai_model.nvmodel";
+    // CMake tests must also work without a Make-created source/build directory.
+    auto directory = std::filesystem::temp_directory_path() /
+                     ("nextviper-model-test-" + std::to_string(getpid()));
+    std::filesystem::create_directories(directory);
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code error; std::filesystem::remove_all(path, error); }
+    } cleanup{directory};
+    std::string model_file = (directory / "model.nvmodel").string();
     model.save(model_file);
 
     AIModel loaded_model = AIModel::load(model_file);

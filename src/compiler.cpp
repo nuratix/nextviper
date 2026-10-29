@@ -26,14 +26,19 @@ void BytecodeCompiler::emit_bytes(uint8_t byte1, uint8_t byte2) {
     emit_byte(byte2);
 }
 
-void BytecodeCompiler::emit_constant(Value value) {
-    size_t idx = current_chunk().add_constant(std::move(value));
-    if (idx > 255) {
-        diagnostics_.error("too many constants in one chunk", SourceSpan{});
-        return;
+uint8_t BytecodeCompiler::constant_index(Value value) {
+    size_t index = current_chunk().add_constant(std::move(value));
+    if (index > 255) {
+        diagnostics_.error("too many constants in one VM chunk (limit: 256); run with the interpreter", SourceSpan{});
+        return 0;
     }
+    return static_cast<uint8_t>(index);
+}
+
+void BytecodeCompiler::emit_constant(Value value) {
+    auto index = constant_index(std::move(value));
     emit_opcode(OpCode::OP_CONSTANT);
-    emit_byte(static_cast<uint8_t>(idx));
+    emit_byte(index);
 }
 
 size_t BytecodeCompiler::emit_jump(OpCode op) {
@@ -140,7 +145,13 @@ void BytecodeCompiler::visit_identifier(const IdentifierExpr& expr) {
         emit_opcode(OpCode::OP_GET_LOCAL);
         emit_byte(static_cast<uint8_t>(local));
     } else {
-        size_t name_idx = current_chunk().add_constant(Value::make_string(expr.name()));
+        for (auto* outer = current_ctx_->enclosing; outer; outer = outer->enclosing) {
+            if (resolve_local(outer, expr.name()) != -1) {
+                diagnostics_.error("VM lexical captures are unavailable; run this program with the interpreter", expr.span());
+                return;
+            }
+        }
+        size_t name_idx = constant_index(Value::make_string(expr.name()));
         emit_opcode(OpCode::OP_GET_GLOBAL);
         emit_byte(static_cast<uint8_t>(name_idx));
     }
@@ -209,6 +220,10 @@ void BytecodeCompiler::visit_binary(const BinaryExpr& expr) {
 }
 
 void BytecodeCompiler::visit_call(const CallExpr& expr) {
+    if (expr.args().size() > 255) {
+        diagnostics_.error("VM operand count exceeds limit (255); run with the interpreter", expr.span());
+        return;
+    }
     line_ = expr.span().start.line;
     expr.callee().accept(*this);
 
@@ -249,6 +264,10 @@ void BytecodeCompiler::visit_slice(const SliceExpr& expr) {
 }
 
 void BytecodeCompiler::visit_array(const ArrayExpr& expr) {
+    if (expr.elements().size() > 255) {
+        diagnostics_.error("VM operand count exceeds limit (255); run with the interpreter", expr.span());
+        return;
+    }
     line_ = expr.span().start.line;
     for (const auto& el : expr.elements()) {
         el->accept(*this);
@@ -258,6 +277,10 @@ void BytecodeCompiler::visit_array(const ArrayExpr& expr) {
 }
 
 void BytecodeCompiler::visit_object(const ObjectExpr& expr) {
+    if (expr.entries().size() > 255) {
+        diagnostics_.error("VM operand count exceeds limit (255); run with the interpreter", expr.span());
+        return;
+    }
     line_ = expr.span().start.line;
     for (const auto& [k, v] : expr.entries()) {
         emit_constant(Value::make_string(k));
@@ -294,7 +317,19 @@ void BytecodeCompiler::visit_assign(const AssignExpr& expr) {
         const auto* idx = expr.index_target();
         idx->target().accept(*this);
         idx->index().accept(*this);
+        if (expr.op() != TokenType::ASSIGN) {
+            emit_opcode(OpCode::OP_DUP_TWO);
+            emit_opcode(OpCode::OP_INDEX_GET);
+        }
         expr.value().accept(*this);
+        switch (expr.op()) {
+            case TokenType::PLUS_ASSIGN: emit_opcode(OpCode::OP_ADD); break;
+            case TokenType::MINUS_ASSIGN: emit_opcode(OpCode::OP_SUBTRACT); break;
+            case TokenType::STAR_ASSIGN: emit_opcode(OpCode::OP_MULTIPLY); break;
+            case TokenType::SLASH_ASSIGN: emit_opcode(OpCode::OP_DIVIDE); break;
+            case TokenType::PERCENT_ASSIGN: emit_opcode(OpCode::OP_MODULO); break;
+            default: break;
+        }
         emit_opcode(OpCode::OP_INDEX_SET);
         return;
     }
@@ -307,7 +342,7 @@ void BytecodeCompiler::visit_assign(const AssignExpr& expr) {
             emit_opcode(OpCode::OP_GET_LOCAL);
             emit_byte(static_cast<uint8_t>(local));
         } else {
-            size_t name_idx = current_chunk().add_constant(Value::make_string(expr.name()));
+            size_t name_idx = constant_index(Value::make_string(expr.name()));
             emit_opcode(OpCode::OP_GET_GLOBAL);
             emit_byte(static_cast<uint8_t>(name_idx));
         }
@@ -333,7 +368,7 @@ void BytecodeCompiler::visit_assign(const AssignExpr& expr) {
         emit_opcode(OpCode::OP_SET_LOCAL);
         emit_byte(static_cast<uint8_t>(local));
     } else {
-        size_t name_idx = current_chunk().add_constant(Value::make_string(expr.name()));
+        size_t name_idx = constant_index(Value::make_string(expr.name()));
         emit_opcode(OpCode::OP_SET_GLOBAL);
         emit_byte(static_cast<uint8_t>(name_idx));
     }
@@ -342,7 +377,7 @@ void BytecodeCompiler::visit_assign(const AssignExpr& expr) {
 void BytecodeCompiler::visit_range(const RangeExpr& expr) {
     line_ = expr.span().start.line;
     // Call builtin range()
-    size_t name_idx = current_chunk().add_constant(Value::make_string("range"));
+    size_t name_idx = constant_index(Value::make_string(expr.inclusive() ? "$range_inclusive" : "range"));
     emit_opcode(OpCode::OP_GET_GLOBAL);
     emit_byte(static_cast<uint8_t>(name_idx));
 
@@ -403,7 +438,7 @@ void BytecodeCompiler::visit_let_stmt(const LetStmt& stmt) {
     if (current_ctx_->scope_depth > 0 || current_ctx_->enclosing != nullptr) {
         add_local(stmt.name(), stmt.is_mut());
     } else {
-        size_t name_idx = current_chunk().add_constant(Value::make_string(stmt.name()));
+        size_t name_idx = constant_index(Value::make_string(stmt.name()));
         emit_opcode(OpCode::OP_DEFINE_GLOBAL);
         emit_byte(static_cast<uint8_t>(name_idx));
     }
@@ -443,6 +478,7 @@ void BytecodeCompiler::visit_while_stmt(const WhileStmt& stmt) {
     current_ctx_->loop_starts.push_back(loop_start);
     current_ctx_->break_jumps.push_back({});
     current_ctx_->continue_jumps.push_back({});
+    current_ctx_->loop_local_counts.push_back(current_ctx_->locals.size());
 
     stmt.condition().accept(*this);
     size_t exit_jump = emit_jump(OpCode::OP_JUMP_IF_FALSE);
@@ -466,84 +502,21 @@ void BytecodeCompiler::visit_while_stmt(const WhileStmt& stmt) {
     current_ctx_->loop_starts.pop_back();
     current_ctx_->break_jumps.pop_back();
     current_ctx_->continue_jumps.pop_back();
+    current_ctx_->loop_local_counts.pop_back();
 }
 
 void BytecodeCompiler::visit_for_in_stmt(const ForInStmt& stmt) {
     line_ = stmt.span().start.line;
     begin_scope();
 
-    // Check if iterable is a static RangeExpr: for i in 0..10 or for i in 0..=10
-    if (const auto* range_expr = dynamic_cast<const RangeExpr*>(&stmt.iterable())) {
-        // 1. Initial value: start
-        if (range_expr->start()) {
-            range_expr->start()->accept(*this);
-        } else {
-            emit_constant(Value::make_int(0));
-        }
-        add_local(stmt.variable_name(), true);
-        int var_local = resolve_local(current_ctx_, stmt.variable_name());
-
-        // 2. End bound
-        if (range_expr->end()) {
-            range_expr->end()->accept(*this);
-        } else {
-            emit_constant(Value::make_int(0));
-        }
-        add_local("$end", false);
-        int end_local = resolve_local(current_ctx_, "$end");
-
-        size_t loop_start = current_chunk().count();
-        current_ctx_->loop_starts.push_back(loop_start);
-        current_ctx_->break_jumps.push_back({});
-        current_ctx_->continue_jumps.push_back({});
-
-        // Condition: var < end (or <= end)
-        emit_opcode(OpCode::OP_GET_LOCAL);
-        emit_byte(static_cast<uint8_t>(var_local));
-        emit_opcode(OpCode::OP_GET_LOCAL);
-        emit_byte(static_cast<uint8_t>(end_local));
-        if (range_expr->inclusive()) {
-            emit_opcode(OpCode::OP_LESS_EQUAL);
-        } else {
-            emit_opcode(OpCode::OP_LESS);
-        }
-
-        size_t exit_jump = emit_jump(OpCode::OP_JUMP_IF_FALSE);
-        emit_opcode(OpCode::OP_POP);
-
-        stmt.body().accept(*this);
-
-        for (size_t cj : current_ctx_->continue_jumps.back()) {
-            patch_jump(cj);
-        }
-
-        // Increment: var += 1
-        emit_opcode(OpCode::OP_GET_LOCAL);
-        emit_byte(static_cast<uint8_t>(var_local));
-        emit_constant(Value::make_int(1));
-        emit_opcode(OpCode::OP_ADD);
-        emit_opcode(OpCode::OP_SET_LOCAL);
-        emit_byte(static_cast<uint8_t>(var_local));
-        emit_opcode(OpCode::OP_POP);
-
-        emit_loop(loop_start);
-        patch_jump(exit_jump);
-        emit_opcode(OpCode::OP_POP);
-
-        for (size_t bj : current_ctx_->break_jumps.back()) {
-            patch_jump(bj);
-        }
-
-        current_ctx_->loop_starts.pop_back();
-        current_ctx_->break_jumps.pop_back();
-        current_ctx_->continue_jumps.pop_back();
-        end_scope();
-        return;
-    }
-
     // Generic collection iteration
-    // 1. Evaluate iterable
+    // 1. Snapshot the iterable, matching interpreter mutation semantics.
+    auto snapshot = constant_index(Value::make_string("$iter_snapshot"));
+    emit_opcode(OpCode::OP_GET_GLOBAL);
+    emit_byte(snapshot);
     stmt.iterable().accept(*this);
+    emit_opcode(OpCode::OP_CALL);
+    emit_byte(1);
     add_local("$iter", false);
 
     // 2. Local index = 0
@@ -554,9 +527,10 @@ void BytecodeCompiler::visit_for_in_stmt(const ForInStmt& stmt) {
     current_ctx_->loop_starts.push_back(loop_start);
     current_ctx_->break_jumps.push_back({});
     current_ctx_->continue_jumps.push_back({});
+    current_ctx_->loop_local_counts.push_back(current_ctx_->locals.size());
 
     // Condition: $idx < len($iter)
-    size_t len_fn_idx = current_chunk().add_constant(Value::make_string("len"));
+    size_t len_fn_idx = constant_index(Value::make_string("len"));
     emit_opcode(OpCode::OP_GET_GLOBAL);
     emit_byte(static_cast<uint8_t>(len_fn_idx));
 
@@ -611,6 +585,7 @@ void BytecodeCompiler::visit_for_in_stmt(const ForInStmt& stmt) {
     current_ctx_->loop_starts.pop_back();
     current_ctx_->break_jumps.pop_back();
     current_ctx_->continue_jumps.pop_back();
+    current_ctx_->loop_local_counts.pop_back();
     end_scope();
 }
 
@@ -629,6 +604,8 @@ void BytecodeCompiler::visit_break_stmt(const BreakStmt&) {
         diagnostics_.error("break statement outside loop", SourceSpan{});
         return;
     }
+    for (size_t i = current_ctx_->locals.size(); i > current_ctx_->loop_local_counts.back(); --i)
+        emit_opcode(OpCode::OP_POP);
     size_t jump = emit_jump(OpCode::OP_JUMP);
     current_ctx_->break_jumps.back().push_back(jump);
 }
@@ -638,6 +615,8 @@ void BytecodeCompiler::visit_continue_stmt(const ContinueStmt&) {
         diagnostics_.error("continue statement outside loop", SourceSpan{});
         return;
     }
+    for (size_t i = current_ctx_->locals.size(); i > current_ctx_->loop_local_counts.back(); --i)
+        emit_opcode(OpCode::OP_POP);
     size_t jump = emit_jump(OpCode::OP_JUMP);
     current_ctx_->continue_jumps.back().push_back(jump);
 }
@@ -671,17 +650,17 @@ void BytecodeCompiler::visit_fn_decl_stmt(const FnDeclStmt& stmt) {
     current_ctx_ = prev;
 
     emit_constant(Value::make_compiled_fn(fn_ctx.function));
-    if (current_ctx_->scope_depth > 0) {
+    if (current_ctx_->scope_depth > 0 || current_ctx_->enclosing) {
         add_local(stmt.name(), false);
     } else {
-        size_t name_idx = current_chunk().add_constant(Value::make_string(stmt.name()));
+        size_t name_idx = constant_index(Value::make_string(stmt.name()));
         emit_opcode(OpCode::OP_DEFINE_GLOBAL);
         emit_byte(static_cast<uint8_t>(name_idx));
     }
 }
 
-void BytecodeCompiler::visit_import_stmt(const ImportStmt&) {
-    // Top-level module import handled in AST environment / ModuleManager
+void BytecodeCompiler::visit_import_stmt(const ImportStmt& stmt) {
+    diagnostics_.error("VM module imports are unavailable; run this program with the interpreter", stmt.span());
 }
 
 void BytecodeCompiler::visit_export_stmt(const ExportStmt& stmt) {
