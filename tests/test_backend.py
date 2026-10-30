@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the shipped application against a real, dedicated PostgreSQL DB."""
 import http.client
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -68,7 +69,7 @@ class BackendContract(unittest.TestCase):
             headers['Authorization'] = 'Bearer ' + TOKEN
         if body is not None and not isinstance(body, str):
             body = json.dumps(body)
-        with http.client.HTTPConnection('127.0.0.1', self.port, timeout=10) as connection:
+        with closing(http.client.HTTPConnection('127.0.0.1', self.port, timeout=10)) as connection:
             connection.request(method, path, body, headers)
             response = connection.getresponse()
             payload = response.read()
@@ -103,7 +104,7 @@ class BackendContract(unittest.TestCase):
         self.assertEqual(self.request('GET', '/missing')[0], 404)
         self.assertEqual(self.request('GET', '/health', authenticated=False), (200, {'ok': True}))
 
-    def test_transaction_rollback_and_closed_connection(self):
+    def test_transaction_on_closed_connection_fails_cleanly(self):
         source = self.work / 'transaction.nv'
         source.write_text('import db\nimport env\nlet client = db.postgres(env.require("DATABASE_URL"))\n'
                           'client.close()\nclient.transaction(fn(tx) => true)\n')
