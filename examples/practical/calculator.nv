@@ -1,0 +1,15 @@
+// Supply an operator, then two integer operands on separate stdin lines.
+import io
+let operation = io.read_line()
+let left = int(io.read_line())
+let right = int(io.read_line())
+assert(operation == "+" or operation == "-" or operation == "*" or operation == "/", "operator must be +, -, * or /")
+if operation == "+":
+    print(left + right)
+elif operation == "-":
+    print(left - right)
+elif operation == "*":
+    print(left * right)
+else:
+    assert(right != 0, "division by zero")
+    print(left / right)

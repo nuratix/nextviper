@@ -111,9 +111,14 @@ if(UNIX)
     set_tests_properties(transports PROPERTIES ENVIRONMENT "NEXTVIPER_BIN=$<TARGET_FILE:nextviper>")
 endif()
 
-foreach(check language_contract http_hardening backend distribution)
+foreach(check language_contract http_hardening backend distribution practical_examples grammar)
     add_test(NAME ${check} COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/test_${check}.py")
     set_tests_properties(${check} PROPERTIES ENVIRONMENT "NEXTVIPER_BIN=$<TARGET_FILE:nextviper>;NEXTVIPER_LSP_BIN=$<TARGET_FILE:nextviper-lsp>")
 endforeach()
 install(DIRECTORY examples/todo-api DESTINATION share/nextviper/examples)
 install(FILES README.md CURRENT_STATUS.md LICENSE DESTINATION share/doc/nextviper)
+
+# Bound hung subprocess suites in local and hosted runs. Individual integration
+# subprocesses use shorter deadlines where appropriate.
+get_property(NEXTVIPER_TESTS DIRECTORY PROPERTY TESTS)
+set_tests_properties(${NEXTVIPER_TESTS} PROPERTIES TIMEOUT 600)

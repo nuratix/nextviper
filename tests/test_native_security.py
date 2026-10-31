@@ -1,69 +1,34 @@
 #!/usr/bin/env python3
-import subprocess
+"""Native output paths are passed as argv, including spaces/metacharacters."""
 import os
-import sys
-import shutil
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
 
-print("=== Starting NextViper Native Compiler Security Regression Tests ===")
+ROOT = Path(__file__).resolve().parents[1]
+BIN = Path(os.environ.get('NEXTVIPER_BIN', ROOT / 'bin/nextviper')).resolve()
 
-all_passed = True
 
-# 1. Output path with spaces
-test_dir_spaces = "/tmp/nv test space dir"
-os.makedirs(test_dir_spaces, exist_ok=True)
-bin_spaces = os.path.join(test_dir_spaces, "my compiled binary")
+class NativePathSecurity(unittest.TestCase):
+    def test_output_paths_are_not_shell_commands(self):
+        with tempfile.TemporaryDirectory(prefix='nv-native-security-') as directory:
+            work = Path(directory)
+            source = work / 'source.nv'
+            source.write_text('print("SAFE_EXECUTION_SUCCESS_42")\n')
+            marker = work / 'INJECTION_MARKER'
+            for name in ('my compiled binary', 'prog;touch INJECTION_MARKER;', 'prog$(touch INJECTION_MARKER)'):
+                with self.subTest(path=name):
+                    binary = work / name
+                    built = subprocess.run([str(BIN), 'build', '--native', str(source), '-o', str(binary)],
+                                           capture_output=True, text=True, timeout=90, cwd=work)
+                    self.assertEqual(built.returncode, 0, built.stderr)
+                    self.assertFalse(marker.exists(), 'output path executed a shell command')
+                    result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=10, cwd=work)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (0, 'SAFE_EXECUTION_SUCCESS_42\n', ''))
+                    self.assertFalse(marker.exists())
 
-src_code = "/tmp/nv_security_test.nv"
-with open(src_code, "w") as f:
-    f.write("""
-print("SAFE_EXECUTION_SUCCESS_42")
-""")
 
-try:
-    res = subprocess.run(["/root/nextviper/bin/nextviper", "build", "--native", src_code, "-o", bin_spaces], capture_output=True, text=True)
-    assert res.returncode == 0, f"Compilation failed: {res.stderr}"
-    assert os.path.exists(bin_spaces), f"Binary not created at {bin_spaces}"
-    
-    # Run the binary with spaces in path
-    run_res = subprocess.run([bin_spaces], capture_output=True, text=True)
-    assert "SAFE_EXECUTION_SUCCESS_42" in run_res.stdout
-    print("  ✓ PASS: Native binary compiled and executed at path with spaces")
-except Exception as e:
-    print(f"  ✗ FAIL: Path with spaces: {e}")
-    all_passed = False
-
-# 2. Path with Shell Metacharacters (verifying no shell injection occurs)
-marker_file = "/tmp/nv_shell_injection_marker.txt"
-if os.path.exists(marker_file):
-    os.remove(marker_file)
-
-test_dir_meta = "/tmp/nv_meta_test;touch " + marker_file + ";"
-os.makedirs(test_dir_meta, exist_ok=True)
-bin_meta = os.path.join(test_dir_meta, "prog;id;")
-
-try:
-    res = subprocess.run(["/root/nextviper/bin/nextviper", "build", "--native", src_code, "-o", bin_meta], capture_output=True, text=True)
-    assert res.returncode == 0, f"Compilation failed: {res.stderr}"
-    assert not os.path.exists(marker_file), "SECURITY FLAW: Shell command injection succeeded via compiler output path!"
-    
-    run_res = subprocess.run([bin_meta], capture_output=True, text=True)
-    assert "SAFE_EXECUTION_SUCCESS_42" in run_res.stdout
-    print("  ✓ PASS: Shell metacharacter injection blocked (safe posix_spawnp parameter passing)")
-except Exception as e:
-    print(f"  ✗ FAIL: Shell metacharacters: {e}")
-    all_passed = False
-
-# Cleanup
-shutil.rmtree(test_dir_spaces, ignore_errors=True)
-shutil.rmtree(test_dir_meta, ignore_errors=True)
-if os.path.exists(src_code):
-    os.remove(src_code)
-if os.path.exists(marker_file):
-    os.remove(marker_file)
-
-if all_passed:
-    print("🎉 ALL NATIVE COMPILER SECURITY REGRESSION TESTS PASSED!")
-    sys.exit(0)
-else:
-    print("❌ SOME NATIVE COMPILER SECURITY REGRESSION TESTS FAILED!")
-    sys.exit(1)
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

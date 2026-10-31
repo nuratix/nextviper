@@ -128,6 +128,8 @@ test: directories $(TEST_TARGET) $(TARGET) $(LSP_TARGET)
 	@python3 $(TEST_DIR)/test_http_hardening.py
 	@python3 $(TEST_DIR)/test_backend.py
 	@python3 $(TEST_DIR)/test_distribution.py
+	@python3 $(TEST_DIR)/test_practical_examples.py
+	@python3 $(TEST_DIR)/test_grammar.py
 
 examples: $(TARGET)
 	@echo "\n\033[1;34m=== Running Hello World Example ===\033[0m"

@@ -9,6 +9,10 @@
 
 namespace nextviper::test {
 
+struct SkippedTest : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
 struct TestCase {
     std::string suite;
     std::string name;
@@ -29,6 +33,7 @@ public:
     int run_all() {
         size_t passed = 0;
         size_t failed = 0;
+        size_t skipped = 0;
         std::string current_suite = "";
 
         std::cout << "\033[1;36m====================================================\033[0m\n";
@@ -47,6 +52,9 @@ public:
                 test.func();
                 std::cout << "  \033[1;32m✓ PASS\033[0m: " << test.name << "\n" << std::flush;
                 passed++;
+            } catch (const SkippedTest& e) {
+                std::cout << "  SKIP: " << test.name << ": " << e.what() << "\n" << std::flush;
+                skipped++;
             } catch (const std::exception& e) {
                 std::cout << "  \033[1;31m✗ FAIL\033[0m: " << test.name << "\n" << std::flush;
                 std::cout << "    \033[31mError: " << e.what() << "\033[0m\n" << std::flush;
@@ -61,11 +69,11 @@ public:
         double elapsed_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
         std::cout << "\n\033[1;36m----------------------------------------------------\033[0m\n";
-        std::cout << "Tests Summary: " << (passed + failed) << " total | "
+        std::cout << "Tests Summary: " << (passed + failed + skipped) << " total | "
                   << "\033[1;32m" << passed << " passed\033[0m | "
                   << (failed > 0 ? "\033[1;31m" : "") << failed << " failed"
                   << (failed > 0 ? "\033[0m" : "")
-                  << " (" << elapsed_ms << " ms)\n";
+                  << " | " << skipped << " skipped (" << elapsed_ms << " ms)\n";
         std::cout << "\033[1;36m====================================================\033[0m\n";
 
         return (failed == 0) ? 0 : 1;
@@ -85,6 +93,8 @@ struct TestRegistrar {
     static void test_##suite##_##name(); \
     static nextviper::test::TestRegistrar registrar_##suite##_##name(#suite, #name, test_##suite##_##name); \
     static void test_##suite##_##name()
+
+#define NV_SKIP(reason) throw nextviper::test::SkippedTest(reason)
 
 #define NV_ASSERT(condition) \
     do { \

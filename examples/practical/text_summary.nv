@@ -1,0 +1,10 @@
+// Read stdin and count bytes and nonempty lines. Strings are byte-oriented.
+import io
+import string
+let text = io.read_all()
+let mut nonempty = 0
+for line in string.split(text, "\n"):
+    if len(line) > 0:
+        nonempty += 1
+print("bytes:", len(text))
+print("nonempty lines:", nonempty)

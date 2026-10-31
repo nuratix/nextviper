@@ -2,7 +2,9 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "NextViper",
   "scopeName": "source.nextviper",
-  "fileTypes": ["nv"],
+  "fileTypes": [
+    "nv"
+  ],
   "patterns": [
     {
       "name": "comment.line.double-slash.nextviper",
@@ -37,11 +39,11 @@
     },
     {
       "name": "keyword.control.nextviper",
-      "match": "\\b(if|else|while|for|in|return|break|continue|match|import|export|from|as|try|catch|finally|throw)\\b"
+      "match": "\\b(if|elif|else|while|for|in|loop|return|break|continue|match|import|export|from|as|and|or|not)\\b"
     },
     {
       "name": "keyword.declaration.nextviper",
-      "match": "\\b(fn|let|mut|const|type|struct|enum|interface|class)\\b"
+      "match": "\\b(fn|let|mut|type|struct)\\b"
     },
     {
       "name": "storage.type.nextviper",
@@ -49,7 +51,7 @@
     },
     {
       "name": "constant.language.nextviper",
-      "match": "\\b(true|false|nil|null|none)\\b"
+      "match": "\\b(true|false|nil|null)\\b"
     },
     {
       "name": "constant.numeric.float.nextviper",
@@ -65,7 +67,7 @@
     },
     {
       "name": "keyword.operator.nextviper",
-      "match": "(==|!=|<=|>=|&&|\\|\\||\\+|-|\\*|/|%|=|\\+=|-=|\\*=|/=|!|<|>)"
+      "match": "(==|!=|<=|>=|&&|\\|\\||\\+=|-=|\\*=|/=|%=|\\*\\*|=>|->|\\.\\.=|\\.\\.|\\+|-|\\*|/|%|=|!|<|>|\\^|~|&|\\|)"
     },
     {
       "name": "entity.name.function.nextviper",

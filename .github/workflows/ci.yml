@@ -13,6 +13,7 @@ jobs:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17
@@ -47,6 +48,7 @@ jobs:
           python3 tests/test_distribution.py --archive dist/nextviper-v1.0.0-preview-linux-$(uname -m).tar.gz
   npm:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,6 +61,7 @@ jobs:
           npm pack --dry-run
   sanitizers:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies

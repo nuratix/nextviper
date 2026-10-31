@@ -26,7 +26,7 @@ NV_TEST(GPUSubsystem, DeviceDetectionAndProperties) {
 }
 
 NV_TEST(GPUSubsystem, HostDeviceMemoryTransferRoundtrip) {
-    if (!GPUTensorBackend::is_gpu_available()) return;
+    if (!GPUTensorBackend::is_gpu_available()) NV_SKIP("no Vulkan GPU device available");
 
     Tensor cpu_t({2, 3}, {1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, DType::FLOAT32, Device::CPU);
     NV_ASSERT_TRUE(cpu_t.device() == Device::CPU);
@@ -45,7 +45,7 @@ NV_TEST(GPUSubsystem, HostDeviceMemoryTransferRoundtrip) {
 }
 
 NV_TEST(GPUSubsystem, ElementwiseArithmeticGPUExecution) {
-    if (!GPUTensorBackend::is_gpu_available()) return;
+    if (!GPUTensorBackend::is_gpu_available()) NV_SKIP("no Vulkan GPU device available");
 
     Tensor a = Tensor({4}, {10.0, 20.0, 30.0, 40.0}, DType::FLOAT32, Device::GPU);
     Tensor b = Tensor({4}, {2.0, 4.0, 5.0, 8.0}, DType::FLOAT32, Device::GPU);
@@ -85,7 +85,7 @@ NV_TEST(GPUSubsystem, ElementwiseArithmeticGPUExecution) {
 }
 
 NV_TEST(GPUSubsystem, MatrixMultiplicationGEMM) {
-    if (!GPUTensorBackend::is_gpu_available()) return;
+    if (!GPUTensorBackend::is_gpu_available()) NV_SKIP("no Vulkan GPU device available");
 
     Tensor a = Tensor({2, 3}, {1.0, 2.0, 3.0, 4.0, 5.0, 6.0}, DType::FLOAT32, Device::GPU);
     Tensor b = Tensor({3, 2}, {7.0, 8.0, 9.0, 1.0, 2.0, 3.0}, DType::FLOAT32, Device::GPU);
@@ -102,7 +102,7 @@ NV_TEST(GPUSubsystem, MatrixMultiplicationGEMM) {
 }
 
 NV_TEST(GPUSubsystem, ReductionsAndActivations) {
-    if (!GPUTensorBackend::is_gpu_available()) return;
+    if (!GPUTensorBackend::is_gpu_available()) NV_SKIP("no Vulkan GPU device available");
 
     Tensor t = Tensor({4}, {-2.0, 0.0, 3.0, -5.0}, DType::FLOAT32, Device::GPU);
 
@@ -131,7 +131,7 @@ NV_TEST(GPUSubsystem, ReductionsAndActivations) {
 }
 
 NV_TEST(GPUSubsystem, GPUAutogradAndTrainingConvergence) {
-    if (!GPUTensorBackend::is_gpu_available()) return;
+    if (!GPUTensorBackend::is_gpu_available()) NV_SKIP("no Vulkan GPU device available");
 
     Tensor x = Tensor({2, 2}, {1.0, 2.0, 3.0, 4.0}, DType::FLOAT32, Device::GPU);
     Tensor target = Tensor({2, 1}, {5.0, 11.0}, DType::FLOAT32, Device::GPU);

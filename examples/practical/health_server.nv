@@ -1,0 +1,6 @@
+// Loopback-only HTTP example. Stop with Ctrl-C; no database is required.
+import http
+import env
+let app = http.server()
+app.get("/health", fn(req) => {"ok": true})
+app.listen(int(env.get("PORT", "8080")), "127.0.0.1")
