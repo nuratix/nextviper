@@ -1,3 +1,15 @@
+<p align="center">
+  <a href="https://nextviper.nuratix.com"><img src="https://nextviper.nuratix.com/logo-black.png" alt="NextViper language logo" height="96"></a>
+  &nbsp;&nbsp;
+  <a href="https://www.nuratix.com"><img src="https://www.nuratix.com/nuratix-logo-light.png" alt="Nuratix logo" height="64"></a>
+</p>
+
+<p align="center">
+  <a href="https://nextviper.nuratix.com">nextviper.nuratix.com</a> ·
+  <a href="https://www.nuratix.com">nuratix.com</a> ·
+  <a href="mailto:team@nuratix.com">team@nuratix.com</a>
+</p>
+
 # NextViper
 
 NextViper is an experimental programming language with Python-like syntax,
@@ -129,4 +141,5 @@ No general speed advantage over Python, Go, Rust, or C++ is claimed. Release
 artifacts are prepared as draft prereleases for review.
 
 Project: [nextviper.nuratix.com](https://nextviper.nuratix.com) ·
-Developed by [Nuratix](https://www.nuratix.com) · team@nuratix.com
+Developed by [Nuratix — nuratix.com](https://www.nuratix.com) ·
+[team@nuratix.com](mailto:team@nuratix.com)
