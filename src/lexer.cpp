@@ -1,9 +1,20 @@
 #include "nextviper/lexer.hpp"
-#include <cctype>
 #include <cstdlib>
 #include <sstream>
 
 namespace nextviper {
+
+// Source identifiers and digits are ASCII, independent of the process locale.
+// Unlike <cctype> predicates these also accept every possible signed char.
+static bool ascii_digit(char c) { return c >= '0' && c <= '9'; }
+static bool ascii_alpha(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+static bool ascii_alnum(char c) { return ascii_alpha(c) || ascii_digit(c); }
+static bool ascii_hex_digit(char c) {
+    return ascii_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
 
 static void append_utf8(std::string& out, uint32_t codepoint) {
     if (codepoint <= 0x7F) {
@@ -159,7 +170,7 @@ void Lexer::skip_whitespace_and_comments() {
 }
 
 Token Lexer::scan_identifier_or_keyword() {
-    while (std::isalnum(peek()) || peek() == '_') {
+    while (ascii_alnum(peek()) || peek() == '_') {
         advance();
     }
 
@@ -195,7 +206,7 @@ Token Lexer::scan_number() {
     if (source_[start_offset_] == '0' && (peek() == 'x' || peek() == 'X')) {
         advance(); // consume 'x' / 'X'
         size_t digit_count = 0;
-        while (std::isxdigit(peek()) || peek() == '_') {
+        while (ascii_hex_digit(peek()) || peek() == '_') {
             if (peek() != '_') digit_count++;
             advance();
         }
@@ -206,9 +217,9 @@ Token Lexer::scan_number() {
         }
 
         // Check for invalid letters following hex
-        if (std::isalpha(peek())) {
+        if (ascii_alpha(peek())) {
             diagnostics_.error(std::string("invalid digit '") + peek() + "' in hexadecimal literal", make_span(current_location()));
-            while (std::isalnum(peek()) || peek() == '_') advance();
+            while (ascii_alnum(peek()) || peek() == '_') advance();
             return make_token(TokenType::INVALID);
         }
 
@@ -241,9 +252,9 @@ Token Lexer::scan_number() {
             return make_token(TokenType::INVALID);
         }
 
-        if (std::isdigit(peek()) || std::isalpha(peek())) {
+        if (ascii_digit(peek()) || ascii_alpha(peek())) {
             diagnostics_.error(std::string("invalid digit '") + peek() + "' in binary literal", make_span(current_location()));
-            while (std::isalnum(peek()) || peek() == '_') advance();
+            while (ascii_alnum(peek()) || peek() == '_') advance();
             return make_token(TokenType::INVALID);
         }
 
@@ -276,9 +287,9 @@ Token Lexer::scan_number() {
             return make_token(TokenType::INVALID);
         }
 
-        if (std::isdigit(peek()) || std::isalpha(peek())) {
+        if (ascii_digit(peek()) || ascii_alpha(peek())) {
             diagnostics_.error(std::string("invalid digit '") + peek() + "' in octal literal", make_span(current_location()));
-            while (std::isalnum(peek()) || peek() == '_') advance();
+            while (ascii_alnum(peek()) || peek() == '_') advance();
             return make_token(TokenType::INVALID);
         }
 
@@ -298,15 +309,15 @@ Token Lexer::scan_number() {
     }
 
     // 4. Standard Decimal digits
-    while (std::isdigit(peek()) || peek() == '_') {
+    while (ascii_digit(peek()) || peek() == '_') {
         advance();
     }
 
     // Fractional part: .123 (ensuring not range operator `..`)
-    if (peek() == '.' && std::isdigit(peek_next())) {
+    if (peek() == '.' && ascii_digit(peek_next())) {
         is_float = true;
         advance(); // consume '.'
-        while (std::isdigit(peek()) || peek() == '_') {
+        while (ascii_digit(peek()) || peek() == '_') {
             advance();
         }
     }
@@ -318,11 +329,11 @@ Token Lexer::scan_number() {
         if (peek() == '+' || peek() == '-') {
             advance();
         }
-        if (!std::isdigit(peek())) {
+        if (!ascii_digit(peek())) {
             diagnostics_.error("expected exponent digits in scientific notation", make_span(start_loc));
             return make_token(TokenType::INVALID);
         }
-        while (std::isdigit(peek()) || peek() == '_') {
+        while (ascii_digit(peek()) || peek() == '_') {
             advance();
         }
     }
@@ -401,7 +412,7 @@ Token Lexer::scan_string(char quote_char, bool is_raw, bool is_multiline) {
                 case 'x': {
                     char h1 = peek();
                     char h2 = peek_next();
-                    if (std::isxdigit(h1) && std::isxdigit(h2)) {
+                    if (ascii_hex_digit(h1) && ascii_hex_digit(h2)) {
                         advance(); advance();
                         std::string hex_str{h1, h2};
                         int val = std::stoi(hex_str, nullptr, 16);
@@ -416,11 +427,12 @@ Token Lexer::scan_string(char quote_char, bool is_raw, bool is_multiline) {
 
                 // Unicode escape: \u{HHHH} or \uHHHH
                 case 'u': {
+                    uint32_t cp = 0;
                     if (peek() == '{') {
                         advance(); // consume '{'
                         std::string hex_str;
                         while (!is_at_end() && peek() != '}') {
-                            if (!std::isxdigit(peek())) {
+                            if (!ascii_hex_digit(peek())) {
                                 diagnostics_.error("invalid hex digit in unicode escape", make_span(current_location()));
                                 return make_token(TokenType::INVALID);
                             }
@@ -435,22 +447,26 @@ Token Lexer::scan_string(char quote_char, bool is_raw, bool is_multiline) {
                             diagnostics_.error("unicode escape must contain 1 to 6 hex digits", make_span(current_location()));
                             return make_token(TokenType::INVALID);
                         }
-                        uint32_t cp = static_cast<uint32_t>(std::stoul(hex_str, nullptr, 16));
-                        append_utf8(value, cp);
+                        cp = static_cast<uint32_t>(std::stoul(hex_str, nullptr, 16));
                     } else {
                         // \uHHHH (4 hex digits)
                         std::string hex_str;
                         for (int i = 0; i < 4; ++i) {
-                            if (!std::isxdigit(peek())) {
+                            if (!ascii_hex_digit(peek())) {
                                 diagnostics_.error("expected 4 hex digits in \\u escape (or use \\u{...})",
                                                    make_span(current_location()));
                                 return make_token(TokenType::INVALID);
                             }
                             hex_str.push_back(advance());
                         }
-                        uint32_t cp = static_cast<uint32_t>(std::stoul(hex_str, nullptr, 16));
-                        append_utf8(value, cp);
+                        cp = static_cast<uint32_t>(std::stoul(hex_str, nullptr, 16));
                     }
+                    if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+                        diagnostics_.error("unicode escape must be a Unicode scalar value (excluding surrogates and values above U+10FFFF)",
+                                           make_span(start_loc));
+                        return make_token(TokenType::INVALID);
+                    }
+                    append_utf8(value, cp);
                     break;
                 }
 
@@ -488,12 +504,12 @@ Token Lexer::next_token() {
     }
 
     // Identifiers & keywords
-    if (std::isalpha(c) || c == '_') {
+    if (ascii_alpha(c) || c == '_') {
         return scan_identifier_or_keyword();
     }
 
     // Number literals
-    if (std::isdigit(c)) {
+    if (ascii_digit(c)) {
         return scan_number();
     }
 
@@ -566,7 +582,7 @@ Token Lexer::next_token() {
                 return make_token(TokenType::DOT_DOT);
             }
             // Check leading dot for float: .5
-            if (std::isdigit(peek())) {
+            if (ascii_digit(peek())) {
                 current_offset_ = start_offset_;
                 line_ = start_line_;
                 column_ = start_column_;

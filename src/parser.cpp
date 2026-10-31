@@ -145,6 +145,8 @@ std::unique_ptr<Stmt> Parser::parse_statement() {
     return parse_expression_statement();
 }
 std::string Parser::parse_type_annotation() {
+    RecursionGuard guard(*this);
+    if (!guard.ok) return "";
     Token base_type = consume(TokenType::IDENTIFIER, "expected type name");
     std::string result = base_type.text;
 

@@ -1,3 +1,4 @@
+#include "nextviper/slicing.hpp"
 #include "nextviper/interpreter.hpp"
 #include "nextviper/module.hpp"
 #include "nextviper/arithmetic.hpp"
@@ -1006,73 +1007,20 @@ void Interpreter::visit_index(const IndexExpr& expr) {
 
 void Interpreter::visit_slice(const SliceExpr& expr) {
     Value target = evaluate(expr.target());
-
-    if (!target.is_array() && !target.is_string()) {
+    if (!target.is_array() && !target.is_string())
         type_error("slicing requires list or string, got " + target.type_name(), expr.span());
-    }
-
-    int64_t len = target.is_array() ? static_cast<int64_t>(target.as_array()->size()) : static_cast<int64_t>(target.as_string().size());
-
-    int64_t start = 0;
-    int64_t end = len;
-    int64_t step = 1;
-
-    if (expr.start()) {
-        Value v_start = evaluate(*expr.start());
-        if (!v_start.is_int()) type_error("slice start must be an integer, got " + v_start.type_name(), expr.start()->span());
-        start = v_start.as_int();
-        if (start < 0) start += len;
-        if (start < 0) start = 0;
-        if (start > len) start = len;
-    }
-
-    if (expr.end()) {
-        Value v_end = evaluate(*expr.end());
-        if (!v_end.is_int()) type_error("slice end must be an integer, got " + v_end.type_name(), expr.end()->span());
-        end = v_end.as_int();
-        if (end < 0) end += len;
-        if (end < 0) end = 0;
-        if (end > len) end = len;
-    }
-
-    if (expr.step()) {
-        Value v_step = evaluate(*expr.step());
-        if (!v_step.is_int()) type_error("slice step must be an integer, got " + v_step.type_name(), expr.step()->span());
-        step = v_step.as_int();
-        if (step == 0) runtime_error("slice step cannot be zero", expr.step()->span());
-    }
-
-    if (target.is_array()) {
-        const auto& arr = *target.as_array();
-        std::vector<Value> sliced;
-        if (step > 0) {
-            for (int64_t i = start; i < end; i += step) {
-                sliced.push_back(arr[static_cast<size_t>(i)]);
-            }
-        } else {
-            for (int64_t i = start; i > end; i += step) {
-                sliced.push_back(arr[static_cast<size_t>(i)]);
-            }
-        }
-        last_evaluated_value_ = Value::make_array(std::move(sliced));
-        return;
-    }
-
-    if (target.is_string()) {
-        const auto& str = target.as_string();
-        std::string sliced;
-        if (step > 0) {
-            for (int64_t i = start; i < end; i += step) {
-                sliced += str[static_cast<size_t>(i)];
-            }
-        } else {
-            for (int64_t i = start; i > end; i += step) {
-                sliced += str[static_cast<size_t>(i)];
-            }
-        }
-        last_evaluated_value_ = Value::make_string(std::move(sliced));
-        return;
-    }
+    auto bound = [&](const Expr* expression, const char* name) -> std::optional<int64_t> {
+        if (!expression) return std::nullopt;
+        Value value = evaluate(*expression);
+        if (!value.is_int())
+            type_error(std::string("slice ") + name + " must be an integer, got " + value.type_name(), expression->span());
+        return value.as_int();
+    };
+    const auto start = bound(expr.start(), "start");
+    const auto end = bound(expr.end(), "end");
+    const auto step = bound(expr.step(), "step");
+    if (step && *step == 0) runtime_error("slice step cannot be zero", expr.step()->span());
+    last_evaluated_value_ = slice_value(target, start, end, step.value_or(1));
 }
 
 void Interpreter::visit_array(const ArrayExpr& expr) {

@@ -352,3 +352,37 @@ NV_TEST(Lexer, MalformedStringsAndInvalidChars) {
         NV_ASSERT_TRUE(diag.has_errors());
     }
 }
+
+NV_TEST(Lexer, UnicodeEscapesRequireScalarValues) {
+    for (const std::string source : {R"("\uD800")", R"("\uDFFF")",
+                                    R"("\u{D800}")", R"("\u{DFFF}")",
+                                    R"("\u{110000}")", R"("\u{FFFFFF}")"}) {
+        SourceManager sm;
+        DiagnosticEngine diag(sm, false);
+        auto tokens = lex_string(source, diag);
+        NV_ASSERT_TRUE(diag.has_errors());
+        NV_ASSERT_EQ(tokens.front().type, TokenType::INVALID);
+        NV_ASSERT_EQ(tokens.front().span.start.line, 1);
+    }
+}
+
+NV_TEST(Lexer, UnicodeScalarBoundariesEncodeExactly) {
+    SourceManager sm;
+    DiagnosticEngine diag(sm, false);
+    auto tokens = lex_string(R"("\u0000\u007F\u0080\u07FF\u0800\uD7FF\uE000\uFFFF\u{10000}\u{10FFFF}")", diag);
+    NV_ASSERT_FALSE(diag.has_errors());
+    const std::string expected = std::string("\0", 1) + "\x7f\xc2\x80\xdf\xbf\xe0\xa0\x80"
+        "\xed\x9f\xbf\xee\x80\x80\xef\xbf\xbf\xf0\x90\x80\x80\xf4\x8f\xbf\xbf";
+    NV_ASSERT_EQ(tokens.front().string_value, expected);
+}
+
+NV_TEST(Lexer, HighBytesOutsideStringsAreDiagnosed) {
+    for (int byte = 128; byte <= 255; ++byte) {
+        SourceManager sm;
+        DiagnosticEngine diag(sm, false);
+        auto tokens = lex_string(std::string(1, static_cast<char>(byte)), diag);
+        NV_ASSERT_TRUE(diag.has_errors());
+        NV_ASSERT_EQ(tokens.front().type, TokenType::INVALID);
+        NV_ASSERT_EQ(tokens.back().type, TokenType::EOF_TOKEN);
+    }
+}

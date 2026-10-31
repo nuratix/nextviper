@@ -35,6 +35,42 @@ class LanguageContract(unittest.TestCase):
                 result = self.execute(source, engine)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout, expected)
+                self.assertEqual(result.stderr, "")
+
+    def test_slice_boundaries_and_extreme_strides(self):
+        self.assert_output('let a = [0, 1, 2, 3]\n'
+                           'print(a[::-1])\nprint(a[4:0:-1])\n'
+                           'print(a[-99:99])\nprint(a[:-1:-1])\n'
+                           'print(a[1:4:9223372036854775807])\n'
+                           'print(a[3::-9223372036854775807 - 1])\n'
+                           'print("abcd"[::-1])\nprint("abcd"[4:0:-1])\n'
+                           'print([][::-1])\nprint(""[::-1])\n',
+                           '[3, 2, 1, 0]\n[3, 2, 1]\n[0, 1, 2, 3]\n[]\n'
+                           '[1]\n[3]\ndcba\ndcb\n[]\n\n', engines=('tree', 'vm'))
+
+    def test_slices_match_python_reference(self):
+        # Fixed exhaustive boundary matrix; Python is an oracle only for this
+        # deliberately shared slicing contract, not for the whole language.
+        bounds = (None, -6, -1, 0, 2, 5)
+        strides = (-9223372036854775808, -2, -1, 1, 2, 9223372036854775807)
+        source, expected = [], []
+        for start in bounds:
+            for end in bounds:
+                for step in strides:
+                    fields = ['(-9223372036854775807 - 1)' if v == -9223372036854775808
+                              else str(v) if v is not None else '' for v in (start, end, step)]
+                    source.append('print([0, 1, 2, 3][' + ':'.join(fields) + '])')
+                    expected.append(str([0, 1, 2, 3][slice(start, end, step)]))
+        # Keep each VM chunk below its documented 256-constant limit.
+        for offset in range(0, len(source), 16):
+            self.assert_output('\n'.join(source[offset:offset + 16]) + '\n',
+                               '\n'.join(expected[offset:offset + 16]) + '\n',
+                               engines=('tree', 'vm'))
+
+    def test_slice_bounds_can_resize_target(self):
+        self.assert_output('let a = [1, 2, 3]\n'
+                           'fn shrink():\n    pop(a)\n    pop(a)\n    return 0\n'
+                           'print(a[shrink():])\n', '[1]\n', engines=('tree', 'vm'))
 
     def test_integer_boundaries_and_precise_comparisons(self):
         self.assert_output('print(9223372036854775807 > 9223372036854775806)\n'

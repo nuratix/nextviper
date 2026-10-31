@@ -241,3 +241,16 @@ NV_TEST(Parser, InvalidSyntaxDiagnostics) {
         NV_ASSERT_TRUE(diag.has_errors());
     }
 }
+
+NV_TEST(Parser, GenericTypeNestingIsBounded) {
+    SourceManager sm;
+    DiagnosticEngine diag(sm, false);
+    std::string source = "let value: ";
+    for (int i = 0; i < 600; ++i) source += "list[";
+    source += "int";
+    source.append(600, ']');
+    source += " = []\n";
+    auto program = parse_src(source, diag);
+    NV_ASSERT(program != nullptr);
+    NV_ASSERT_TRUE(diag.has_errors());
+}

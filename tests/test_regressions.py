@@ -45,6 +45,14 @@ class ReadinessRegressions(unittest.TestCase):
         self.assertEqual(native.stdout, interpreted.stdout)
         return native.stdout
 
+    def test_deep_generic_annotation_reports_error_instead_of_crashing(self):
+        source = self.source('let value: ' + 'list[' * 30000 + 'int' + ']' * 30000 + ' = []\n')
+        for command in ('run', 'check'):
+            with self.subTest(command=command):
+                result = self.invoke(command, source)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn('maximum parsing nesting depth', result.stderr)
+
     def test_fractional_functions_and_math(self):
         out = self.native_equivalent('fn twice(x) => x * 2\nprint(twice(1.75))\nprint(sqrt(2.0))\nprint(5 / 2)\nprint(4 / 2)\n')
         self.assertEqual(out, '3.5\n1.41421\n2.5\n2\n')

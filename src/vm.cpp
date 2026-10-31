@@ -1,3 +1,4 @@
+#include "nextviper/slicing.hpp"
 #include "nextviper/vm.hpp"
 #include "nextviper/compiler.hpp"
 #include "nextviper/arithmetic.hpp"
@@ -775,76 +776,16 @@ VMResult VM::run_interpreter(size_t target_frame_count) {
                     return VMResult::RUNTIME_ERROR;
                 }
 
-                int64_t len = target.is_array() ? static_cast<int64_t>(target.as_array()->size()) : static_cast<int64_t>(target.as_string().size());
-                int64_t start = 0;
-                int64_t end = len;
-                int64_t step = 1;
-
-                if (!start_val.is_nil()) {
-                    if (!start_val.is_int()) {
-                        runtime_error("slice start must be integer");
-                        return VMResult::RUNTIME_ERROR;
-                    }
-                    start = start_val.as_int();
-                    if (start < 0) start += len;
-                    if (start < 0) start = 0;
-                    if (start > len) start = len;
-                }
-
-                if (!end_val.is_nil()) {
-                    if (!end_val.is_int()) {
-                        runtime_error("slice end must be integer");
-                        return VMResult::RUNTIME_ERROR;
-                    }
-                    end = end_val.as_int();
-                    if (end < 0) end += len;
-                    if (end < 0) end = 0;
-                    if (end > len) end = len;
-                }
-
-                if (!step_val.is_nil()) {
-                    if (!step_val.is_int()) {
-                        runtime_error("slice step must be integer");
-                        return VMResult::RUNTIME_ERROR;
-                    }
-                    step = step_val.as_int();
-                    if (step == 0) {
-                        runtime_error("slice step cannot be zero");
-                        return VMResult::RUNTIME_ERROR;
-                    }
-                }
-
-                if (target.is_array()) {
-                    const auto& arr = *target.as_array();
-                    std::vector<Value> sliced;
-                    if (step > 0) {
-                        for (int64_t i = start; i < end; i += step) {
-                            sliced.push_back(arr[static_cast<size_t>(i)]);
-                        }
-                    } else {
-                        for (int64_t i = start; i > end; i += step) {
-                            sliced.push_back(arr[static_cast<size_t>(i)]);
-                        }
-                    }
-                    push(Value::make_array(std::move(sliced)));
-                    break;
-                }
-
-                if (target.is_string()) {
-                    const auto& str = target.as_string();
-                    std::string sliced;
-                    if (step > 0) {
-                        for (int64_t i = start; i < end; i += step) {
-                            sliced += str[static_cast<size_t>(i)];
-                        }
-                    } else {
-                        for (int64_t i = start; i > end; i += step) {
-                            sliced += str[static_cast<size_t>(i)];
-                        }
-                    }
-                    push(Value::make_string(std::move(sliced)));
-                    break;
-                }
+                auto bound = [](const Value& value, const char* name) -> std::optional<int64_t> {
+                    if (value.is_nil()) return std::nullopt;
+                    if (!value.is_int())
+                        throw std::invalid_argument(std::string("slice ") + name + " must be an integer");
+                    return value.as_int();
+                };
+                const auto start = bound(start_val, "start");
+                const auto end = bound(end_val, "end");
+                const auto step = bound(step_val, "step");
+                push(slice_value(target, start, end, step.value_or(1)));
                 break;
             }
 
