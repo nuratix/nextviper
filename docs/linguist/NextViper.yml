@@ -1,0 +1,8 @@
+# Draft entry for lib/linguist/languages.yml; not an official registration.
+# Generate language_id with upstream script/update-ids only after eligibility.
+NextViper:
+  type: programming
+  extensions:
+    - .nv
+  tm_scope: source.nextviper
+  ace_mode: text

@@ -15,7 +15,9 @@ All contributors and maintainers are expected to foster a respectful, collaborat
 ### 2.1 Prerequisites
 - **Compiler**: GCC 11+ or Clang 13+ with full **C++20** support
 - **Build System**: GNU Make (`make`) or CMake 3.20+
-- **GPU Subsystem (Optional)**: Vulkan SDK headers and loader (`libvulkan-dev` or `vulkan-headers`)
+- **Required libraries**: Vulkan headers/loader, PostgreSQL development libraries, and libcurl 7.85+. These are mandatory even for non-GPU scripts.
+- **Test tools**: Python 3, Bash, curl, and OpenSSL. See [installation](INSTALLATION.md).
+- **Validated platform for this audit**: Linux ARM64; Windows and macOS remain unverified.
 - **Shell**: Bash / POSIX-compatible shell
 
 ### 2.2 Quick Start
@@ -25,7 +27,7 @@ git clone https://github.com/nuratix/nextviper.git
 cd nextviper
 
 # 2. Build the toolchain (compiler + language server)
-make -j$(nproc)
+make -j2
 
 # 3. Run the full test suite
 make test
@@ -85,3 +87,16 @@ git commit -s -m "feat(stdlib): add base64 encoder functions"
 ## 6. Security Vulnerabilities
 
 Please **do not** open public GitHub issues for critical security vulnerabilities. Follow our responsible disclosure process outlined in [`SECURITY.md`](SECURITY.md) or email `security@nuratix.com`.
+
+## AI-assisted contributions and beginner tasks
+
+AI assisted this engineering audit and its implementation. Contributors remain
+responsible for inspecting generated code, reproducing failures, and providing
+actual test results. Identify AI assistance in PR descriptions; never submit
+fabricated test or benchmark claims. Tests should exercise observable behavior.
+
+Start with the scoped tasks in [the engineering roadmap](docs/roadmap.md).
+Useful beginner work includes a diagnostic/source-location regression, a
+standalone module example with asserted output, or a grammar fixture that
+reproduces a known highlighting gap. Consult CURRENT_STATUS.md before advertising
+new backend or platform support. Do not post access tokens in issues or chat.

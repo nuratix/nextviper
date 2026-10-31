@@ -1,0 +1,19 @@
+====================================================
+  NextViper 1.0.0 Test Suite Runner
+====================================================
+
+[GPUSubsystem]
+  ✓ PASS: DeviceDetectionAndProperties
+  SKIP: HostDeviceMemoryTransferRoundtrip: no Vulkan GPU device available
+  SKIP: ElementwiseArithmeticGPUExecution: no Vulkan GPU device available
+  SKIP: MatrixMultiplicationGEMM: no Vulkan GPU device available
+  SKIP: ReductionsAndActivations: no Vulkan GPU device available
+  SKIP: GPUAutogradAndTrainingConvergence: no Vulkan GPU device available
+  ✓ PASS: AutoDeviceSelectionFallback
+GPU status: false
+CPU tensor: cpu
+  ✓ PASS: NextViperInterpreterGPUWorkflow
+
+----------------------------------------------------
+Tests Summary: 8 total | 3 passed | 0 failed | 5 skipped (22.6192 ms)
+====================================================

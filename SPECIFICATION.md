@@ -221,3 +221,24 @@ All errors must include:
 - Source code line excerpt with line numbering
 - Visual caret/underline indicators precisely spanning the offending token
 - Contextual suggestions or correction hints
+
+
+## Slice and escape contract (engineering hardening)
+
+`value[start:end:step]` operates on lists or byte strings in the interpreter and
+VM. Bounds are exclusive at the end; negative indices are relative to the end.
+Positive strides clamp bounds to `[0, length]`. Negative strides clamp to
+`[-1, length - 1]`; omitted start/end mean `length - 1` and `-1`. An explicit
+`-1` end is normalized as an index and differs from an omitted reverse end.
+Zero strides fail. The full signed 64-bit stride range is accepted without
+loop-index overflow. Bounds evaluate left to right before length normalization,
+so their side effects may resize the target. Native slicing remains unsupported.
+Explicit `nil` bounds still differ between interpreter and VM and are outside
+this shared contract; omitted bounds are portable between those two backends.
+
+Unicode escapes encode scalar values only: U+0000 through U+10FFFF excluding
+U+D800 through U+DFFF. Surrogate escapes and out-of-range escapes fail lexing.
+Strings can otherwise contain arbitrary bytes (including `\xHH`), so this does
+not make strings universally valid UTF-8. Catchable language-level exceptions
+(`try`, `catch`, `throw`) are not implemented; runtime errors terminate execution
+with a nonzero status.

@@ -1,0 +1,4 @@
+tensor.is_gpu_available(): true
+tensor.device_count(): 1
+tensor.device_name(): llvmpipe (LLVM 19.1.7, 128 bits)
+Software Vulkan execution only; no physical GPU certification.

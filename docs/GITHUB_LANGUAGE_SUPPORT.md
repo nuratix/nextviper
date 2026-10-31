@@ -24,3 +24,14 @@ Linguist explicitly says it closes submissions for very new or hobby languages w
 6. Wait for maintainer review, acceptance, a Linguist release, and GitHub deployment. Opening or merging a pull request does not immediately enable recognition everywhere.
 
 Do not add `linguist-language=NextViper` as an interim override: an override cannot create a language missing from Linguist's supported language list.
+
+## Engineering recheck, 2026-10-31
+
+The upstream contribution policy was re-read; the adoption threshold above still
+applies. Independent usage was not established in this session. See the
+[local upstream draft](linguist/submission-draft.md) and
+[metadata draft](linguist/NextViper.yml). Grammar metadata and keyword/operator
+patterns are checked by `tests/test_grammar.py`; this is not full TextMate or
+upstream grammar validation. The grammar now recognizes `elif`, `loop` and
+logical keywords and no longer marks unimplemented exception/class syntax as
+language keywords. Historical file counts above describe the earlier checkout.

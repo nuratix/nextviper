@@ -1,0 +1,11 @@
+AddressSanitizer: CHECK failed: sanitizer_allocator_primary64.h:131 "((kSpaceBeg)) == ((address_range.Init(TotalSpaceSize, PrimaryAllocatorName, kSpaceBeg)))" (0x500000000000, 0xfffffffffffffff4) (tid=4802)
+    <empty stack>
+
+Traceback (most recent call last):
+  File "/root/nextviper/tests/test_native_runtime_sanitizers.py", line 46, in <module>
+    subprocess.run([str(binary)], check=True, timeout=30, env=environment)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/tmp/nv-sanitize-merncyzo/runtime']' returned non-zero exit status 1.

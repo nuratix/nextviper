@@ -1,0 +1,6 @@
+test_output_paths_are_not_shell_commands (__main__.NativePathSecurity.test_output_paths_are_not_shell_commands) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 34.157s
+
+OK

@@ -11,3 +11,27 @@ The native backend is not LLVM-based and does not implement JIT compilation. Its
 Optional-looking libraries currently have mandatory build dependencies: Vulkan and PostgreSQL development libraries. HTTP clients invoke external curl with a separate argument vector. DataFrame, tensor, autograd and database implementations are local components rather than automatic interoperability with PyTorch, ONNX, CUDA or other libraries.
 
 Static checking is gradual and incomplete. The interpreter, VM and native backend do not have a proven universal equivalence contract. See [CURRENT_STATUS.md](CURRENT_STATUS.md) for tested scope and limitations, and [HARDENING.md](HARDENING.md) for the targeted corrections.
+
+
+```mermaid
+flowchart LR
+    S[.nv source] --> L[Lexer: tokens and source spans]
+    L --> P[Parser: owned AST]
+    P --> T[Gradual type checking]
+    P --> I[Interpreter: lexical environments]
+    P --> B[Bytecode compiler]
+    B --> V[Stack VM]
+    P --> R[Register IR]
+    R --> C[C++20 emitter and host compiler]
+    C --> N[Native executable]
+```
+
+For `print(1 + 2)`, the lexer emits the identifier, parentheses, integer literals,
+and `+`; the parser constructs a call containing a binary expression. The
+interpreter evaluates it directly; the VM emits constants, addition and a call;
+the native route emits tagged-value operations and compiles them. All three must
+print `3` followed by a newline. `tests/test_language_contract.py` checks shared
+observable behavior and explicitly selects backends for subset features.
+
+List/string slice normalization is shared in `include/nextviper/slicing.hpp` by
+the interpreter and VM. Native slicing is unsupported and must be diagnosed.

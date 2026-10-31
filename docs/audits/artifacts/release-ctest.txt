@@ -1,0 +1,510 @@
+Start testing: Oct 31 03:30 UTC
+----------------------------------------------------------
+2/11 Testing: cli
+2/11 Test: cli
+Command: "/usr/bin/bash" "/root/nextviper/tests/test_cli.sh"
+Directory: /root/nextviper
+"cli" start time: Oct 31 03:30 UTC
+Output:
+----------------------------------------------------------
+Testing NextViper CLI Tooling...
+1. Checking --version
+  ✓ PASS: version output correct
+2. Checking --help
+  ✓ PASS: help output correct
+3. Checking eval (-e)
+  ✓ PASS: eval output correct (42)
+4. Checking syntax & type validation
+  ✓ PASS: check command succeeded
+5. Checking check --format=json
+  ✓ PASS: check --format=json succeeded
+6. Checking file execution
+  ✓ PASS: hello_world.nv executed successfully
+7. Checking fmt command
+✓ Formatted: /tmp/test_fmt_21686.nv
+
+✓ Successfully formatted 1 file(s).
+  ✓ PASS: fmt in-place formatting succeeded
+8. Checking fmt --check
+  ✓ PASS: fmt --check passed on clean code
+9. Checking build command
+  ✓ PASS: build command succeeded
+10. Checking package command
+  ✓ PASS: package command succeeded
+11. Checking info command
+  ✓ PASS: info command succeeded
+12. Checking nextviper-lsp binary
+  ✓ PASS: nextviper-lsp binary verified
+13. Checking error exit codes
+  ✓ PASS: non-zero exit code on missing file
+
+All CLI Integration Tests Passed!
+<end of output>
+Test time =  38.80 sec
+----------------------------------------------------------
+Test Passed.
+"cli" end time: Oct 31 03:31 UTC
+"cli" time elapsed: 00:00:38
+----------------------------------------------------------
+
+3/11 Testing: errors
+3/11 Test: errors
+Command: "/usr/bin/bash" "/root/nextviper/tests/test_error_codes.sh"
+Directory: /root/nextviper
+"errors" start time: Oct 31 03:31 UTC
+Output:
+----------------------------------------------------------
+==================================================
+  NEXTVIPER ERROR SYSTEM INTEGRATION TESTS
+==================================================
+1. Checking Unknown Identifier (NV1001)
+  ✓ PASS: NV1001 error code and documentation link verified
+2. Checking Type Mismatch (NV1003)
+  ✓ PASS: NV1003 error code and documentation link verified
+3. Checking check --format=json documentation field
+  ✓ PASS: JSON machine-readable error output contains documentation field
+4. Checking File Not Found (NV2002)
+  ✓ PASS: NV2002 CLI file error code and documentation link verified
+==================================================
+  🎉 ALL ERROR SYSTEM INTEGRATION TESTS PASSED!
+==================================================
+<end of output>
+Test time =   1.05 sec
+----------------------------------------------------------
+Test Passed.
+"errors" end time: Oct 31 03:31 UTC
+"errors" time elapsed: 00:00:01
+----------------------------------------------------------
+
+1/11 Testing: unit
+1/11 Test: unit
+Command: "/root/nextviper/build-cmake/bin/test_runner"
+Directory: /root/nextviper
+"unit" start time: Oct 31 03:30 UTC
+Output:
+----------------------------------------------------------
+====================================================
+  NextViper 1.0.0 Test Suite Runner
+====================================================
+
+[Lexer]
+  ✓ PASS: IdentifiersAndKeywords
+  ✓ PASS: IntegersAllBasesAndUnderscores
+  ✓ PASS: FloatingPointNumbers
+  ✓ PASS: StringsAndEscapes
+  ✓ PASS: OperatorsAndDelimiters
+  ✓ PASS: CommentsAndNesting
+  ✓ PASS: UserPromptExampleTokenization
+  ✓ PASS: MalformedStringsAndInvalidChars
+  ✓ PASS: UnicodeEscapesRequireScalarValues
+  ✓ PASS: UnicodeScalarBoundariesEncodeExactly
+  ✓ PASS: HighBytesOutsideStringsAreDiagnosed
+[Parser]
+  ✓ PASS: ParseLetStatements
+  ✓ PASS: ParseBareAssignments
+  ✓ PASS: ParseArithmeticAndPrecedence
+  ✓ PASS: ParseComparisonAndBoolean
+  ✓ PASS: ParseFunctionCalls
+  ✓ PASS: ParseIfElseBothStyles
+  ✓ PASS: ParseFullUserProgram
+  ✓ PASS: InvalidSyntaxDiagnostics
+  ✓ PASS: GenericTypeNestingIsBounded
+[Interpreter]
+x is smaller
+30
+  ✓ PASS: UserPromptExample
+30
+  ✓ PASS: FunctionsProposedSyntax
+  ✓ PASS: FunctionsOptionalTypesAndExtensibility
+  ✓ PASS: FunctionsRecursionAndNestedCalls
+  ✓ PASS: FunctionsClosuresAndScope
+  ✓ PASS: VariablesAndScopes
+  ✓ PASS: ArithmeticAndComparisons
+  ✓ PASS: LogicalOperatorsAndNull
+  ✓ PASS: RuntimeErrorsDetection
+[TypeSystem]
+  ✓ PASS: PromptPrimitivesAndInference
+  ✓ PASS: GenericCollections
+  ✓ PASS: FunctionSignatures
+  ✓ PASS: TensorAndFutureTypes
+  ✓ PASS: TypeMismatchDiagnostics
+[Collections]
+  ✓ PASS: ListIndexingAndSlicing
+  ✓ PASS: MapCreationAndOperations
+  ✓ PASS: AppendRemoveInsert
+  ✓ PASS: MapFilterReduce
+  ✓ PASS: ForInIteration
+  ✓ PASS: VMExecutionAndSlicing
+[Loops]
+  ✓ PASS: RangeLoopsHalfOpenAndInclusive
+  ✓ PASS: WhileLoopWithCondition
+  ✓ PASS: BreakAndContinue
+  ✓ PASS: NestedLoopsMatrixAndBreak
+  ✓ PASS: EdgeCasesEmptyRangesAndCollections
+  ✓ PASS: VMExecutionLoopsAndContinues
+[Modules]
+  ✓ PASS: ImportMathFullAndSelective
+  ✓ PASS: ImportDataAndSysStdlib
+  ✓ PASS: FileBasedCustomModuleResolution
+  ✓ PASS: SecurityAndResolutionErrors
+[AIData]
+  ✓ PASS: TensorCreationAndLinearAlgebra
+  ✓ PASS: DatasetLoadingCleaningAndSplitting
+  ✓ PASS: AIModelTrainingInferenceAndSerialization
+  ✓ PASS: NextViperLanguageAIAndDataAPIs
+[DataSubsystem]
+  ✓ PASS: SchemaAndColumnValidation
+  ✓ PASS: DataArrayOperationsAndVectorization
+  ✓ PASS: DataFrameCsvLoadingAndTypeInference
+  ✓ PASS: DataFrameFilteringSelectingSorting
+  ✓ PASS: DataFramePreprocessingAndMissingValues
+  ✓ PASS: DataFrameSplittingAndBatching
+  ✓ PASS: InterpreterDataSubsystemEndToEnd
+[AISubsystem]
+  ✓ PASS: AutogradForwardBackwardAndGradientCheck
+  ✓ PASS: DenseDropoutAndActivations
+  ✓ PASS: LossFunctionsAndOptimizers
+  ✓ PASS: RealXORLearningAndConvergence
+  ✓ PASS: ModelSerializationAndRestoration
+  ✓ PASS: NextViperLanguageEndToEndPipeline
+[GPUSubsystem]
+  ✓ PASS: DeviceDetectionAndProperties
+  ✓ PASS: HostDeviceMemoryTransferRoundtrip
+  ✓ PASS: ElementwiseArithmeticGPUExecution
+  ✓ PASS: MatrixMultiplicationGEMM
+  ✓ PASS: ReductionsAndActivations
+  ✓ PASS: GPUAutogradAndTrainingConvergence
+  ✓ PASS: AutoDeviceSelectionFallback
+GPU status: true
+CPU tensor: cpu
+GPU tensor device: gpu
+GPU add result: gpu
+  ✓ PASS: NextViperInterpreterGPUWorkflow
+[NativeCompiler]
+  ✓ PASS: UserPromptExampleCompileAndRun
+  ✓ PASS: InterpreterWorks
+  ✓ PASS: NativeBackendWorks
+  ✓ PASS: InterpreterAndNativeEquivalence
+  ✓ PASS: IRGenerationAndConstantFolding
+  ✓ PASS: FunctionsAndLoopsCompiledExecution
+  ✓ PASS: BenchmarkSuiteExecution
+[StdLib]
+  ✓ PASS: StdFsOperations
+  ✓ PASS: StdPathOperations
+  ✓ PASS: StdStringOperations
+  ✓ PASS: StdCollectionsOperations
+  ✓ PASS: StdMathOperations
+  ✓ PASS: StdJsonOperations
+  ✓ PASS: StdCsvOperations
+  ✓ PASS: StdTimeOperations
+  ✓ PASS: StdProcessOperations
+  ✓ PASS: StdCryptoOperations
+  ✓ PASS: StdRegexOperations
+  ✓ PASS: StdRandomOperations
+  ✓ PASS: StdConcurrencyOperations
+  ✓ PASS: StdHttpServerAndClientExecution
+  ✓ PASS: StdPostgresRealDriverAndErrorHandling
+  ✓ PASS: InterpreterAndNativeStdlibEquivalence
+[PackageManager]
+  ✓ PASS: SemVerParsingAndComparison
+  ✓ PASS: VersionRequirementMatching
+  ✓ PASS: ManifestTomlParsingAndSerialization
+  ✓ PASS: LockfileGenerationAndParsing
+  ✓ PASS: PackageIntegrityTreeHashing
+  ✓ PASS: DependencyResolutionAndCycleDetection
+✓ Initialized NextViper package 'demo_app'
+  Created nextviper.toml
+  Created src/main.nv
+  Created tests/main_test.nv
+  Created README.md
+  Created .gitignore
+✓ Added dependency 'string_helper' to nextviper.toml
+✓ Installed 1 package(s) successfully
+demo_app v0.1.0
+└── string_helper v0.2.0 (path:../string_helper) [verified: bef886a2...]
+
+[Packaging] demo_app v0.1.0
+  Tree SHA-256: 03f53c03f5eb78da046bd3a7eb03d6c10e928cf38d45c6ab65f03e238b94ad1b
+  License:      MIT
+  Repository:   (none)
+  Homepage:     (none)
+✓ Package validation passed (dry-run mode). Ready for publication.
+✓ Removed dependency 'string_helper' from nextviper.toml
+✓ Installed 0 package(s) successfully
+  ✓ PASS: LocalPackageEndToEndWorkflow
+[Formatter]
+  ✓ PASS: DeterministicAndIdempotent
+  ✓ PASS: BinaryOperatorsAndDelimiters
+  ✓ PASS: FunctionsAndBlocks
+  ✓ PASS: CommentsAndBlankLines
+  ✓ PASS: DiffGeneration
+[Tooling]
+  ✓ PASS: PromptExactErrorFormat
+  ✓ PASS: MachineReadableJSONDiagnostics
+  ✓ PASS: RuntimeExecutionErrorEmission
+[VM]
+  ✓ PASS: BasicArithmeticAndStack
+  ✓ PASS: FunctionCallsAndRecursion
+  ✓ PASS: LoopsAndArrays
+  ✓ PASS: PipelineTransformation
+[Diagnostics]
+  ✓ PASS: RenderErrorReport
+  ✓ PASS: MultipleDiagnosticLevels
+[Fuzz]
+  ✓ PASS: LexerMalformedInputs
+  ✓ PASS: ParserDeepNestingDepthLimit
+  ✓ PASS: ParserMalformedStructures
+  ✓ PASS: TypeCheckerMalformedInputs
+  ✓ PASS: InterpreterRecursionLimitProtection
+  ✓ PASS: InterpreterResourceLimits
+21
+12
+1
+  ✓ PASS: RandomizedMutationFuzzing
+[LSP]
+  ✓ PASS: InitializeHandshake
+  ✓ PASS: DocumentDidOpenAndDiagnostics
+  ✓ PASS: Autocompletion
+  ✓ PASS: HoverInformation
+  ✓ PASS: DefinitionAndReferences
+  ✓ PASS: DocumentSymbolsAndFormatting
+[ErrorSystem]
+  ✓ PASS: RegistryIntegrity
+  ✓ PASS: UnknownIdentifierDiagnostic
+  ✓ PASS: TypeMismatchDiagnostic
+  ✓ PASS: SyntaxErrorDiagnostic
+  ✓ PASS: InvalidFunctionCallDiagnostic
+[Linter]
+  ✓ PASS: CleanCodePassesWithZeroWarnings
+  ✓ PASS: DetectsUnusedVariables
+  ✓ PASS: DetectsUnreachableCode
+  ✓ PASS: DetectsRedundantSelfComparison
+
+----------------------------------------------------
+Tests Summary: 141 total | 141 passed | 0 failed (221461 ms)
+====================================================
+<end of output>
+Test time = 221.65 sec
+----------------------------------------------------------
+Test Passed.
+"unit" end time: Oct 31 03:34 UTC
+"unit" time elapsed: 00:03:41
+----------------------------------------------------------
+
+5/11 Testing: transports
+5/11 Test: transports
+Command: "/usr/bin/python3" "/root/nextviper/tests/test_transport.py"
+Directory: /root/nextviper/build-cmake
+"transports" start time: Oct 31 03:34 UTC
+Output:
+----------------------------------------------------------
+......
+----------------------------------------------------------------------
+Ran 6 tests in 2.760s
+
+OK
+<end of output>
+Test time =   3.81 sec
+----------------------------------------------------------
+Test Passed.
+"transports" end time: Oct 31 03:34 UTC
+"transports" time elapsed: 00:00:03
+----------------------------------------------------------
+
+4/11 Testing: regressions
+4/11 Test: regressions
+Command: "/usr/bin/python3" "/root/nextviper/tests/test_regressions.py"
+Directory: /root/nextviper/build-cmake
+"regressions" start time: Oct 31 03:31 UTC
+Output:
+----------------------------------------------------------
+test_captured_closures (__main__.ReadinessRegressions.test_captured_closures) ... ok
+test_checker_rejects_invalid_control_flow (__main__.ReadinessRegressions.test_checker_rejects_invalid_control_flow) ... ok
+test_checker_reports_missing_files (__main__.ReadinessRegressions.test_checker_reports_missing_files) ... ok
+test_cycles_print_without_crashing (__main__.ReadinessRegressions.test_cycles_print_without_crashing) ... ok
+test_deep_generic_annotation_reports_error_instead_of_crashing (__main__.ReadinessRegressions.test_deep_generic_annotation_reports_error_instead_of_crashing) ... ok
+test_default_build_executes_and_bytecode_is_explicitly_unavailable (__main__.ReadinessRegressions.test_default_build_executes_and_bytecode_is_explicitly_unavailable) ... ok
+test_formatter_preserves_programs (__main__.ReadinessRegressions.test_formatter_preserves_programs) ... ok
+test_fractional_functions_and_math (__main__.ReadinessRegressions.test_fractional_functions_and_math) ... ok
+test_http_preserves_arguments_without_shell_expansion (__main__.ReadinessRegressions.test_http_preserves_arguments_without_shell_expansion) ... ok
+test_immutable_reassignment_rejected (__main__.ReadinessRegressions.test_immutable_reassignment_rejected) ... ok
+test_invalid_dataframe_inputs_are_errors (__main__.ReadinessRegressions.test_invalid_dataframe_inputs_are_errors) ... ok
+test_modulo_assignment (__main__.ReadinessRegressions.test_modulo_assignment) ... ok
+test_mutable_closure_cells (__main__.ReadinessRegressions.test_mutable_closure_cells) ... ok
+test_native_control_flow_and_ranges (__main__.ReadinessRegressions.test_native_control_flow_and_ranges) ... ok
+test_native_runtime_errors_and_nil_returns (__main__.ReadinessRegressions.test_native_runtime_errors_and_nil_returns) ... ok
+test_native_tagged_collections (__main__.ReadinessRegressions.test_native_tagged_collections) ... ok
+test_primitive_annotations_enforced_at_runtime (__main__.ReadinessRegressions.test_primitive_annotations_enforced_at_runtime) ... ok
+test_repl_retains_function_bodies (__main__.ReadinessRegressions.test_repl_retains_function_bodies) ... ok
+test_unsupported_native_features_fail_cleanly (__main__.ReadinessRegressions.test_unsupported_native_features_fail_cleanly) ... ok
+test_vm_flag_executes_vm (__main__.ReadinessRegressions.test_vm_flag_executes_vm) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 260.084s
+
+OK
+<end of output>
+Test time = 261.16 sec
+----------------------------------------------------------
+Test Passed.
+"regressions" end time: Oct 31 03:35 UTC
+"regressions" time elapsed: 00:04:21
+----------------------------------------------------------
+
+7/11 Testing: http_hardening
+7/11 Test: http_hardening
+Command: "/usr/bin/python3" "/root/nextviper/tests/test_http_hardening.py"
+Directory: /root/nextviper/build-cmake
+"http_hardening" start time: Oct 31 03:35 UTC
+Output:
+----------------------------------------------------------
+test_background_server_can_close_cleanly (__main__.HttpServerContract.test_background_server_can_close_cleanly) ... ok
+test_disconnected_client_does_not_kill_server (__main__.HttpServerContract.test_disconnected_client_does_not_kill_server) ... ok
+test_fragmented_request (__main__.HttpServerContract.test_fragmented_request) ... ok
+test_handler_errors_do_not_leak_or_split_responses (__main__.HttpServerContract.test_handler_errors_do_not_leak_or_split_responses) ... ok
+test_invalid_json_is_400 (__main__.HttpServerContract.test_invalid_json_is_400) ... ok
+test_malformed_http_framing (__main__.HttpServerContract.test_malformed_http_framing) ... ok
+test_oversized_header (__main__.HttpServerContract.test_oversized_header) ... ok
+test_query_and_unicode_json (__main__.HttpServerContract.test_query_and_unicode_json) ... ok
+test_static_files_and_traversal (__main__.HttpServerContract.test_static_files_and_traversal) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.747s
+
+OK
+<end of output>
+Test time =   2.20 sec
+----------------------------------------------------------
+Test Passed.
+"http_hardening" end time: Oct 31 03:35 UTC
+"http_hardening" time elapsed: 00:00:02
+----------------------------------------------------------
+
+8/11 Testing: backend
+8/11 Test: backend
+Command: "/usr/bin/python3" "/root/nextviper/tests/test_backend.py"
+Directory: /root/nextviper/build-cmake
+"backend" start time: Oct 31 03:35 UTC
+Output:
+----------------------------------------------------------
+test_authentication_and_validation (__main__.BackendContract.test_authentication_and_validation) ... skipped 'set NEXTVIPER_TEST_DATABASE_URL to a dedicated test database'
+test_crud_unicode_sql_parameters_and_restart_persistence (__main__.BackendContract.test_crud_unicode_sql_parameters_and_restart_persistence) ... skipped 'set NEXTVIPER_TEST_DATABASE_URL to a dedicated test database'
+test_transaction_on_closed_connection_fails_cleanly (__main__.BackendContract.test_transaction_on_closed_connection_fails_cleanly) ... skipped 'set NEXTVIPER_TEST_DATABASE_URL to a dedicated test database'
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+OK (skipped=3)
+<end of output>
+Test time =   1.23 sec
+----------------------------------------------------------
+Test Passed.
+"backend" end time: Oct 31 03:35 UTC
+"backend" time elapsed: 00:00:01
+----------------------------------------------------------
+
+9/11 Testing: distribution
+9/11 Test: distribution
+Command: "/usr/bin/python3" "/root/nextviper/tests/test_distribution.py"
+Directory: /root/nextviper/build-cmake
+"distribution" start time: Oct 31 03:35 UTC
+Output:
+----------------------------------------------------------
+test_install_run_native_build_language_server_and_uninstall (__main__.DistributionContract.test_install_run_native_build_language_server_and_uninstall) ... ok
+test_missing_build_reports_failure (__main__.DistributionContract.test_missing_build_reports_failure) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 16.760s
+
+OK
+<end of output>
+Test time =  17.52 sec
+----------------------------------------------------------
+Test Passed.
+"distribution" end time: Oct 31 03:36 UTC
+"distribution" time elapsed: 00:00:17
+----------------------------------------------------------
+
+10/11 Testing: practical_examples
+10/11 Test: practical_examples
+Command: "/usr/bin/python3" "/root/nextviper/tests/test_practical_examples.py"
+Directory: /root/nextviper/build-cmake
+"practical_examples" start time: Oct 31 03:36 UTC
+Output:
+----------------------------------------------------------
+test_calculator (__main__.PracticalExamples.test_calculator) ... ok
+test_calculator_errors (__main__.PracticalExamples.test_calculator_errors) ... ok
+test_http_health (__main__.PracticalExamples.test_http_health) ... ok
+test_text_summary (__main__.PracticalExamples.test_text_summary) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.926s
+
+OK
+<end of output>
+Test time =   1.81 sec
+----------------------------------------------------------
+Test Passed.
+"practical_examples" end time: Oct 31 03:36 UTC
+"practical_examples" time elapsed: 00:00:01
+----------------------------------------------------------
+
+11/11 Testing: grammar
+11/11 Test: grammar
+Command: "/usr/bin/python3" "/root/nextviper/tests/test_grammar.py"
+Directory: /root/nextviper/build-cmake
+"grammar" start time: Oct 31 03:36 UTC
+Output:
+----------------------------------------------------------
+test_compound_operator_patterns_consume_full_token (__main__.GrammarContract.test_compound_operator_patterns_consume_full_token) ... ok
+test_keyword_patterns_match_lexer (__main__.GrammarContract.test_keyword_patterns_match_lexer) ... ok
+test_metadata_matches_extension_manifest (__main__.GrammarContract.test_metadata_matches_extension_manifest) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.019s
+
+OK
+<end of output>
+Test time =   0.70 sec
+----------------------------------------------------------
+Test Passed.
+"grammar" end time: Oct 31 03:36 UTC
+"grammar" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/11 Testing: language_contract
+6/11 Test: language_contract
+Command: "/usr/bin/python3" "/root/nextviper/tests/test_language_contract.py"
+Directory: /root/nextviper/build-cmake
+"language_contract" start time: Oct 31 03:34 UTC
+Output:
+----------------------------------------------------------
+test_assignment_target_is_evaluated_once_before_value (__main__.LanguageContract.test_assignment_target_is_evaluated_once_before_value) ... ok
+test_break_and_continue_unwind_nested_locals (__main__.LanguageContract.test_break_and_continue_unwind_nested_locals) ... ok
+test_compound_assignments_match_binary_operators (__main__.LanguageContract.test_compound_assignments_match_binary_operators) ... ok
+test_failed_module_initialization_does_not_export_partial_values (__main__.LanguageContract.test_failed_module_initialization_does_not_export_partial_values) ... ok
+test_inclusive_range_expression_and_maximum_endpoint (__main__.LanguageContract.test_inclusive_range_expression_and_maximum_endpoint) ... ok
+test_integer_boundaries_and_precise_comparisons (__main__.LanguageContract.test_integer_boundaries_and_precise_comparisons) ... ok
+test_invalid_arithmetic_and_indices_are_errors (__main__.LanguageContract.test_invalid_arithmetic_and_indices_are_errors) ... ok
+test_invalid_function_control_flow_is_an_error (__main__.LanguageContract.test_invalid_function_control_flow_is_an_error) ... ok
+test_mutating_collection_during_iteration_is_defined (__main__.LanguageContract.test_mutating_collection_during_iteration_is_defined) ... ok
+test_overflow_fails_instead_of_wrapping_or_crashing (__main__.LanguageContract.test_overflow_fails_instead_of_wrapping_or_crashing) ... ok
+test_slice_boundaries_and_extreme_strides (__main__.LanguageContract.test_slice_boundaries_and_extreme_strides) ... ok
+test_slice_bounds_can_resize_target (__main__.LanguageContract.test_slice_bounds_can_resize_target) ... ok
+test_slices_match_python_reference (__main__.LanguageContract.test_slices_match_python_reference) ... ok
+test_vm_limits_fail_explicitly (__main__.LanguageContract.test_vm_limits_fail_explicitly) ... ok
+test_vm_unsupported_features_are_diagnosed (__main__.LanguageContract.test_vm_unsupported_features_are_diagnosed) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 188.497s
+
+OK
+<end of output>
+Test time = 189.16 sec
+----------------------------------------------------------
+Test Passed.
+"language_contract" end time: Oct 31 03:37 UTC
+"language_contract" time elapsed: 00:03:09
+----------------------------------------------------------
+
+End testing: Oct 31 03:37 UTC

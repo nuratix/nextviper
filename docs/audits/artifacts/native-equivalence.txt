@@ -1,0 +1,20 @@
+Native equivalence: 13 fixtures
+test_fixtures (__main__.NativeEquivalence.test_fixtures) ... PASS: 01_hello.nv
+PASS: 02_arithmetic.nv
+PASS: 03_variables.nv
+PASS: 04_functions.nv
+PASS: 05_recursion.nv
+PASS: 06_loops.nv
+PASS: 07_arrays.nv
+PASS: 08_maps.nv
+PASS: 09_strings.nv
+PASS: 10_closures.nv
+PASS: 11_higher_order.nv
+PASS: 12_stdlib_calls.nv
+PASS: fibonacci.nv
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 98.506s
+
+OK

@@ -1,0 +1,218 @@
+Start testing: Oct 31 03:43 UTC
+----------------------------------------------------------
+1/11 Testing: unit
+1/11 Test: unit
+Command: "/root/nextviper/build-cmake/bin/test_runner"
+Directory: /root/nextviper
+"unit" start time: Oct 31 03:43 UTC
+Output:
+----------------------------------------------------------
+====================================================
+  NextViper 1.0.0 Test Suite Runner
+====================================================
+
+[Lexer]
+  ✓ PASS: IdentifiersAndKeywords
+  ✓ PASS: IntegersAllBasesAndUnderscores
+  ✓ PASS: FloatingPointNumbers
+  ✓ PASS: StringsAndEscapes
+  ✓ PASS: OperatorsAndDelimiters
+  ✓ PASS: CommentsAndNesting
+  ✓ PASS: UserPromptExampleTokenization
+  ✓ PASS: MalformedStringsAndInvalidChars
+  ✓ PASS: UnicodeEscapesRequireScalarValues
+  ✓ PASS: UnicodeScalarBoundariesEncodeExactly
+  ✓ PASS: HighBytesOutsideStringsAreDiagnosed
+[Parser]
+  ✓ PASS: ParseLetStatements
+  ✓ PASS: ParseBareAssignments
+  ✓ PASS: ParseArithmeticAndPrecedence
+  ✓ PASS: ParseComparisonAndBoolean
+  ✓ PASS: ParseFunctionCalls
+  ✓ PASS: ParseIfElseBothStyles
+  ✓ PASS: ParseFullUserProgram
+  ✓ PASS: InvalidSyntaxDiagnostics
+  ✓ PASS: GenericTypeNestingIsBounded
+[Interpreter]
+x is smaller
+30
+  ✓ PASS: UserPromptExample
+30
+  ✓ PASS: FunctionsProposedSyntax
+  ✓ PASS: FunctionsOptionalTypesAndExtensibility
+  ✓ PASS: FunctionsRecursionAndNestedCalls
+  ✓ PASS: FunctionsClosuresAndScope
+  ✓ PASS: VariablesAndScopes
+  ✓ PASS: ArithmeticAndComparisons
+  ✓ PASS: LogicalOperatorsAndNull
+  ✓ PASS: RuntimeErrorsDetection
+[TypeSystem]
+  ✓ PASS: PromptPrimitivesAndInference
+  ✓ PASS: GenericCollections
+  ✓ PASS: FunctionSignatures
+  ✓ PASS: TensorAndFutureTypes
+  ✓ PASS: TypeMismatchDiagnostics
+[Collections]
+  ✓ PASS: ListIndexingAndSlicing
+  ✓ PASS: MapCreationAndOperations
+  ✓ PASS: AppendRemoveInsert
+  ✓ PASS: MapFilterReduce
+  ✓ PASS: ForInIteration
+  ✓ PASS: VMExecutionAndSlicing
+[Loops]
+  ✓ PASS: RangeLoopsHalfOpenAndInclusive
+  ✓ PASS: WhileLoopWithCondition
+  ✓ PASS: BreakAndContinue
+  ✓ PASS: NestedLoopsMatrixAndBreak
+  ✓ PASS: EdgeCasesEmptyRangesAndCollections
+  ✓ PASS: VMExecutionLoopsAndContinues
+[Modules]
+  ✓ PASS: ImportMathFullAndSelective
+  ✓ PASS: ImportDataAndSysStdlib
+  ✓ PASS: FileBasedCustomModuleResolution
+  ✓ PASS: SecurityAndResolutionErrors
+[AIData]
+  ✓ PASS: TensorCreationAndLinearAlgebra
+  ✓ PASS: DatasetLoadingCleaningAndSplitting
+  ✓ PASS: AIModelTrainingInferenceAndSerialization
+  ✓ PASS: NextViperLanguageAIAndDataAPIs
+[DataSubsystem]
+  ✓ PASS: SchemaAndColumnValidation
+  ✓ PASS: DataArrayOperationsAndVectorization
+  ✓ PASS: DataFrameCsvLoadingAndTypeInference
+  ✓ PASS: DataFrameFilteringSelectingSorting
+  ✓ PASS: DataFramePreprocessingAndMissingValues
+  ✓ PASS: DataFrameSplittingAndBatching
+  ✓ PASS: InterpreterDataSubsystemEndToEnd
+[AISubsystem]
+  ✓ PASS: AutogradForwardBackwardAndGradientCheck
+  ✓ PASS: DenseDropoutAndActivations
+  ✓ PASS: LossFunctionsAndOptimizers
+  ✓ PASS: RealXORLearningAndConvergence
+  ✓ PASS: ModelSerializationAndRestoration
+  ✓ PASS: NextViperLanguageEndToEndPipeline
+[GPUSubsystem]
+  ✓ PASS: DeviceDetectionAndProperties
+  ✓ PASS: HostDeviceMemoryTransferRoundtrip
+  ✓ PASS: ElementwiseArithmeticGPUExecution
+  ✓ PASS: MatrixMultiplicationGEMM
+  ✓ PASS: ReductionsAndActivations
+  ✓ PASS: GPUAutogradAndTrainingConvergence
+  ✓ PASS: AutoDeviceSelectionFallback
+GPU status: true
+CPU tensor: cpu
+GPU tensor device: gpu
+GPU add result: gpu
+  ✓ PASS: NextViperInterpreterGPUWorkflow
+[NativeCompiler]
+  ✓ PASS: UserPromptExampleCompileAndRun
+  ✓ PASS: InterpreterWorks
+  ✓ PASS: NativeBackendWorks
+  ✓ PASS: InterpreterAndNativeEquivalence
+  ✓ PASS: IRGenerationAndConstantFolding
+  ✓ PASS: FunctionsAndLoopsCompiledExecution
+  ✓ PASS: BenchmarkSuiteExecution
+[StdLib]
+  ✓ PASS: StdFsOperations
+  ✓ PASS: StdPathOperations
+  ✓ PASS: StdStringOperations
+  ✓ PASS: StdCollectionsOperations
+  ✓ PASS: StdMathOperations
+  ✓ PASS: StdJsonOperations
+  ✓ PASS: StdCsvOperations
+  ✓ PASS: StdTimeOperations
+  ✓ PASS: StdProcessOperations
+  ✓ PASS: StdCryptoOperations
+  ✓ PASS: StdRegexOperations
+  ✓ PASS: StdRandomOperations
+  ✓ PASS: StdConcurrencyOperations
+  ✓ PASS: StdHttpServerAndClientExecution
+  ✓ PASS: StdPostgresRealDriverAndErrorHandling
+  ✓ PASS: InterpreterAndNativeStdlibEquivalence
+[PackageManager]
+  ✓ PASS: SemVerParsingAndComparison
+  ✓ PASS: VersionRequirementMatching
+  ✓ PASS: ManifestTomlParsingAndSerialization
+  ✓ PASS: LockfileGenerationAndParsing
+  ✓ PASS: PackageIntegrityTreeHashing
+  ✓ PASS: DependencyResolutionAndCycleDetection
+✓ Initialized NextViper package 'demo_app'
+  Created nextviper.toml
+  Created src/main.nv
+  Created tests/main_test.nv
+  Created README.md
+  Created .gitignore
+✓ Added dependency 'string_helper' to nextviper.toml
+✓ Installed 1 package(s) successfully
+demo_app v0.1.0
+└── string_helper v0.2.0 (path:../string_helper) [verified: bef886a2...]
+
+[Packaging] demo_app v0.1.0
+  Tree SHA-256: 03f53c03f5eb78da046bd3a7eb03d6c10e928cf38d45c6ab65f03e238b94ad1b
+  License:      MIT
+  Repository:   (none)
+  Homepage:     (none)
+✓ Package validation passed (dry-run mode). Ready for publication.
+✓ Removed dependency 'string_helper' from nextviper.toml
+✓ Installed 0 package(s) successfully
+  ✓ PASS: LocalPackageEndToEndWorkflow
+[Formatter]
+  ✓ PASS: DeterministicAndIdempotent
+  ✓ PASS: BinaryOperatorsAndDelimiters
+  ✓ PASS: FunctionsAndBlocks
+  ✓ PASS: CommentsAndBlankLines
+  ✓ PASS: DiffGeneration
+[Tooling]
+  ✓ PASS: PromptExactErrorFormat
+  ✓ PASS: MachineReadableJSONDiagnostics
+  ✓ PASS: RuntimeExecutionErrorEmission
+[VM]
+  ✓ PASS: BasicArithmeticAndStack
+  ✓ PASS: FunctionCallsAndRecursion
+  ✓ PASS: LoopsAndArrays
+  ✓ PASS: PipelineTransformation
+[Diagnostics]
+  ✓ PASS: RenderErrorReport
+  ✓ PASS: MultipleDiagnosticLevels
+[Fuzz]
+  ✓ PASS: LexerMalformedInputs
+  ✓ PASS: ParserDeepNestingDepthLimit
+  ✓ PASS: ParserMalformedStructures
+  ✓ PASS: TypeCheckerMalformedInputs
+  ✓ PASS: InterpreterRecursionLimitProtection
+  ✓ PASS: InterpreterResourceLimits
+21
+12
+1
+  ✓ PASS: RandomizedMutationFuzzing
+[LSP]
+  ✓ PASS: InitializeHandshake
+  ✓ PASS: DocumentDidOpenAndDiagnostics
+  ✓ PASS: Autocompletion
+  ✓ PASS: HoverInformation
+  ✓ PASS: DefinitionAndReferences
+  ✓ PASS: DocumentSymbolsAndFormatting
+[ErrorSystem]
+  ✓ PASS: RegistryIntegrity
+  ✓ PASS: UnknownIdentifierDiagnostic
+  ✓ PASS: TypeMismatchDiagnostic
+  ✓ PASS: SyntaxErrorDiagnostic
+  ✓ PASS: InvalidFunctionCallDiagnostic
+[Linter]
+  ✓ PASS: CleanCodePassesWithZeroWarnings
+  ✓ PASS: DetectsUnusedVariables
+  ✓ PASS: DetectsUnreachableCode
+  ✓ PASS: DetectsRedundantSelfComparison
+
+----------------------------------------------------
+Tests Summary: 141 total | 141 passed | 0 failed | 0 skipped (204122 ms)
+====================================================
+<end of output>
+Test time = 204.26 sec
+----------------------------------------------------------
+Test Passed.
+"unit" end time: Oct 31 03:46 UTC
+"unit" time elapsed: 00:03:24
+----------------------------------------------------------
+
+End testing: Oct 31 03:46 UTC

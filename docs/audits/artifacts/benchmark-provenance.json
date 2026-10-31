@@ -1,0 +1,9 @@
+{
+  "base_revision": "bcf1394",
+  "correctness_commit": "544fced",
+  "before_source": "bcf1394 plus Unicode/ASCII lexer fixes; before annotation and slicing fixes",
+  "after_source": "544fced correctness changes",
+  "notes": "Three measured samples after one warmup; wall clock includes startup. Other compilation/tests ran concurrently. No performance improvement claim.",
+  "before_binary_sha256": "3c2a7e66d3e60043344a5075eff21f27c1386f5fb5b4da32e6c54e0f1f1207dc",
+  "after_binary_sha256": "be460f30576ac6642775f933d28c953c111efdab79872e1e0bb2a6660e9a75ec"
+}

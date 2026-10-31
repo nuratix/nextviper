@@ -51,28 +51,25 @@ results for your commit. Windows and macOS are not supported release targets yet
 Save this as `hello.nv`:
 
 ```nextviper
-fn make_adder(bias):
-    return fn(x) => x + bias
-
-let add_ten = make_adder(10)
-let mut total = 0
-for i in 0..5:
-    total += add_ten(i)
-print(total)
+print("Hello, world!")
 ```
 
 ```sh
 nextviper run hello.nv
-# Output: 60
+# Output: Hello, world!
 nextviper check hello.nv
 nextviper repl
 ```
 
-Use the [beginner examples](examples/tutorials) to learn the language. Integer
-arithmetic uses signed 64-bit values and reports overflow instead of wrapping.
-`+=`, `-=`, `*=`, `/=`, and `%=` use the same arithmetic rules as binary
-operators. Collection iteration visits a snapshot, so resizing the original
-collection does not invalidate the loop.
+Try the [three tested practical applications](examples/practical) or the
+[beginner tutorials](examples/tutorials) next. Integer arithmetic uses signed
+64-bit values and reports overflow instead of wrapping. Collection iteration
+visits a snapshot. Strings and string slices operate on bytes.
+
+The [engineering audit](docs/audits/nextviper-engineering-audit.md) and
+[validation record](docs/audits/nextviper-validation.md) distinguish verified
+behavior from remaining work. Development is AI-assisted; passing tests cover
+specific cases and do not certify production readiness.
 
 ## Run a small backend
 

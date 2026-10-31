@@ -50,3 +50,24 @@ NV_SANITIZERS=undefined python3 tests/test_native_runtime_sanitizers.py
 ```
 
 A sanitizer startup failure is an environment limitation, not a passing memory-safety test. The second command exercises undefined-behavior instrumentation only.
+
+## Engineering contract and examples
+
+`tests/test_language_contract.py` compares expected stdout, empty stderr and
+successful status for explicitly selected backends. Error tests assert failure
+status and diagnostic content where formatting differs across engines. The slice
+matrix checks 216 boundary/stride combinations in each of the interpreter and VM
+against Python's slice reference. Native slicing, VM captures/imports, and
+language-level exceptions are not counted as supported cases. Function return
+values are observed through printed calls; there is no separate process return
+value protocol.
+
+`tests/native_verify/run_all.py` compares complete native/interpreter stdout,
+stderr and exit status for 13 fixtures. Only Fibonacci's measured elapsed-time
+number is normalized; the line must still be present and well-formed. Temporary
+executables use private directories, and every subprocess has a timeout.
+`NEXTVIPER_BIN` selects the compiler for both suites.
+
+Practical applications and grammar metadata/pattern checks run in Make and CTest.
+The grammar checks do not run a TextMate engine. See the
+[troubleshooting guide](docs/troubleshooting.md) and [validation record](docs/audits/nextviper-validation.md).

@@ -12,3 +12,17 @@ python3 benchmarks/harness.py
 The harness writes local timings to `benchmarks/results.json`. It includes process startup costs, does not provide a general language ranking, and is not a production capacity test. Check outputs for equivalence before interpreting timings. Report hardware, OS, compiler flags, language/runtime versions, workload, warm-up, repetitions, variance, and failures. Compare AI/data workloads against appropriate optimized libraries, not only handwritten Python loops.
 
 No general speed advantage over Python, Go, Rust, or C++ is claimed.
+
+
+For correctness-checked small interpreter workloads and compilation/startup time:
+
+```sh
+python3 benchmarks/core.py --binary build-cmake/bin/nextviper --label local --output /tmp/nextviper-benchmark.json --repeat 3
+```
+
+This harness includes calls, loops, recursion, strings, collections and allocation.
+It uses private temporary directories, validates expected output and status, and
+records every sample after one warmup. The legacy comprehensive harness above
+still needs stronger correctness validation and temporary-file isolation.
+See [the measured audit record](docs/audits/nextviper-validation.md) for actual
+before/after samples and the noise limitations; no optimization benefit is claimed.
